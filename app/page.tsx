@@ -1,13 +1,17 @@
 "use client";
+
+import { useEffect } from "react";
 import * as VKID from "@vkid/sdk";
-export default function Home() {
-   
+
+ export default function Home() {  
+  useEffect(() => {
   VKID.Config.init({
     app: 54770027,
     redirectUrl: "https://my-agent-air.vercel.app/auth/callback",
     responseMode: VKID.ConfigResponseMode.Redirect,
     source: VKID.ConfigSource.LOWCODE,
-  }); 
+  });
+}, []); 
   
     return (
     <main className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-blue-100 flex items-center justify-center p-6">
