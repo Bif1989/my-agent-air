@@ -1,5 +1,15 @@
+"use client";
+import * as VKID from "@vkid/sdk";
 export default function Home() {
-  return (
+   
+  VKID.Config.init({
+    app: 54770027,
+    redirectUrl: "https://my-agent-air.vercel.app/auth/callback",
+    responseMode: VKID.ConfigResponseMode.Redirect,
+    source: VKID.ConfigSource.LOWCODE,
+  }); 
+  
+    return (
     <main className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-blue-100 flex items-center justify-center p-6">
       <div className="w-full max-w-md">
         <div className="bg-white rounded-3xl shadow-xl border border-blue-100 p-8">
@@ -30,6 +40,7 @@ export default function Home() {
           {/* VK Login */}
           <button
             type="button"
+            onClick={() => VKID.Auth.login()}
             className="mt-8 w-full bg-[#0077FF] hover:opacity-90 text-white font-semibold py-4 px-6 rounded-2xl transition flex items-center justify-center gap-3"
           >
             <span className="bg-white text-[#0077FF] font-bold rounded-lg px-2 py-1">
