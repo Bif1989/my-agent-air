@@ -7,7 +7,7 @@ import * as VKID from "@vkid/sdk";
   useEffect(() => {
   VKID.Config.init({
     app: 54770027,
-    redirectUrl: "https://my-agent-air.vercel.app/auth/callback",
+    redirectUrl: "https://agent.bifavia.uz/auth/callback", 
     responseMode: VKID.ConfigResponseMode.Redirect,
     source: VKID.ConfigSource.LOWCODE,
   });
