@@ -40,7 +40,7 @@ export default function Home() {
           {/* VK Login */}
           <button
             type="button"
-            onClick={() => VKID.Auth.login()}
+            onClick={() => VKID.Auth.login().catch(console.error)}
             className="mt-8 w-full bg-[#0077FF] hover:opacity-90 text-white font-semibold py-4 px-6 rounded-2xl transition flex items-center justify-center gap-3"
           >
             <span className="bg-white text-[#0077FF] font-bold rounded-lg px-2 py-1">
