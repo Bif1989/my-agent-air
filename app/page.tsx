@@ -1,4 +1,5 @@
 import Link from "next/link";
+import BrandMark from "@/app/components/brand-mark";
 
 const features = [
   { name: "Exchange", description: "Parvoz va xizmatlar bo‘yicha so‘rovlarni bir joyda boshqaring.", icon: "↔" },
@@ -14,7 +15,7 @@ export default function Home() {
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_75%_20%,rgba(56,189,248,0.28),transparent_35%),linear-gradient(120deg,#0b1f3a_15%,#0f4c81_100%)]" />
         <div className="mx-auto max-w-7xl px-6 pb-20 pt-6 lg:px-10 lg:pb-28">
           <nav className="flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-3" aria-label="My Agent Air bosh sahifa"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-lg font-bold text-[#0f4c81] shadow-lg shadow-cyan-950/20">M</span><span className="text-sm font-semibold tracking-wide sm:text-base">MY AGENT AIR</span></Link>
+            <Link href="/" className="flex items-center gap-3" aria-label="My Agent Air bosh sahifa"><BrandMark /><span className="text-sm font-semibold tracking-wide sm:text-base">MY AGENT AIR</span></Link>
             <div className="flex items-center gap-3 text-sm"><Link href="/login" className="rounded-full px-4 py-2.5 text-slate-200 transition hover:bg-white/10 hover:text-white">Kirish</Link><Link href="/register" className="rounded-full bg-white px-4 py-2.5 font-semibold text-[#0f4c81] shadow-lg shadow-cyan-950/20 transition hover:bg-cyan-50">Ro‘yxatdan o‘tish</Link></div>
           </nav>
           <div className="grid items-center gap-14 pt-20 lg:grid-cols-[1.05fr_0.95fr] lg:gap-20 lg:pt-28">
