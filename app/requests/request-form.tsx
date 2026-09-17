@@ -32,7 +32,11 @@ export default function RequestForm({ initialValues, submitLabel, submittingLabe
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = (() => {
+    const date = new Date();
+    const offset = date.getTimezoneOffset();
+    return new Date(date.getTime() - offset * 60 * 1000).toISOString().slice(0, 10);
+  })();
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -43,7 +47,7 @@ export default function RequestForm({ initialValues, submitLabel, submittingLabe
     const infantsNumber = Number(infants);
     const budgetNumber = budget === "" ? null : Number(budget);
     if (!category) return setError("Kategoriya tanlanishi kerak.");
-    if (!origin.trim() && !destination.trim()) return setError("Origin yoki destinationdan kamida bittasini kiriting.");
+    if (!origin.trim() && !destination.trim()) return setError("Qayerdan yoki qayerga maydonidan kamida bittasini kiriting.");
     if (!Number.isInteger(adultsNumber) || adultsNumber < 1) return setError("Kattalar soni kamida 1 bo‘lishi kerak.");
     if (!Number.isInteger(childrenNumber) || childrenNumber < 0 || !Number.isInteger(infantsNumber) || infantsNumber < 0) return setError("Bolalar va go‘daklar soni 0 yoki undan yuqori bo‘lishi kerak.");
     if (budgetNumber !== null && (!Number.isFinite(budgetNumber) || budgetNumber < 0)) return setError("Budjet manfiy bo‘lishi mumkin emas.");

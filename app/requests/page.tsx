@@ -55,7 +55,7 @@ export default function RequestsPage() {
           setError("So‘rovlarni yuklashda xatolik yuz berdi. Qayta urinib ko‘ring.");
         })
         .finally(() => setIsLoading(false));
-    }, 0);
+    }, 350);
     return () => window.clearTimeout(timeoutId);
   }, [status, category, search, mineOnly]);
 
