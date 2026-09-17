@@ -38,8 +38,8 @@ export async function loadDashboardData(userId: string) {
     readJson<Profile[]>(`profiles?select=full_name,company_name,city,phone,agent_type,is_verified&id=eq.${encodeURIComponent(userId)}&limit=1`),
     readJson<RequestItem[]>("requests?select=id,origin,destination,travel_date,adults,children,infants,category,status,created_at&order=created_at.desc&limit=5"),
     countRows("requests?select=id&status=eq.open"),
-    countRows(`offers?select=id&user_id=eq.${encodeURIComponent(userId)}`),
-    countRows("deals?select=id&status=eq.active"),
+    countRows(`offers?select=id&agent_id=eq.${encodeURIComponent(userId)}`),
+    countRows("deals?select=id&status=in.(accepted,processing,issued)"),
     countRows("profiles?select=id"),
   ]);
   return { profile: profileRows[0] || null, requests, stats: { openRequests, offers, deals, agents } };
