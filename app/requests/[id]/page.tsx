@@ -78,10 +78,13 @@ export default function RequestDetailPage() {
     if (!request || request.status !== "open" || isAccepting || !window.confirm("Ushbu taklifni qabul qilasizmi?")) return;
     setIsAccepting(true); setError(""); setMessage("");
     try {
-      await acceptOffer(offerId);
+      const result = await acceptOffer(offerId);
+      const dealId = typeof result === "string" ? result : result.deal_id;
+      if (!dealId) throw new Error("DEAL_ID_MISSING");
       setRequest({ ...request, status: "accepted" });
       setOffers((current) => current.map((offer) => offer.id === offerId ? { ...offer, status: "accepted" } : { ...offer, status: offer.status === "pending" ? "rejected" : offer.status }));
       setMessage("Taklif qabul qilindi. Bitim yaratildi.");
+      window.setTimeout(() => router.push(`/deals/${dealId}`), 700);
     } catch { setError("Taklifni qabul qilib bo‘lmadi. Qayta urinib ko‘ring."); } finally { setIsAccepting(false); }
   }
 

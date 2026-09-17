@@ -120,5 +120,5 @@ export async function acceptOffer(offerId: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ p_offer_id: offerId }),
   });
-  return response.json() as Promise<string>;
+  return response.json() as Promise<{ deal_id?: string } | string>;
 }
