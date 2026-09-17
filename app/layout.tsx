@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "My Agent Air — Travel Agent Network",
-  description: "Aviakassa va turizm agentlari uchun professional B2B platforma",
+  title: "My Agent Air — Travel Agent B2B Platform",
+  description: "Aviakassa va turizm agentlari uchun so‘rov, taklif, bitim va hamkorlik platformasi.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

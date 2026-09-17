@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import BrandMark from "@/app/components/brand-mark";
 import { FormEvent, useState } from "react";
 import { saveSession, signUp } from "@/lib/supabase-auth";
@@ -10,6 +11,7 @@ const agentTypes = ["Aviakassa", "Turagent", "Turoperator", "Boshqa"];
 export default function RegisterPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -32,7 +34,7 @@ export default function RegisterPage() {
         agent_type: String(formData.get("agentType") || ""),
       });
       saveSession(response);
-      window.location.href = "/dashboard";
+      router.push("/dashboard");
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Ro‘yxatdan o‘tishda xatolik yuz berdi.");
       setIsLoading(false);

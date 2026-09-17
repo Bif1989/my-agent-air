@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import BrandMark from "@/app/components/brand-mark";
 import { FormEvent, useState } from "react";
 import { saveSession, signIn } from "@/lib/supabase-auth";
@@ -8,6 +9,7 @@ import { saveSession, signIn } from "@/lib/supabase-auth";
 export default function LoginPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -17,7 +19,7 @@ export default function LoginPage() {
     try {
       const response = await signIn(String(formData.get("email") || ""), String(formData.get("password") || ""));
       saveSession(response);
-      window.location.href = "/dashboard";
+      router.push("/dashboard");
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Kirishda xatolik yuz berdi.");
       setIsLoading(false);

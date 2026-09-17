@@ -34,7 +34,9 @@ async function authRequest(path: string, body: Record<string, unknown>) {
   });
   const data = (await response.json().catch(() => ({}))) as AuthResponse;
   if (!response.ok) {
-    throw new Error(data.error_description || data.message || data.msg || data.error || "So‘rovni bajarib bo‘lmadi.");
+    if (response.status === 400 || response.status === 401) throw new Error("Email yoki parol noto‘g‘ri.");
+    if (response.status === 422) throw new Error("Bu email bilan ro‘yxatdan o‘tib bo‘lmadi. Ma’lumotlarni tekshiring.");
+    throw new Error("Auth xizmatida vaqtinchalik xatolik yuz berdi.");
   }
   return data;
 }

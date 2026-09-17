@@ -96,7 +96,7 @@ export default function AppShell({ children, session, activePath = "" }: { child
         </nav>
         <div className="mt-auto border-t border-white/10 pt-5">
           <p className="truncate px-3 text-sm font-semibold">{profileName || currentSession.user.email || "Foydalanuvchi"}</p>
-          <p className="truncate px-3 text-xs text-blue-200">{companyName || (role === "admin" ? "Administrator" : "Agent")}</p>
+          <p className="truncate px-3 text-xs text-blue-200">{companyName || "Kompaniya ko‘rsatilmagan"} · {role === "admin" ? "Administrator" : "Agent"}</p>
           <button type="button" onClick={handleLogout} disabled={isSigningOut} className="mt-5 w-full rounded-xl border border-white/15 px-4 py-3 text-left text-sm font-medium text-blue-100 transition hover:border-red-300/50 hover:bg-red-400/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-300 disabled:opacity-60">{isSigningOut ? "Chiqilmoqda..." : "Chiqish"}</button>
         </div>
       </aside>
