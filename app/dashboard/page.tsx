@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import AppShell from "@/app/dashboard/components/app-shell";
 import { loadDashboardData, type Profile, type RequestItem } from "@/app/dashboard/components/dashboard-data";
 import { getStoredSession, type AuthSession } from "@/lib/supabase-auth";
+import { POST_CATEGORY_LABELS, type FeedPost } from "@/app/feed/feed-api";
+import { formatPrice } from "@/app/feed/post-card";
 
 type DashboardData = Awaited<ReturnType<typeof loadDashboardData>>;
 
@@ -51,6 +53,17 @@ function RequestRow({ request }: { request: RequestItem }) {
   );
 }
 
+function AnnouncementRow({ announcement }: { announcement: FeedPost }) {
+  const price = formatPrice(announcement.price, announcement.currency);
+  return (
+    <Link href={`/feed/${announcement.id}`} className="grid gap-2 border-t border-slate-100 py-4 text-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 md:grid-cols-[1.4fr_1fr_0.7fr] md:items-center">
+      <div><p className="font-semibold text-[#0b1f3a]">{announcement.title || announcement.body.slice(0, 60)}</p><p className="mt-1 text-xs text-slate-400">{announcement.author_full_name || "Agent"} · {POST_CATEGORY_LABELS[announcement.category]}</p></div>
+      <div>{(announcement.origin || announcement.destination) && <p className="text-slate-600">{announcement.origin || "—"} <span className="px-1 text-blue-400">→</span> {announcement.destination || "—"}</p>}</div>
+      <p className="text-xs font-semibold text-[#0b1f3a] md:text-right">{price || "Narx ko‘rsatilmagan"}</p>
+    </Link>
+  );
+}
+
 export default function DashboardPage() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [data, setData] = useState<DashboardData | null>(null);
@@ -86,12 +99,13 @@ export default function DashboardPage() {
         <>
           <header className="flex flex-col justify-between gap-5 xl:flex-row xl:items-end">
             <div><p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-600">Ish paneli</p><h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#0b1f3a] sm:text-4xl">Xush kelibsiz, {data.profile?.full_name || session.user.email?.split("@")[0] || "hamkor"}</h1><ProfileSummary profile={data.profile} email={session.user.email} /></div>
-            <div className="flex flex-wrap gap-3"><Link href="/requests/new" className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100">Yangi so‘rov yaratish</Link><Link href="/agents" className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-[#0b1f3a] transition hover:border-blue-300 hover:text-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100">Agentlarni ko‘rish</Link></div>
+            <div className="flex flex-wrap gap-3"><Link href="/requests/new" className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100">Yangi so‘rov yaratish</Link><Link href="/feed" className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-[#0b1f3a] transition hover:border-blue-300 hover:text-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100">Lentani ko‘rish</Link><Link href="/agents" className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-[#0b1f3a] transition hover:border-blue-300 hover:text-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100">Agentlarni ko‘rish</Link></div>
           </header>
           <section aria-label="Asosiy ko‘rsatkichlar" className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {statLabels.map(([key, label, detail]) => key === "deals" || key === "agents" ? <Link href={key === "deals" ? "/deals" : "/agents"} key={key} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-300 focus:outline-none focus:ring-4 focus:ring-blue-100"><p className="text-sm font-medium text-slate-500">{label}</p><p className="mt-4 text-3xl font-semibold tracking-tight text-[#0b1f3a]">{data.stats[key]}</p><p className="mt-2 text-xs text-slate-400">{detail}</p></Link> : <div key={key} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-sm font-medium text-slate-500">{label}</p><p className="mt-4 text-3xl font-semibold tracking-tight text-[#0b1f3a]">{data.stats[key]}</p><p className="mt-2 text-xs text-slate-400">{detail}</p></div>)}
           </section>
           <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-semibold text-[#0b1f3a]">So‘nggi so‘rovlar</h2><p className="mt-1 text-sm text-slate-500">Platformadagi eng yangi so‘rovlar</p></div><Link href="/requests" className="text-sm font-semibold text-blue-600 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">Barchasini ko‘rish</Link></div>{data.requests.length ? <div className="mt-5">{data.requests.map((request) => <RequestRow key={request.id} request={request} />)}</div> : <div className="mt-6 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center"><p className="font-semibold text-[#0b1f3a]">Hozircha so‘rovlar yo‘q</p><p className="mt-2 text-sm text-slate-500">Yangi so‘rov yaratib, hamkorlar tarmog‘ini ishga tushiring.</p></div>}</section>
+          <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-semibold text-[#0b1f3a]">So‘nggi e’lonlar</h2><p className="mt-1 text-sm text-slate-500">Agentlar lentasidagi eng yangi e’lonlar</p></div><Link href="/feed" className="text-sm font-semibold text-blue-600 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">Lentani ko‘rish</Link></div>{data.announcements.length ? <div className="mt-5">{data.announcements.map((announcement) => <AnnouncementRow key={announcement.id} announcement={announcement} />)}</div> : <div className="mt-6 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center"><p className="font-semibold text-[#0b1f3a]">Hozircha e’lonlar yo‘q</p><p className="mt-2 text-sm text-slate-500">Lentada birinchi e’lonni joylashtiring.</p></div>}</section>
   </>
       )}
     </AppShell>

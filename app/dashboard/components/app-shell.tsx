@@ -11,6 +11,7 @@ import { getCurrentProfile } from "@/app/profile/profile-api";
 
 const navigation = [
   ["Dashboard", "/dashboard"],
+  ["Lenta", "/feed"],
   ["So‘rovlar", "/requests"],
   ["Takliflar", "/offers"],
   ["Agentlar", "/agents"],
@@ -50,7 +51,7 @@ export default function AppShell({ children, session, activePath = "" }: { child
     return () => window.clearTimeout(timeoutId);
   }, []);
 
-  const visibleNavigation = role === "admin" ? [...navigation.slice(0, 7), ["Admin", "/admin"] as const, navigation[7]] : navigation;
+  const visibleNavigation = role === "admin" ? [...navigation.slice(0, -1), ["Admin", "/admin"] as const, navigation[navigation.length - 1]] : navigation;
 
   useEffect(() => {
     if (!currentSession) return;
