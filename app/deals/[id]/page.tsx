@@ -81,6 +81,7 @@ export default function DealDetailPage() {
 
   const actions = deal ? nextActions[deal.status] || [] : [];
   return <AppShell session={session} activePath="/deals">
+    {deal && <Link href={`/messages/${deal.id}`} className="mx-auto mb-4 block max-w-5xl text-sm font-semibold text-blue-600 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">Agent bilan yozishish →</Link>}
     {isLoading && <div className="flex min-h-[60vh] items-center justify-center text-sm text-slate-500">Bitim yuklanmoqda...</div>}
     {!isLoading && error && <div role="alert" className="mx-auto max-w-4xl rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">{error}<Link href="/deals" className="ml-2 font-semibold underline">Bitimlarga qaytish</Link></div>}
     {!isLoading && deal && <div className="mx-auto max-w-5xl"><Link href="/deals" className="text-sm font-semibold text-blue-600 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">← Bitimlarga qaytish</Link><header className="mt-7 flex flex-col justify-between gap-5 sm:flex-row sm:items-start"><div><p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-600">Bitim tafsilotlari</p><h1 className="mt-3 break-all text-2xl font-semibold tracking-tight text-[#0b1f3a] sm:text-3xl">{deal.id}</h1><p className="mt-2 text-sm text-slate-500">Yaratilgan: {formatDate(deal.created_at)}</p></div><span className={`w-fit rounded-full px-4 py-2 text-sm font-semibold ${statusClasses[deal.status]}`}>{statusLabels[deal.status]}</span></header>
