@@ -42,12 +42,12 @@ function ProfileSummary({ profile, email }: { profile: Profile | null; email?: s
 function RequestRow({ request }: { request: RequestItem }) {
   const passengers = `${request.adults || 0} kattalar · ${request.children || 0} bolalar · ${request.infants || 0} go‘daklar`;
   return (
-    <div className="grid gap-3 border-t border-slate-100 py-4 text-sm md:grid-cols-[1.4fr_1fr_0.7fr_0.7fr] md:items-center">
+    <Link href={`/requests/${request.id}`} className="grid gap-3 border-t border-slate-100 py-4 text-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 md:grid-cols-[1.4fr_1fr_0.7fr_0.7fr] md:items-center">
       <div><p className="font-semibold text-[#0b1f3a]">{request.origin || "—"} <span className="px-1 text-blue-400">→</span> {request.destination || "—"}</p><p className="mt-1 text-xs text-slate-400">{passengers}</p></div>
       <div><p className="text-slate-600">{formatDate(request.travel_date)}</p><p className="mt-1 text-xs text-slate-400">{request.category || "Kategoriya yo‘q"}</p></div>
       <span className="w-fit rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">{formatStatus(request.status)}</span>
       <p className="text-xs text-slate-400 md:text-right">{formatDate(request.created_at)}</p>
-    </div>
+    </Link>
   );
 }
 
