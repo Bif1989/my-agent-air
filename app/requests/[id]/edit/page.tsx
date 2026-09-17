@@ -23,7 +23,7 @@ export default function EditRequestPage() {
       setSession(storedSession);
       getRequest(params.id)
         .then((loadedRequest) => {
-          if (!loadedRequest || loadedRequest.created_by !== storedSession.user.id) { router.replace(loadedRequest ? `/requests/${params.id}` : "/requests"); return; }
+          if (!loadedRequest || loadedRequest.created_by !== storedSession.user.id || loadedRequest.status !== "open") { router.replace(loadedRequest ? `/requests/${params.id}` : "/requests"); return; }
           setRequest(loadedRequest);
         })
         .catch((requestError: unknown) => {
