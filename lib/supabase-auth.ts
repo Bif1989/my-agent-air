@@ -6,19 +6,25 @@ export const ACCESS_TOKEN_STORAGE_KEY = "my_agent_air_access_token";
 
 export type AuthSession = {
   access_token: string;
-  refresh_token?: string;
-  user?: { email?: string };
+  refresh_token: string;
+  user: { id: string; email?: string };
 };
 
 type AuthResponse = {
   access_token?: string;
   refresh_token?: string;
-  user?: AuthSession["user"];
+  user?: Partial<AuthSession["user"]>;
   error?: string;
   error_description?: string;
   msg?: string;
   message?: string;
 };
+
+type SupabaseUser = { id: string; email?: string };
+
+function isBrowser() {
+  return typeof window !== "undefined";
+}
 
 async function authRequest(path: string, body: Record<string, unknown>) {
   const response = await fetch(`${SUPABASE_URL}/auth/v1/${path}`, {
@@ -60,19 +66,92 @@ export function signIn(email: string, password: string) {
 }
 
 export function saveSession(data: AuthResponse) {
-  if (!data.access_token) {
+  if (!data.access_token || !data.refresh_token || !data.user?.id) {
     throw new Error("Session yaratilmadi. Emailingizni tasdiqlash talab qilinishi mumkin.");
   }
   const session: AuthSession = {
     access_token: data.access_token,
     refresh_token: data.refresh_token,
-    user: data.user,
+    user: { id: data.user.id, email: data.user.email },
   };
+  if (!isBrowser()) return;
   localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
   localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, data.access_token);
 }
 
 export function clearSession() {
+  if (!isBrowser()) return;
   localStorage.removeItem(SESSION_STORAGE_KEY);
   localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+}
+
+export function getStoredSession(): AuthSession | null {
+  if (!isBrowser()) return null;
+  const storedSession = localStorage.getItem(SESSION_STORAGE_KEY);
+  if (!storedSession) return null;
+  try {
+    const session = JSON.parse(storedSession) as Partial<AuthSession> & { user?: Partial<SupabaseUser> };
+    if (!session.access_token || !session.refresh_token || !session.user?.id) return null;
+    return {
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+      user: { id: session.user.id, email: session.user.email },
+    };
+  } catch {
+    clearSession();
+    return null;
+  }
+}
+
+export async function refreshSession(): Promise<AuthSession | null> {
+  const session = getStoredSession();
+  if (!session) return null;
+  try {
+    const data = await authRequest("token?grant_type=refresh_token", { refresh_token: session.refresh_token });
+    saveSession({ ...data, user: data.user || session.user });
+    return getStoredSession();
+  } catch {
+    clearSession();
+    return null;
+  }
+}
+
+export async function authenticatedSupabaseFetch(path: string, init: RequestInit = {}) {
+  let session = getStoredSession();
+  if (!session) throw new Error("AUTH_SESSION_MISSING");
+
+  const request = (accessToken: string) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+      ...(init.headers || {}),
+    },
+  });
+
+  let response = await request(session.access_token);
+  if (response.status === 401) {
+    session = await refreshSession();
+    if (!session) throw new Error("AUTH_SESSION_EXPIRED");
+    response = await request(session.access_token);
+  }
+  if (!response.ok) {
+    throw new Error(`SUPABASE_${response.status}`);
+  }
+  return response;
+}
+
+export async function signOut() {
+  const session = getStoredSession();
+  try {
+    if (session) {
+      await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${session.access_token}` },
+      });
+    }
+  } finally {
+    clearSession();
+  }
 }
