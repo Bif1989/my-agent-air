@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import BrandMark from "@/app/components/brand-mark";
 import { getStoredSession, signOut, type AuthSession } from "@/lib/supabase-auth";
 import { getUnreadMessageCount } from "@/app/messages/messages-api";
-import { subscribeToMessages } from "@/lib/supabase-realtime";
+import { listMessengerConversations } from "@/app/messenger/messenger-api";
+import { subscribeToMessages, subscribeToMessengerMessages } from "@/lib/supabase-realtime";
 import { getCurrentProfile } from "@/app/profile/profile-api";
 
 const navigation = [
@@ -14,7 +15,8 @@ const navigation = [
   ["Takliflar", "/offers"],
   ["Agentlar", "/agents"],
   ["Bitimlar", "/deals"],
-  ["Xabarlar", "/messages"],
+  ["Bitim chatlari", "/messages"],
+  ["Messenger", "/messenger"],
   ["Profil", "/profile"],
 ] as const;
 
@@ -23,6 +25,7 @@ export default function AppShell({ children, session, activePath = "" }: { child
   const [isReady, setIsReady] = useState(Boolean(session));
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [unreadMessenger, setUnreadMessenger] = useState(0);
   const [profileName, setProfileName] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [role, setRole] = useState<string | null>(null);
@@ -47,18 +50,22 @@ export default function AppShell({ children, session, activePath = "" }: { child
     return () => window.clearTimeout(timeoutId);
   }, []);
 
-  const visibleNavigation = role === "admin" ? [...navigation.slice(0, 6), ["Admin", "/admin"] as const, navigation[6]] : navigation;
+  const visibleNavigation = role === "admin" ? [...navigation.slice(0, 7), ["Admin", "/admin"] as const, navigation[7]] : navigation;
 
   useEffect(() => {
     if (!currentSession) return;
     const refreshUnread = () => {
       if (unreadRefreshTimer.current !== null) return;
       unreadRefreshTimer.current = window.setTimeout(() => {
-        getUnreadMessageCount().then(setUnreadMessages).catch(() => undefined).finally(() => { unreadRefreshTimer.current = null; });
+        Promise.allSettled([getUnreadMessageCount(), listMessengerConversations()]).then(([dealResult, messengerResult]) => {
+          if (dealResult.status === "fulfilled") setUnreadMessages(dealResult.value);
+          if (messengerResult.status === "fulfilled") setUnreadMessenger(messengerResult.value.reduce((total, conversation) => total + (conversation.unread_count || 0), 0));
+        }).finally(() => { unreadRefreshTimer.current = null; });
       }, 300);
     };
     const handleVisibility = () => { if (document.visibilityState === "visible") refreshUnread(); };
     const realtime = subscribeToMessages(() => refreshUnread());
+    const messengerRealtime = subscribeToMessengerMessages(() => refreshUnread());
     refreshUnread();
     window.addEventListener("focus", refreshUnread);
     document.addEventListener("visibilitychange", handleVisibility);
@@ -66,6 +73,7 @@ export default function AppShell({ children, session, activePath = "" }: { child
       window.removeEventListener("focus", refreshUnread);
       document.removeEventListener("visibilitychange", handleVisibility);
       if (realtime) realtime.client.removeChannel(realtime.channel);
+      if (messengerRealtime) messengerRealtime.client.removeChannel(messengerRealtime.channel);
       if (unreadRefreshTimer.current !== null) window.clearTimeout(unreadRefreshTimer.current);
       unreadRefreshTimer.current = null;
     };
@@ -90,7 +98,7 @@ export default function AppShell({ children, session, activePath = "" }: { child
         <nav aria-label="Asosiy navigatsiya" className="mt-12 space-y-1">
             {visibleNavigation.map(([label, href]) => (
             <Link key={href} href={href} className={`flex items-center justify-between rounded-xl px-4 py-3 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-cyan-300 ${activePath === href ? "bg-blue-600 text-white shadow-lg shadow-blue-950/30" : "text-blue-100 hover:bg-white/10 hover:text-white"}`}>
-              <span>{label}</span>{href === "/messages" && unreadMessages > 0 && <span aria-label={`${unreadMessages} ta o‘qilmagan xabar`} className="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold text-white">{unreadMessages > 99 ? "99+" : unreadMessages}</span>}
+              <span>{label}</span>{href === "/messages" && unreadMessages > 0 && <span aria-label={`${unreadMessages} ta o‘qilmagan xabar`} className="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold text-white">{unreadMessages > 99 ? "99+" : unreadMessages}</span>}{href === "/messenger" && unreadMessenger > 0 && <span aria-label={`${unreadMessenger} ta o‘qilmagan messenger xabari`} className="rounded-full bg-cyan-300 px-2 py-0.5 text-[10px] font-bold text-[#0b1f3a]">{unreadMessenger > 99 ? "99+" : unreadMessenger}</span>}
             </Link>
           ))}
         </nav>
@@ -107,7 +115,7 @@ export default function AppShell({ children, session, activePath = "" }: { child
             <button type="button" onClick={handleLogout} disabled={isSigningOut} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">Chiqish</button>
           </div>
           <nav aria-label="Mobil navigatsiya" className="mt-4 flex gap-2 overflow-x-auto pb-1">
-            {visibleNavigation.map(([label, href]) => <Link key={href} href={href} className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${activePath === href ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}><span>{label}</span>{href === "/messages" && unreadMessages > 0 && <span aria-label={`${unreadMessages} ta o‘qilmagan xabar`} className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] text-white">{unreadMessages > 99 ? "99+" : unreadMessages}</span>}</Link>)}
+            {visibleNavigation.map(([label, href]) => <Link key={href} href={href} className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${activePath === href ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}><span>{label}</span>{href === "/messages" && unreadMessages > 0 && <span aria-label={`${unreadMessages} ta o‘qilmagan xabar`} className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] text-white">{unreadMessages > 99 ? "99+" : unreadMessages}</span>}{href === "/messenger" && unreadMessenger > 0 && <span aria-label={`${unreadMessenger} ta o‘qilmagan messenger xabari`} className="rounded-full bg-cyan-300 px-1.5 py-0.5 text-[10px] font-bold text-[#0b1f3a]">{unreadMessenger > 99 ? "99+" : unreadMessenger}</span>}</Link>)}
           </nav>
         </header>
         <main className="mx-auto w-full max-w-[1440px] px-4 py-6 sm:px-8 sm:py-8">{children}</main>

@@ -40,3 +40,21 @@ export function subscribeToMessages(onChange: (payload: RealtimeMessagePayload) 
     .subscribe();
   return { client, channel };
 }
+
+export function subscribeToMessengerRoom(roomId: string, onChange: (payload: RealtimeMessagePayload) => void) {
+  const client = getSupabaseRealtimeClient();
+  if (!client) return null;
+  const channel: RealtimeChannel = client.channel(`messenger-room:${roomId}`)
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `room_id=eq.${roomId}` }, onChange)
+    .subscribe();
+  return { client, channel };
+}
+
+export function subscribeToMessengerMessages(onChange: (payload: RealtimeMessagePayload) => void) {
+  const client = getSupabaseRealtimeClient();
+  if (!client) return null;
+  const channel: RealtimeChannel = client.channel("messenger-messages-global")
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, onChange)
+    .subscribe();
+  return { client, channel };
+}
