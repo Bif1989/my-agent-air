@@ -19,11 +19,24 @@ export function getSupabaseRealtimeClient() {
   return realtimeClient;
 }
 
-export function subscribeToDealMessages(dealId: string, onInsert: (payload: { new: Record<string, unknown> }) => void) {
+export type RealtimeMessagePayload = { new: Record<string, unknown>; old: Record<string, unknown> };
+
+export function subscribeToDealMessages(dealId: string, onChange: (payload: RealtimeMessagePayload) => void) {
   const client = getSupabaseRealtimeClient();
   if (!client) return null;
   const channel: RealtimeChannel = client.channel(`deal-messages:${dealId}`)
-    .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `deal_id=eq.${dealId}` }, onInsert)
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `deal_id=eq.${dealId}` }, onChange)
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages", filter: `deal_id=eq.${dealId}` }, onChange)
+    .subscribe();
+  return { client, channel };
+}
+
+export function subscribeToMessages(onChange: (payload: RealtimeMessagePayload) => void) {
+  const client = getSupabaseRealtimeClient();
+  if (!client) return null;
+  const channel: RealtimeChannel = client.channel("messages-global")
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, onChange)
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, onChange)
     .subscribe();
   return { client, channel };
 }

@@ -40,7 +40,7 @@ export async function loadDashboardData(userId: string) {
     countRows("requests?select=id&status=eq.open"),
     countRows(`offers?select=id&agent_id=eq.${encodeURIComponent(userId)}`),
     countRows("deals?select=id&status=in.(accepted,processing,issued)"),
-    countRows("profiles?select=id"),
+    countRows("profiles?select=id&is_active=eq.true"),
   ]);
   return { profile: profileRows[0] || null, requests, stats: { openRequests, offers, deals, agents } };
 }

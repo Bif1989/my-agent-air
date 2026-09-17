@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import BrandMark from "@/app/components/brand-mark";
 import { getStoredSession, signOut, type AuthSession } from "@/lib/supabase-auth";
-import { listConversationSummaries } from "@/app/messages/messages-api";
+import { getUnreadMessageCount } from "@/app/messages/messages-api";
+import { subscribeToMessages } from "@/lib/supabase-realtime";
 
 const navigation = [
   ["Dashboard", "/dashboard"],
@@ -21,6 +22,7 @@ export default function AppShell({ children, session, activePath = "" }: { child
   const [isReady, setIsReady] = useState(Boolean(session));
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const unreadRefreshTimer = useRef<number | null>(null);
 
   useEffect(() => {
     const storedSession = getStoredSession();
@@ -36,10 +38,25 @@ export default function AppShell({ children, session, activePath = "" }: { child
   }, []);
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      listConversationSummaries().then((summaries) => setUnreadMessages(summaries.reduce((total, summary) => total + (summary.unread_count || 0), 0))).catch(() => undefined);
-    }, 0);
-    return () => window.clearTimeout(timeoutId);
+    if (!currentSession) return;
+    const refreshUnread = () => {
+      if (unreadRefreshTimer.current !== null) return;
+      unreadRefreshTimer.current = window.setTimeout(() => {
+        getUnreadMessageCount().then(setUnreadMessages).catch(() => undefined).finally(() => { unreadRefreshTimer.current = null; });
+      }, 300);
+    };
+    const handleVisibility = () => { if (document.visibilityState === "visible") refreshUnread(); };
+    const realtime = subscribeToMessages(() => refreshUnread());
+    refreshUnread();
+    window.addEventListener("focus", refreshUnread);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.removeEventListener("focus", refreshUnread);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      if (realtime) realtime.client.removeChannel(realtime.channel);
+      if (unreadRefreshTimer.current !== null) window.clearTimeout(unreadRefreshTimer.current);
+      unreadRefreshTimer.current = null;
+    };
   }, [currentSession]);
 
   async function handleLogout() {

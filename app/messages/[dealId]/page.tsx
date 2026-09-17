@@ -56,8 +56,9 @@ export default function MessagesDetailPage() {
   async function reloadMessages(dealId: string, userId: string) {
     const loadedMessages = await listMessages(dealId);
     setMessages((current) => {
-      const knownIds = new Set(current.map((message) => message.id));
-      return loadedMessages.reduce((next, message) => knownIds.has(message.id) ? next : [...next, message], current).sort((left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime());
+      const currentById = new Map(current.map((message) => [message.id, message]));
+      loadedMessages.forEach((message) => currentById.set(message.id, { ...currentById.get(message.id), ...message }));
+      return [...currentById.values()].sort((left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime());
     });
     if (loadedMessages.some((message) => message.sender_id !== userId && !message.read_at)) await markDealMessagesRead(dealId);
   }

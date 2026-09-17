@@ -49,6 +49,11 @@ export async function listConversationSummaries() {
   return readJson<ConversationSummary[]>(response);
 }
 
+export async function getUnreadMessageCount() {
+  const summaries = await listConversationSummaries();
+  return summaries.reduce((total, summary) => total + (summary.unread_count || 0), 0);
+}
+
 export async function listConversations(deals: DealRecord[]) {
   const summaries = await listConversationSummaries();
   const dealsById = new Map(deals.map((deal) => [deal.id, deal]));
