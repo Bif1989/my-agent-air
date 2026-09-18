@@ -17,8 +17,7 @@ import ChatToastStack, { type ChatToastData } from "@/app/dashboard/components/c
 const navigation = [
   ["Dashboard", "/dashboard"],
   ["Lenta", "/feed"],
-  ["So‘rovlar", "/requests"],
-  ["Takliflar", "/offers"],
+  ["So‘rovlar va takliflar", "/requests"],
   ["Agentlar", "/agents"],
   ["Bitimlar", "/deals"],
   ["Bitim chatlari", "/messages"],
