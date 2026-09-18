@@ -1,0 +1,9 @@
+# Minimal config: this repo only uses the Supabase CLI to deploy the
+# push-dispatch Edge Function, not the local dev stack (db/api/auth/storage).
+project_id = "my-agent-air"
+
+[functions.push-dispatch]
+# The DB trigger calls this function with a shared x-webhook-secret header,
+# not a Supabase Auth JWT, so platform JWT verification must be disabled or
+# every call gets rejected with 401 before reaching our own auth check.
+verify_jwt = false
