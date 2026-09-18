@@ -7,6 +7,7 @@ import BrandMark from "@/app/components/brand-mark";
 import { getStoredSession, signOut, type AuthSession } from "@/lib/supabase-auth";
 import { getUnreadMessageCount } from "@/app/messages/messages-api";
 import { getDeal } from "@/app/deals/deals-api";
+import { disablePushNotifications, registerServiceWorker } from "@/lib/push-notifications";
 import { listMessengerConversations } from "@/app/messenger/messenger-api";
 import { getAgent } from "@/app/agents/agents-api";
 import { subscribeToMessages, subscribeToMessengerMessages, type RealtimeMessagePayload } from "@/lib/supabase-realtime";
@@ -87,6 +88,7 @@ export default function AppShell({ children, session, activePath = "" }: { child
         setCompanyName(profile.company_name || "");
         setRole(profile.role || "agent");
       }).catch(() => undefined);
+      registerServiceWorker().catch(() => undefined);
     }, 0);
     return () => window.clearTimeout(timeoutId);
   }, []);
@@ -164,6 +166,7 @@ export default function AppShell({ children, session, activePath = "" }: { child
 
   async function handleLogout() {
     setIsSigningOut(true);
+    await disablePushNotifications().catch(() => undefined);
     await signOut();
     window.location.replace("/login");
   }

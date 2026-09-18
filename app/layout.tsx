@@ -15,7 +15,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "My Agent Air — Travel Agent B2B Platform",
   description: "Aviakassa va turizm agentlari uchun so‘rov, taklif, bitim va hamkorlik platformasi.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "My Agent Air", statusBarStyle: "black-translucent" },
 };
+
+export const viewport = { themeColor: "#0b1f3a" };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
