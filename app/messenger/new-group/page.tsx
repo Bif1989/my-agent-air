@@ -95,7 +95,7 @@ export default function NewGroupPage() {
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-700">Yangi guruh</p>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[#0b1f3a]">Guruh yaratish</h1>
           </div>
-          <Link href="/messenger" className="text-sm font-semibold text-blue-600 hover:text-blue-700">← Messenger</Link>
+          <Link href="/messenger" className="text-sm font-semibold text-blue-600 hover:text-blue-700">← Chat</Link>
         </div>
 
         <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
