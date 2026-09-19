@@ -71,7 +71,7 @@ export function verifySignupOtp(email: string, token: string) {
   return authRequest("verify", {
     email,
     token,
-    type: "signup",
+    type: "email",
   });
 }
 
