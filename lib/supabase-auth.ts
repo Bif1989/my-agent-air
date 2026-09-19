@@ -34,6 +34,10 @@ async function authRequest(path: string, body: Record<string, unknown>) {
   });
   const data = (await response.json().catch(() => ({}))) as AuthResponse;
   if (!response.ok) {
+    if (response.status === 429) throw new Error("Kodni qayta yuborish uchun biroz kuting.");
+    if (path === "verify" && (response.status === 400 || response.status === 401)) {
+      throw new Error("Kiritilgan kod noto‘g‘ri yoki eskirgan.");
+    }
     if (response.status === 400 || response.status === 401) throw new Error("Email yoki parol noto‘g‘ri.");
     if (response.status === 422) throw new Error("Bu email bilan ro‘yxatdan o‘tib bo‘lmadi. Ma’lumotlarni tekshiring.");
     throw new Error("Auth xizmatida vaqtinchalik xatolik yuz berdi.");
@@ -60,6 +64,21 @@ export function signUp(body: {
       city: body.city,
       agent_type: body.agent_type,
     },
+  });
+}
+
+export function verifySignupOtp(email: string, token: string) {
+  return authRequest("verify", {
+    email,
+    token,
+    type: "signup",
+  });
+}
+
+export function resendSignupOtp(email: string) {
+  return authRequest("resend", {
+    email,
+    type: "signup",
   });
 }
 
