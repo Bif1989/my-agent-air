@@ -21,6 +21,7 @@ type VkDebugUser = {
   lastName: string;
   vkUserId: string;
   verified: boolean;
+  errorCode: string | null;
 };
 
 export default function VkMiniAppBridge() {
@@ -60,6 +61,7 @@ export default function VkMiniAppBridge() {
         lastName: userInfo.last_name,
         vkUserId,
         verified: verifyResult?.ok === true,
+        errorCode: verifyResult?.error_code ?? null,
       });
     })().catch((error: unknown) => {
       console.error("VK Mini App bridge initialization failed", error);
@@ -87,7 +89,7 @@ export default function VkMiniAppBridge() {
     >
       {debugUser.verified
         ? `VK xavfsiz tasdiqlandi: ${debugUser.firstName} ${debugUser.lastName} (ID: ${debugUser.vkUserId})`
-        : "VK tasdiqlash xatosi"}
+        : `VK tasdiqlash xatosi: ${debugUser.errorCode ?? "UNKNOWN"}`}
     </div>
   );
 }
