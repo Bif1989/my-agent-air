@@ -20,6 +20,7 @@ type VkDebugUser = {
   firstName: string;
   lastName: string;
   vkUserId: string;
+  verified: boolean;
 };
 
 export default function VkMiniAppBridge() {
@@ -44,20 +45,22 @@ export default function VkMiniAppBridge() {
         last_name: userInfo.last_name,
       });
 
-      setDebugUser({
-        firstName: userInfo.first_name,
-        lastName: userInfo.last_name,
-        vkUserId,
-      });
-
       const launchParamsObject = Object.fromEntries(launchParams.entries());
       const verifyResponse = await fetch("/api/auth/vk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(launchParamsObject),
       });
+      const verifyResult = await verifyResponse.json();
 
-      console.log("VK launch params verification", await verifyResponse.json());
+      console.log("VK launch params verification", verifyResult);
+
+      setDebugUser({
+        firstName: userInfo.first_name,
+        lastName: userInfo.last_name,
+        vkUserId,
+        verified: verifyResult?.ok === true,
+      });
     })().catch((error: unknown) => {
       console.error("VK Mini App bridge initialization failed", error);
     });
@@ -82,7 +85,9 @@ export default function VkMiniAppBridge() {
         textAlign: "center",
       }}
     >
-      VK ulandi: {debugUser.firstName} {debugUser.lastName} (ID: {debugUser.vkUserId})
+      {debugUser.verified
+        ? `VK xavfsiz tasdiqlandi: ${debugUser.firstName} ${debugUser.lastName} (ID: ${debugUser.vkUserId})`
+        : "VK tasdiqlash xatosi"}
     </div>
   );
 }
