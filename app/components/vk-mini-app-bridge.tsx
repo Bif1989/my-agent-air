@@ -49,6 +49,15 @@ export default function VkMiniAppBridge() {
         lastName: userInfo.last_name,
         vkUserId,
       });
+
+      const launchParamsObject = Object.fromEntries(launchParams.entries());
+      const verifyResponse = await fetch("/api/auth/vk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(launchParamsObject),
+      });
+
+      console.log("VK launch params verification", await verifyResponse.json());
     })().catch((error: unknown) => {
       console.error("VK Mini App bridge initialization failed", error);
     });
