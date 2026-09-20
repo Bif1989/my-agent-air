@@ -21,21 +21,24 @@ function verifyVkSign(params: URLSearchParams, secretKey: string) {
     .filter(([key]) => key.startsWith("vk_"))
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
 
-  const queryString = new URLSearchParams(vkParams).toString();
+  const queryString = vkParams
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+    .join("&");
   const expectedSign = base64UrlEncode(createHmac("sha256", secretKey).update(queryString).digest());
 
   return expectedSign === sign;
 }
 
 export async function POST(request: NextRequest) {
-  const secretKey = process.env.VK_SECRET_KEY;
+  const secretKey = process.env.VK_SECRET_KEY?.trim();
   if (!secretKey) {
-    return NextResponse.json({ ok: false, error: "VK secret key is not configured" }, { status: 500 });
+    return NextResponse.json({ ok: false, error_code: "MISSING_SECRET" }, { status: 500 });
   }
 
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== "object") {
-    return NextResponse.json({ ok: false, error: "Invalid request body" }, { status: 400 });
+    return NextResponse.json({ ok: false, error_code: "INVALID_PARAMS" }, { status: 400 });
   }
 
   const params = new URLSearchParams();
@@ -49,11 +52,11 @@ export async function POST(request: NextRequest) {
   const vkUserId = params.get("vk_user_id");
 
   if (vkAppId !== VK_APP_ID || !vkUserId) {
-    return NextResponse.json({ ok: false, error: "Invalid VK launch params" }, { status: 401 });
+    return NextResponse.json({ ok: false, error_code: "INVALID_PARAMS" }, { status: 401 });
   }
 
   if (!verifyVkSign(params, secretKey)) {
-    return NextResponse.json({ ok: false, error: "Invalid sign" }, { status: 401 });
+    return NextResponse.json({ ok: false, error_code: "INVALID_SIGN" }, { status: 401 });
   }
 
   return NextResponse.json({ ok: true, vk_user_id: vkUserId });
