@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import bridge from "@vkontakte/vk-bridge";
 
 const VK_APP_ID = "54781128";
@@ -16,7 +16,15 @@ function getLaunchParams() {
   return params;
 }
 
+type VkDebugUser = {
+  firstName: string;
+  lastName: string;
+  vkUserId: string;
+};
+
 export default function VkMiniAppBridge() {
+  const [debugUser, setDebugUser] = useState<VkDebugUser | null>(null);
+
   useEffect(() => {
     const launchParams = getLaunchParams();
     const vkAppId = launchParams.get("vk_app_id");
@@ -35,10 +43,37 @@ export default function VkMiniAppBridge() {
         first_name: userInfo.first_name,
         last_name: userInfo.last_name,
       });
+
+      setDebugUser({
+        firstName: userInfo.first_name,
+        lastName: userInfo.last_name,
+        vkUserId,
+      });
     })().catch((error: unknown) => {
       console.error("VK Mini App bridge initialization failed", error);
     });
   }, []);
 
-  return null;
+  if (!debugUser) {
+    return null;
+  }
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 9999,
+        padding: "6px 12px",
+        background: "#2688eb",
+        color: "#fff",
+        fontSize: 12,
+        textAlign: "center",
+      }}
+    >
+      VK ulandi: {debugUser.firstName} {debugUser.lastName} (ID: {debugUser.vkUserId})
+    </div>
+  );
 }
