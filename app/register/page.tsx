@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { track } from "@vercel/analytics";
 import BrandMark from "@/app/components/brand-mark";
 import { FormEvent, useEffect, useState } from "react";
 import { resendSignupOtp, saveSession, signUp, verifySignupOtp } from "@/lib/supabase-auth";
@@ -24,6 +25,10 @@ export default function RegisterPage() {
   const [otpCode, setOtpCode] = useState("");
   const [resendCooldown, setResendCooldown] = useState(0);
   const router = useRouter();
+
+  useEffect(() => {
+    track("signup_started");
+  }, []);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -55,6 +60,7 @@ export default function RegisterPage() {
         agent_type: String(formData.get("agentType") || ""),
       });
       if (response.access_token && response.refresh_token && response.user?.id) {
+        track("signup_completed");
         saveSession(response);
         router.push("/dashboard");
         return;
@@ -80,6 +86,7 @@ export default function RegisterPage() {
     setIsVerifying(true);
     try {
       const response = await verifySignupOtp(pendingEmail, otpCode);
+      track("signup_completed");
       saveSession(response);
       router.push("/dashboard");
     } catch (requestError) {
