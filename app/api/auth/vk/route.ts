@@ -21,7 +21,7 @@ function verifyVkSign(params: URLSearchParams, secretKey: string) {
     .filter(([key]) => key.startsWith("vk_"))
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
 
-  const queryString = vkParams.map(([key, value]) => `${key}=${value}`).join("&");
+  const queryString = new URLSearchParams(vkParams).toString();
   const expectedSign = base64UrlEncode(createHmac("sha256", secretKey).update(queryString).digest());
 
   return expectedSign === sign;
