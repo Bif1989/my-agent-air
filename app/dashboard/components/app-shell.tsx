@@ -14,6 +14,7 @@ import { subscribeToMessages, subscribeToMessengerMessages, type RealtimeMessage
 import { getCurrentProfile } from "@/app/profile/profile-api";
 import { playNotificationSound } from "@/lib/notification-sound";
 import ChatToastStack, { type ChatToastData } from "@/app/dashboard/components/chat-toast";
+import FloatingMessengerPanel from "@/app/dashboard/components/floating-messenger-panel";
 
 const navigation = [
   ["Dashboard", "/dashboard"],
@@ -207,6 +208,7 @@ export default function AppShell({ children, session, activePath = "" }: { child
         <main className="mx-auto w-full max-w-[1440px] px-4 py-6 sm:px-8 sm:py-8">{children}</main>
       </div>
       <ChatToastStack toasts={toasts} onClose={closeToast} onOpen={openToast} />
+      <FloatingMessengerPanel activePath={activePath} />
     </div>
   );
 }
