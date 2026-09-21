@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import bridge from "@vkontakte/vk-bridge";
+import { getStoredSession, saveSession } from "@/lib/supabase-auth";
 
 const VK_APP_ID = "54781128";
 
@@ -16,59 +18,56 @@ function getLaunchParams() {
   return params;
 }
 
-type VkDebugUser = {
-  firstName: string;
-  lastName: string;
-  vkUserId: string;
-  verified: boolean;
-  errorCode: string | null;
-};
-
 export default function VkMiniAppBridge() {
-  const [debugUser, setDebugUser] = useState<VkDebugUser | null>(null);
+  const router = useRouter();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const launchParams = getLaunchParams();
-    const vkAppId = launchParams.get("vk_app_id");
-    const vkUserId = launchParams.get("vk_user_id");
+    window.setTimeout(() => {
+      const launchParams = getLaunchParams();
+      const vkAppId = launchParams.get("vk_app_id");
+      const vkUserId = launchParams.get("vk_user_id");
 
-    if (vkAppId !== VK_APP_ID || !vkUserId) {
-      return;
-    }
+      if (vkAppId !== VK_APP_ID || !vkUserId) {
+        return;
+      }
 
-    void (async () => {
-      await bridge.send("VKWebAppInit");
-      const userInfo = await bridge.send("VKWebAppGetUserInfo");
+      // Already authenticated in this browser — avoid re-triggering VK login.
+      if (getStoredSession()) {
+        return;
+      }
 
-      console.log("VK Mini App user", {
-        vk_user_id: vkUserId,
-        first_name: userInfo.first_name,
-        last_name: userInfo.last_name,
+      void (async () => {
+        await bridge.send("VKWebAppInit");
+        const userInfo = await bridge.send("VKWebAppGetUserInfo");
+
+        const launchParamsObject = Object.fromEntries(launchParams.entries());
+        const loginResponse = await fetch("/api/auth/vk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...launchParamsObject,
+            first_name: userInfo.first_name,
+            last_name: userInfo.last_name,
+            photo_url: userInfo.photo_200 ?? userInfo.photo_100 ?? "",
+          }),
+        });
+        const loginResult = await loginResponse.json();
+
+        if (!loginResponse.ok || loginResult?.ok !== true) {
+          throw new Error("VK_LOGIN_FAILED");
+        }
+
+        saveSession(loginResult);
+        router.push("/dashboard");
+      })().catch((error: unknown) => {
+        console.error("VK Mini App auto-login failed", error);
+        setErrorMessage("VK orqali kirishda xatolik");
       });
+    }, 0);
+  }, [router]);
 
-      const launchParamsObject = Object.fromEntries(launchParams.entries());
-      const verifyResponse = await fetch("/api/auth/vk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(launchParamsObject),
-      });
-      const verifyResult = await verifyResponse.json();
-
-      console.log("VK launch params verification", verifyResult);
-
-      setDebugUser({
-        firstName: userInfo.first_name,
-        lastName: userInfo.last_name,
-        vkUserId,
-        verified: verifyResult?.ok === true,
-        errorCode: verifyResult?.error_code ?? null,
-      });
-    })().catch((error: unknown) => {
-      console.error("VK Mini App bridge initialization failed", error);
-    });
-  }, []);
-
-  if (!debugUser) {
+  if (!errorMessage) {
     return null;
   }
 
@@ -81,15 +80,13 @@ export default function VkMiniAppBridge() {
         right: 0,
         zIndex: 9999,
         padding: "6px 12px",
-        background: "#2688eb",
+        background: "#c0392b",
         color: "#fff",
         fontSize: 12,
         textAlign: "center",
       }}
     >
-      {debugUser.verified
-        ? `VK xavfsiz tasdiqlandi: ${debugUser.firstName} ${debugUser.lastName} (ID: ${debugUser.vkUserId})`
-        : `VK tasdiqlash xatosi: ${debugUser.errorCode ?? "UNKNOWN"}`}
+      {errorMessage}
     </div>
   );
 }
