@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import bridge from "@vkontakte/vk-bridge";
 import { getStoredSession, saveSession } from "@/lib/supabase-auth";
@@ -21,6 +21,7 @@ function getLaunchParams() {
 export default function VkMiniAppBridge() {
   const router = useRouter();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const hasRunRef = useRef(false);
 
   useEffect(() => {
     window.setTimeout(() => {
@@ -32,12 +33,15 @@ export default function VkMiniAppBridge() {
         return;
       }
 
-      // Already authenticated in this browser — avoid re-triggering VK login.
-      if (getStoredSession()) {
+      // Prevent duplicate VK login requests within the same mount.
+      if (hasRunRef.current) {
         return;
       }
+      hasRunRef.current = true;
 
       void (async () => {
+        // VK identity is always the source of truth inside the Mini App —
+        // never skip init/login just because a stale session exists.
         await bridge.send("VKWebAppInit");
         const userInfo = await bridge.send("VKWebAppGetUserInfo");
 
@@ -58,8 +62,12 @@ export default function VkMiniAppBridge() {
           throw new Error("VK_LOGIN_FAILED");
         }
 
-        saveSession(loginResult);
-        router.push("/dashboard");
+        const storedSession = getStoredSession();
+        if (!storedSession || storedSession.user.id !== loginResult.user?.id) {
+          saveSession(loginResult);
+        }
+
+        router.replace("/dashboard");
       })().catch((error: unknown) => {
         console.error("VK Mini App auto-login failed", error);
         setErrorMessage("VK orqali kirishda xatolik");
