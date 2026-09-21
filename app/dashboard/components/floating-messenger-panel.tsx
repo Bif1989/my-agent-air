@@ -57,7 +57,7 @@ export default function FloatingMessengerPanel({ activePath }: { activePath?: st
   const recentConversations = conversations.slice(0, 8);
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 hidden w-80 flex-col items-end lg:flex">
+    <div className="fixed bottom-4 right-4 z-40 hidden w-80 flex-col items-end sm:flex">
       {isOpen && (
         <div className="mb-3 flex max-h-[26rem] w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/15">
           <div className="flex items-center justify-between bg-[#0b1f3a] px-4 py-3 text-white">
