@@ -7,6 +7,7 @@ import AppShell from "@/app/dashboard/components/app-shell";
 import OfferForm from "@/app/offers/offer-form";
 import { createOffer, listIncomingOffers, listMyOffers, updateOffer, withdrawOffer, type OfferPayload, type OfferRecord } from "@/app/offers/offers-api";
 import { getStoredSession, type AuthSession } from "@/lib/supabase-auth";
+import { formatAirline } from "@/data/airlines";
 import { listRequests, type RequestRecord, type RequestStatus } from "@/app/requests/requests-api";
 
 const categories = ["Aviachipta", "Tur paket", "Mehmonxona", "Transfer", "Viza", "Boshqa"];
@@ -75,7 +76,7 @@ function MyOfferCard({ offer, onEdit, onWithdraw }: { offer: OfferRecord; onEdit
         <div><Link href={`/requests/${offer.request_id}`} className="text-lg font-semibold text-[#0b1f3a] hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">{offer.request?.origin || "—"} <span className="px-1 text-blue-500">→</span> {offer.request?.destination || "—"}</Link><p className="mt-2 text-sm text-slate-500">{offer.request?.category || "Kategoriya ko‘rsatilmagan"} · {formatDate(offer.request?.travel_date || null)}</p></div>
         <span className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${statusClass}`}>{offerStatusLabels[offer.status]}</span>
       </div>
-      <div className="mt-5 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2"><p className="text-xl font-semibold text-[#0b1f3a]">{offer.price == null ? "Narx ko‘rsatilmagan" : `${offer.price.toLocaleString("uz-UZ")} ${offer.currency}`}</p><p className="text-sm text-slate-500">Aviakompaniya: {offer.airline || "Ko‘rsatilmagan"}</p><p className="text-sm text-slate-500">Bagaj: {offer.baggage || "Ko‘rsatilmagan"}</p>{offer.comment && <p className="text-sm text-slate-500 sm:col-span-2">{offer.comment}</p>}</div>
+      <div className="mt-5 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2"><p className="text-xl font-semibold text-[#0b1f3a]">{offer.price == null ? "Narx ko‘rsatilmagan" : `${offer.price.toLocaleString("uz-UZ")} ${offer.currency}`}</p><p className="text-sm text-slate-500">Aviakompaniya: {formatAirline(offer.airline)}</p><p className="text-sm text-slate-500">Bagaj: {offer.baggage || "Ko‘rsatilmagan"}</p>{offer.comment && <p className="text-sm text-slate-500 sm:col-span-2">{offer.comment}</p>}</div>
       <p className="mt-4 text-xs text-slate-400">{formatDate(offer.created_at)}</p>
       {offer.status === "pending" && <div className="mt-5 flex flex-wrap gap-3"><button type="button" onClick={() => onEdit(offer)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:border-blue-300 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">Tahrirlash</button><button type="button" onClick={() => onWithdraw(offer)} className="rounded-xl border border-amber-200 px-4 py-2.5 text-sm font-semibold text-amber-700 hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-500">Taklifni qaytarib olish</button></div>}
     </article>
@@ -90,7 +91,7 @@ function IncomingOfferCard({ offer }: { offer: OfferRecord }) {
         <div><p className="text-lg font-semibold text-[#0b1f3a]">{offer.request?.origin || "—"} <span className="px-1 text-blue-500">→</span> {offer.request?.destination || "—"}</p><p className="mt-2 text-sm text-slate-500">{offer.request?.category || "Kategoriya ko‘rsatilmagan"} · {formatDate(offer.request?.travel_date || null)}</p><p className="mt-2 text-sm text-slate-500">{offer.agent?.full_name || "Agent nomi ko‘rsatilmagan"} · {offer.agent?.company_name || "Kompaniya ko‘rsatilmagan"}</p></div>
         <span className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${statusClass}`}>{offerStatusLabels[offer.status]}</span>
       </div>
-      <div className="mt-5 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2"><p className="text-xl font-semibold text-[#0b1f3a]">{offer.price == null ? "Narx ko‘rsatilmagan" : `${offer.price.toLocaleString("uz-UZ")} ${offer.currency}`}</p><p className="text-sm text-slate-500">Aviakompaniya: {offer.airline || "Ko‘rsatilmagan"}</p><p className="text-sm text-slate-500">Bagaj: {offer.baggage || "Ko‘rsatilmagan"}</p>{offer.comment && <p className="text-sm text-slate-500 sm:col-span-2">{offer.comment}</p>}</div>
+      <div className="mt-5 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2"><p className="text-xl font-semibold text-[#0b1f3a]">{offer.price == null ? "Narx ko‘rsatilmagan" : `${offer.price.toLocaleString("uz-UZ")} ${offer.currency}`}</p><p className="text-sm text-slate-500">Aviakompaniya: {formatAirline(offer.airline)}</p><p className="text-sm text-slate-500">Bagaj: {offer.baggage || "Ko‘rsatilmagan"}</p>{offer.comment && <p className="text-sm text-slate-500 sm:col-span-2">{offer.comment}</p>}</div>
       <Link href={`/requests/${offer.request_id}`} className="mt-5 inline-flex rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:border-blue-300 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">So‘rovni ko‘rish</Link>
     </article>
   );

@@ -1,4 +1,5 @@
 import { AIRPORTS, type AirportReference } from "@/data/airports";
+import { AIRLINES, type AirlineReference } from "@/data/airlines";
 
 export type AirportCode = { code: string; city: string; airport?: string; country?: string };
 
@@ -54,6 +55,7 @@ export const AVIA_TEMPLATES: AviaTemplate[] = [
 
 export type AviaSuggestion =
   | { type: "airport"; code: string; city: string; airport?: string; country: string; tokenStart: number; tokenEnd: number }
+  | { type: "airline"; code: string; name: string; icao?: string; country: string; tokenStart: number; tokenEnd: number }
   | { type: "template"; command: string; label: string; text: string; tokenStart: number; tokenEnd: number };
 
 const MAX_SUGGESTIONS = 6;
@@ -116,7 +118,8 @@ function getAirportSearchEntries(query: string) {
     else if (codeNorm.startsWith(normalizedQuery)) score = 1;
     else if (cityAliases.some((value) => value === normalizedQuery)) score = 2;
     else if (cityAliases.some((value) => value.startsWith(normalizedQuery))) score = 3;
-    else if (airportNorm.includes(normalizedQuery) || countryNorm.includes(normalizedQuery) || aliasValues.some((value) => value.includes(normalizedQuery))) score = 4;
+    else if (airportNorm.includes(normalizedQuery) || aliasValues.some((value) => value.includes(normalizedQuery))) score = 4;
+    else if (countryNorm.includes(normalizedQuery)) score = 6;
 
     if (score !== null) {
       matches.push({ ...airport, code, score });
@@ -138,6 +141,43 @@ export function searchAirports(query: string, limit = 6) {
     }));
 }
 
+function getAirlineSearchEntries(query: string) {
+  const normalizedQuery = normalizeAirportSearch(query);
+  if (!normalizedQuery) return [];
+
+  const matches: Array<AirlineReference & { score: number }> = [];
+  for (const airline of AIRLINES) {
+    const code = normalizeAirportSearch(airline.code);
+    const icao = normalizeAirportSearch(airline.icao ?? "");
+    const name = normalizeAirportSearch(airline.name);
+    const aliases = (airline.aliases ?? []).map((alias) => normalizeAirportSearch(alias));
+    const names = [name, ...aliases];
+    const country = normalizeAirportSearch(airline.country);
+    let score: number | null = null;
+
+    if (code === normalizedQuery) score = 0;
+    else if (code.startsWith(normalizedQuery)) score = 1;
+    else if (names.some((value) => value === normalizedQuery) || icao === normalizedQuery) score = 2;
+    else if (names.some((value) => value.startsWith(normalizedQuery)) || icao.startsWith(normalizedQuery)) score = 3;
+    else if (names.some((value) => value.includes(normalizedQuery)) || icao.includes(normalizedQuery)) score = 4;
+    else if (country.includes(normalizedQuery)) score = 5;
+
+    if (score !== null) matches.push({ ...airline, score });
+  }
+
+  return matches.sort((left, right) => left.score - right.score || left.code.localeCompare(right.code));
+}
+
+export function searchAirlines(query: string, limit = 6) {
+  if (!query || !query.trim()) return [];
+  return getAirlineSearchEntries(query).slice(0, limit).map((airline) => ({
+    code: airline.code,
+    name: airline.name,
+    icao: airline.icao,
+    country: airline.country,
+  }));
+}
+
 export function computeAviaSuggestions(value: string, cursorPos: number): AviaSuggestion[] {
   const { token, tokenStart, tokenEnd } = getLastToken(value, cursorPos);
   if (!token) return [];
@@ -150,5 +190,28 @@ export function computeAviaSuggestions(value: string, cursorPos: number): AviaSu
       .map((template) => ({ type: "template" as const, ...template, tokenStart, tokenEnd }));
   }
 
-  return searchAirports(token, MAX_SUGGESTIONS).map((airport) => ({ type: "airport" as const, ...airport, tokenStart, tokenEnd }));
+  const airportMatches = getAirportSearchEntries(token).map((airport) => ({
+    type: "airport" as const,
+    code: airport.code,
+    city: airport.city,
+    airport: airport.airport,
+    country: airport.country,
+    tokenStart,
+    tokenEnd,
+    score: airport.score,
+  }));
+  const airlineMatches = getAirlineSearchEntries(token).map((airline) => ({
+    type: "airline" as const,
+    code: airline.code,
+    name: airline.name,
+    icao: airline.icao,
+    country: airline.country,
+    tokenStart,
+    tokenEnd,
+    score: airline.score,
+  }));
+  return [...airportMatches, ...airlineMatches]
+    .sort((left, right) => left.score - right.score || left.code.localeCompare(right.code))
+    .slice(0, MAX_SUGGESTIONS)
+    .map(({ score: _score, ...suggestion }) => suggestion);
 }

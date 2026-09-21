@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import AppShell from "@/app/dashboard/components/app-shell";
 import { getStoredSession, type AuthSession } from "@/lib/supabase-auth";
+import { formatAirline } from "@/data/airlines";
 import { getDeal, listDealActivity, updateDealStatus, type DealActivity, type DealRecord, type DealStatus } from "@/app/deals/deals-api";
 
 const statusLabels: Record<DealStatus, string> = { accepted: "Qabul qilingan", processing: "Jarayonda", issued: "Rasmiylashtirilgan", completed: "Yakunlangan", cancelled: "Bekor qilingan" };
@@ -26,7 +27,8 @@ function profileName(profile: DealRecord["buyer"]) {
 }
 
 function DetailItem({ label, value }: { label: string; value: string }) {
-  return <div><dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</dt><dd className="mt-1 break-words text-sm font-medium text-[#0b1f3a]">{value}</dd></div>;
+  const displayValue = label === "Aviakompaniya" ? formatAirline(value) : value;
+  return <div><dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</dt><dd className="mt-1 break-words text-sm font-medium text-[#0b1f3a]">{displayValue}</dd></div>;
 }
 
 function activityValue(activity: DealActivity) {

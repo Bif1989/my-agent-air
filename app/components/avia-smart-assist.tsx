@@ -107,7 +107,7 @@ export default function AviaSmartAssist({ value, onChange, onKeyDown, id, rows =
       {suggestions.length > 0 && (
         <ul role="listbox" className="absolute bottom-full left-0 z-20 mb-2 w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
           {suggestions.map((suggestion, index) => (
-            <li key={suggestion.type === "airport" ? `airport-${suggestion.code}-${index}` : `template-${suggestion.command}-${index}`} role="option" aria-selected={index === activeIndex}>
+            <li key={suggestion.type === "airport" ? `airport-${suggestion.code}-${index}` : suggestion.type === "airline" ? `airline-${suggestion.code}-${index}` : `template-${suggestion.command}-${index}`} role="option" aria-selected={index === activeIndex}>
               <button
                 type="button"
                 onMouseDown={(event) => { event.preventDefault(); applySuggestion(suggestion); }}
@@ -122,6 +122,17 @@ export default function AviaSmartAssist({ value, onChange, onKeyDown, id, rows =
                         <span className="truncate text-slate-600">{suggestion.city}</span>
                       </div>
                       {suggestion.airport && <div className="truncate text-[11px] text-slate-400">{suggestion.airport} · {suggestion.country}</div>}
+                    </div>
+                  </>
+                ) : suggestion.type === "airline" ? (
+                  <>
+                    <span aria-hidden="true" className="text-sm text-emerald-600">🛫</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-bold text-[#0b1f3a]">{suggestion.code}</span>
+                        <span className="truncate text-slate-600">{suggestion.name}</span>
+                      </div>
+                      <div className="truncate text-[11px] text-slate-400">{suggestion.country}</div>
                     </div>
                   </>
                 ) : (
