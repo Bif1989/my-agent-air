@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import AviaSmartAssist from "@/app/components/avia-smart-assist";
 import type { OfferPayload } from "@/app/offers/offers-api";
 
 const currencies = ["USD", "UZS", "EUR", "RUB"];

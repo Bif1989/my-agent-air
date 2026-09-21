@@ -105,27 +105,34 @@ export default function AviaSmartAssist({ value, onChange, onKeyDown, id, rows =
         className={className}
       />
       {suggestions.length > 0 && (
-        <ul role="listbox" className="absolute bottom-full left-0 z-20 mb-2 w-full max-w-sm overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+        <ul role="listbox" className="absolute bottom-full left-0 z-20 mb-2 w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
           {suggestions.map((suggestion, index) => (
-            <li key={suggestion.type === "airport" ? `airport-${suggestion.code}` : `template-${suggestion.command}`} role="option" aria-selected={index === activeIndex}>
+            <li key={suggestion.type === "airport" ? `airport-${suggestion.code}-${index}` : `template-${suggestion.command}-${index}`} role="option" aria-selected={index === activeIndex}>
               <button
                 type="button"
                 onMouseDown={(event) => { event.preventDefault(); applySuggestion(suggestion); }}
-                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition ${index === activeIndex ? "bg-blue-50 text-blue-700" : "text-[#0b1f3a] hover:bg-slate-50"}`}
+                className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition ${index === activeIndex ? "bg-blue-50" : "hover:bg-slate-50"}`}
               >
                 {suggestion.type === "airport" ? (
                   <>
-                    <span aria-hidden="true">✈</span>
-                    <span className="font-semibold">{suggestion.code}</span>
-                    <span className="text-slate-400">—</span>
-                    <span className="truncate text-slate-600">{suggestion.city}</span>
+                    <span aria-hidden="true" className="text-sm text-blue-600">✈</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-bold text-[#0b1f3a]">{suggestion.code}</span>
+                        <span className="truncate text-slate-600">{suggestion.city}</span>
+                      </div>
+                      {suggestion.airport && <div className="truncate text-[11px] text-slate-400">{suggestion.airport} · {suggestion.country}</div>}
+                    </div>
                   </>
                 ) : (
                   <>
-                    <span aria-hidden="true">⚡</span>
-                    <span className="font-semibold">{suggestion.command}</span>
-                    <span className="text-slate-400">—</span>
-                    <span className="truncate text-slate-600">{suggestion.label}</span>
+                    <span aria-hidden="true" className="text-sm text-amber-600">⚡</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-bold text-[#0b1f3a]">{suggestion.command}</span>
+                        <span className="text-slate-500">{suggestion.label}</span>
+                      </div>
+                    </div>
                   </>
                 )}
               </button>

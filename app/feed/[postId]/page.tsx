@@ -5,6 +5,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import AppShell from "@/app/dashboard/components/app-shell";
+import AviaSmartAssist from "@/app/components/avia-smart-assist";
 import { getStoredSession, type AuthSession } from "@/lib/supabase-auth";
 import { getOrCreateDirectChat } from "@/app/messenger/messenger-api";
 import {
@@ -283,7 +284,7 @@ export default function FeedPostDetailPage() {
             <h2 className="text-lg font-semibold text-[#0b1f3a]">Izohlar ({comments.length})</h2>
             <form onSubmit={handleCommentSubmit} className="mt-5">
               <label className="sr-only" htmlFor="comment-body">Izoh yozish</label>
-              <textarea id="comment-body" maxLength={2000} rows={3} value={commentBody} onChange={(event) => setCommentBody(event.target.value)} placeholder="Izoh yozing..." className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
+              <AviaSmartAssist id="comment-body" value={commentBody} onChange={setCommentBody} maxLength={2000} rows={3} placeholder="Izoh yozing..." className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" containerClassName="relative" />
               <div className="mt-2 flex items-center justify-between">
                 <span className="text-xs text-slate-400">{commentBody.length}/2000</span>
                 <button type="submit" disabled={isSubmittingComment || !commentBody.trim()} className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60">{isSubmittingComment ? "Yuborilmoqda..." : "Yuborish"}</button>

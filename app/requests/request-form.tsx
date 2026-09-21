@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import AviaSmartAssist from "@/app/components/avia-smart-assist";
+import AviaSmartInput from "@/app/components/avia-smart-input";
 import type { RequestPayload } from "@/app/requests/requests-api";
 
 const categories = ["Aviachipta", "Tur paket", "Mehmonxona", "Transfer", "Viza", "Boshqa"];
@@ -68,15 +70,15 @@ export default function RequestForm({ initialValues, submitLabel, submittingLabe
     <form onSubmit={handleSubmit} className="space-y-7">
       <div className="grid gap-5 sm:grid-cols-2">
         <label className="text-sm font-semibold text-slate-700 sm:col-span-2">Kategoriya<select required value={category} onChange={(event) => setCategory(event.target.value)} className={inputClass}><option value="" disabled>Kategoriyani tanlang</option>{categories.map((item) => <option key={item}>{item}</option>)}</select></label>
-        <label className="text-sm font-semibold text-slate-700">Qayerdan<input value={origin} onChange={(event) => setOrigin(event.target.value)} placeholder="Toshkent" className={inputClass} /></label>
-        <label className="text-sm font-semibold text-slate-700">Qayerga<input value={destination} onChange={(event) => setDestination(event.target.value)} placeholder="Istanbul" className={inputClass} /></label>
+        <label className="text-sm font-semibold text-slate-700">Qayerdan<AviaSmartInput value={origin} onChange={setOrigin} placeholder="Toshkent" className={inputClass} mode="airport" /></label>
+        <label className="text-sm font-semibold text-slate-700">Qayerga<AviaSmartInput value={destination} onChange={setDestination} placeholder="Istanbul" className={inputClass} mode="airport" /></label>
         <label className="text-sm font-semibold text-slate-700">Safar sanasi<input type="date" min={today} value={travelDate} onChange={(event) => setTravelDate(event.target.value)} className={inputClass} /></label>
         <label className="text-sm font-semibold text-slate-700">Bagaj<input value={baggage} onChange={(event) => setBaggage(event.target.value)} placeholder="Masalan: 1 dona 23 kg" className={inputClass} /></label>
         <label className="text-sm font-semibold text-slate-700">Kattalar soni<input required min="1" step="1" type="number" value={adults} onChange={(event) => setAdults(event.target.value)} className={inputClass} /></label>
         <label className="text-sm font-semibold text-slate-700">Bolalar soni<input min="0" step="1" type="number" value={children} onChange={(event) => setChildren(event.target.value)} className={inputClass} /></label>
         <label className="text-sm font-semibold text-slate-700">Go‘daklar soni<input min="0" step="1" type="number" value={infants} onChange={(event) => setInfants(event.target.value)} className={inputClass} /></label>
         <div className="grid grid-cols-[1fr_110px] gap-3"><label className="text-sm font-semibold text-slate-700">Budjet<input min="0" step="0.01" type="number" value={budget} onChange={(event) => setBudget(event.target.value)} placeholder="0" className={inputClass} /></label><label className="text-sm font-semibold text-slate-700">Valyuta<select value={currency} onChange={(event) => setCurrency(event.target.value)} className={inputClass}>{currencies.map((item) => <option key={item}>{item}</option>)}</select></label></div>
-        <label className="text-sm font-semibold text-slate-700 sm:col-span-2">Qo‘shimcha ma’lumot<textarea maxLength={1000} rows={5} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Safar yoki xizmat tafsilotlarini yozing" className={inputClass} /><span className="mt-1 block text-right text-xs font-normal text-slate-400">{description.length}/1000</span></label>
+        <label className="text-sm font-semibold text-slate-700 sm:col-span-2">Qo‘shimcha ma’lumot<AviaSmartAssist value={description} onChange={setDescription} maxLength={1000} rows={5} placeholder="Safar yoki xizmat tafsilotlarini yozing" className={inputClass} containerClassName="relative mt-2" /><span className="mt-1 block text-right text-xs font-normal text-slate-400">{description.length}/1000</span></label>
       </div>
       {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
       <button type="submit" disabled={isSubmitting} className="w-full rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60">{isSubmitting ? submittingLabel : submitLabel}</button>

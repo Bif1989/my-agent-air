@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import AviaSmartAssist from "@/app/components/avia-smart-assist";
+import AviaSmartInput from "@/app/components/avia-smart-input";
 import { POST_CATEGORIES, POST_CATEGORY_LABELS, POST_CURRENCIES, type PostCategory, type PostCurrency, type PostPayload, type PostType } from "@/app/feed/feed-api";
 
 type PostFormProps = {
@@ -79,10 +81,10 @@ export default function PostForm({ initialValues, submitLabel, submittingLabel, 
           </div>
         </label>
         <label className="text-sm font-semibold text-slate-700 sm:col-span-2">Kategoriya<select required value={category} onChange={(event) => setCategory(event.target.value as PostCategory)} className={inputClass}><option value="" disabled>Kategoriyani tanlang</option>{POST_CATEGORIES.map((item) => <option key={item} value={item}>{POST_CATEGORY_LABELS[item]}</option>)}</select></label>
-        <label className="text-sm font-semibold text-slate-700 sm:col-span-2">Sarlavha{postType === "announcement" && <span className="text-amber-600"> (majburiy)</span>}<input maxLength={180} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Masalan: Toshkent — Istanbul chiptalari" className={inputClass} /></label>
-        <label className="text-sm font-semibold text-slate-700 sm:col-span-2">Matn<textarea required maxLength={5000} rows={6} value={body} onChange={(event) => setBody(event.target.value)} placeholder="Post yoki e’lon matnini yozing" className={inputClass} /><span className="mt-1 block text-right text-xs font-normal text-slate-400">{body.length}/5000</span></label>
-        <label className="text-sm font-semibold text-slate-700">Qayerdan<input maxLength={120} value={origin} onChange={(event) => setOrigin(event.target.value)} placeholder="Toshkent" className={inputClass} /></label>
-        <label className="text-sm font-semibold text-slate-700">Qayerga<input maxLength={120} value={destination} onChange={(event) => setDestination(event.target.value)} placeholder="Istanbul" className={inputClass} /></label>
+        <label className="text-sm font-semibold text-slate-700 sm:col-span-2">Sarlavha{postType === "announcement" && <span className="text-amber-600"> (majburiy)</span>}<AviaSmartInput maxLength={180} value={title} onChange={setTitle} placeholder="Masalan: Toshkent — Istanbul chiptalari" className={inputClass} mode="text" /></label>
+        <label className="text-sm font-semibold text-slate-700 sm:col-span-2">Matn<AviaSmartAssist value={body} onChange={setBody} maxLength={5000} rows={6} placeholder="Post yoki e’lon matnini yozing" className={inputClass} containerClassName="relative mt-2" /><span className="mt-1 block text-right text-xs font-normal text-slate-400">{body.length}/5000</span></label>
+        <label className="text-sm font-semibold text-slate-700">Qayerdan<AviaSmartInput maxLength={120} value={origin} onChange={setOrigin} placeholder="Toshkent" className={inputClass} mode="airport" /></label>
+        <label className="text-sm font-semibold text-slate-700">Qayerga<AviaSmartInput maxLength={120} value={destination} onChange={setDestination} placeholder="Istanbul" className={inputClass} mode="airport" /></label>
         <div className="grid grid-cols-[1fr_110px] gap-3"><label className="text-sm font-semibold text-slate-700">Narx<input min="0" step="0.01" type="number" value={price} onChange={(event) => setPrice(event.target.value)} placeholder="0" className={inputClass} /></label><label className="text-sm font-semibold text-slate-700">Valyuta<select value={currency} onChange={(event) => setCurrency(event.target.value as PostCurrency)} className={inputClass}>{POST_CURRENCIES.map((item) => <option key={item}>{item}</option>)}</select></label></div>
         <label className="text-sm font-semibold text-slate-700">Aloqa telefoni<input maxLength={40} value={contactPhone} onChange={(event) => setContactPhone(event.target.value)} placeholder="+998 90 123 45 67" className={inputClass} /></label>
         <label className="text-sm font-semibold text-slate-700">Amal qilish muddati<input type="date" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} className={inputClass} /></label>
