@@ -38,7 +38,7 @@ export const AIRPORTS: AirportReference[] = [
   { code: "ALA", icao: "UAAA", city: "Almaty", airport: "Almaty International Airport", country: "Kazakhstan", aliases: ["Алматы"] },
   { code: "NQZ", icao: "UACC", city: "Astana", airport: "Nursultan Nazarbayev International Airport", country: "Kazakhstan", aliases: ["Nur-Sultan", "Нур-Султан", "Astana", "TSE"] },
   { code: "KGF", icao: "UAKK", city: "Karaganda", airport: "Sary-Arka Airport", country: "Kazakhstan", aliases: ["Karaganda Airport"] },
-  { code: "GUW", icao: "UATG", city: "Aqtau", airport: "Atyrau International Airport", country: "Kazakhstan", aliases: ["Atyrau", "Aktau"] },
+  { code: "GUW", icao: "UATG", city: "Atyrau", airport: "Atyrau International Airport", country: "Kazakhstan", aliases: ["Атырау"] },
   { code: "CIT", icao: "UAII", city: "Shymkent", airport: "Shymkent International Airport", country: "Kazakhstan", aliases: ["Шымкент"] },
   { code: "DYU", icao: "UTDD", city: "Dushanbe", airport: "Dushanbe International Airport", country: "Tajikistan", aliases: ["Душанбе"] },
   { code: "LBD", icao: "UTDL", city: "Khujand", airport: "Khujand International Airport", country: "Tajikistan", aliases: ["Худжанд"] },
