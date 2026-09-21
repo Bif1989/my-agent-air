@@ -8,7 +8,7 @@ export const AVIA_TEMPLATES: AviaTemplate[] = [
   {
     command: "/avia",
     label: "Avia so‘rov",
-    text: "✈️ NARX SO‘ROVI\nYo‘nalish:\nSana:\nYo‘lovchi:\nBagaj:\nOW / RT:\nIzoh:",
+    text: "✈️ AVIA SO‘ROV\nYo‘nalish:\nSana:\nYo‘lovchi:\nBagaj:\nOW / RT:\nByudjet:\nIzoh:",
   },
   {
     command: "/pnr",
