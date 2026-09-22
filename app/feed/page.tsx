@@ -4,20 +4,13 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import AppShell from "@/app/dashboard/components/app-shell";
 import { getStoredSession, type AuthSession } from "@/lib/supabase-auth";
-import { listFeedPosts, setPostReaction, getFeedPost, POST_CATEGORIES, POST_CATEGORY_LABELS, type FeedPost, type PostCategory, type PostType, type ReactionType } from "@/app/feed/feed-api";
+import { listFeedPosts, setPostReaction, getFeedPost, POST_CATEGORIES, POST_CATEGORY_LABELS, type FeedPost, type PostCategory, type ReactionType } from "@/app/feed/feed-api";
 import { PostCard } from "@/app/feed/post-card";
 
 const PAGE_SIZE = 20;
-const tabs: { key: PostType | "all"; label: string }[] = [
-  { key: "all", label: "Barchasi" },
-  { key: "post", label: "Postlar" },
-  { key: "announcement", label: "E’lonlar" },
-];
-
 export default function FeedPage() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [posts, setPosts] = useState<FeedPost[]>([]);
-  const [tab, setTab] = useState<PostType | "all">("all");
   const [category, setCategory] = useState<PostCategory | "">("");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -47,7 +40,7 @@ export default function FeedPage() {
     window.setTimeout(() => {
       setIsLoading(true);
       setError("");
-      listFeedPosts({ category, postType: tab === "all" ? "" : tab, search, limit: PAGE_SIZE, offset: 0 })
+      listFeedPosts({ category, postType: "", search, limit: PAGE_SIZE, offset: 0 })
         .then((rows) => {
           if (currentRequest !== requestId.current) return;
           setPosts(rows);
@@ -60,7 +53,7 @@ export default function FeedPage() {
         })
         .finally(() => { if (currentRequest === requestId.current) setIsLoading(false); });
     }, 0);
-  }, [category, tab, search]);
+  }, [category, search]);
 
   useEffect(() => {
     const storedSession = getStoredSession();
@@ -69,7 +62,7 @@ export default function FeedPage() {
     const timeoutId = window.setTimeout(() => {
       setIsLoading(true);
       setError("");
-      listFeedPosts({ category, postType: tab === "all" ? "" : tab, search, limit: PAGE_SIZE, offset: 0 })
+      listFeedPosts({ category, postType: "", search, limit: PAGE_SIZE, offset: 0 })
         .then((rows) => {
           if (currentRequest !== requestId.current) return;
           setPosts(rows);
@@ -83,7 +76,7 @@ export default function FeedPage() {
         .finally(() => { if (currentRequest === requestId.current) setIsLoading(false); });
     }, 0);
     return () => window.clearTimeout(timeoutId);
-  }, [category, tab, search]);
+  }, [category, search]);
 
   useEffect(() => {
     function handleVisibility() {
@@ -103,7 +96,7 @@ export default function FeedPage() {
     if (isLoadingMore || !hasMore) return;
     setIsLoadingMore(true);
     try {
-      const rows = await listFeedPosts({ category, postType: tab === "all" ? "" : tab, search, limit: PAGE_SIZE, offset: posts.length });
+      const rows = await listFeedPosts({ category, postType: "", search, limit: PAGE_SIZE, offset: posts.length });
       setPosts((current) => [...current, ...rows]);
       setHasMore(rows.length === PAGE_SIZE);
     } catch {
@@ -144,12 +137,7 @@ export default function FeedPage() {
       </header>
 
       <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex flex-wrap gap-2 border-b border-slate-100 pb-4">
-          {tabs.map(({ key, label }) => (
-            <button key={key} type="button" onClick={() => setTab(key)} className={`rounded-lg px-4 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 ${tab === key ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-100"}`}>{label}</button>
-          ))}
-        </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1.4fr_auto]">
+        <div className="grid gap-3 md:grid-cols-[1fr_1.4fr_auto]">
           <label className="sr-only" htmlFor="feed-category">Kategoriya</label>
           <select id="feed-category" value={category} onChange={(event) => setCategory(event.target.value as PostCategory | "")} className={inputClass}>
             <option value="">Barcha kategoriyalar</option>

@@ -18,7 +18,7 @@ import FloatingMessengerPanel from "@/app/dashboard/components/floating-messenge
 
 const navigation = [
   ["Dashboard", "/dashboard"],
-  ["Lenta", "/feed"],
+  ["Postlar", "/feed"],
   ["So‘rovlar va takliflar", "/requests"],
   ["Agentlar", "/agents"],
   ["Bitimlar", "/deals"],
