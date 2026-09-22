@@ -59,12 +59,15 @@ export default function FloatingMessengerPanel({ activePath }: { activePath?: st
   return (
     <div className="fixed bottom-4 right-4 z-40 hidden w-80 flex-col items-end sm:flex">
       {isOpen && (
-        <div className="mb-3 flex max-h-[26rem] w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/15">
-          <div className="flex items-center justify-between bg-[#0b1f3a] px-4 py-3 text-white">
-            <span className="text-sm font-semibold">Chatlar</span>
+        <div className="mb-3 flex h-[min(42rem,calc(100vh-6rem))] w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/15">
+          <div className="flex items-start justify-between bg-[#0b1f3a] px-4 py-3 text-white">
+            <div>
+              <span className="block text-sm font-semibold">Chatlar</span>
+              <span className="mt-0.5 block text-xs text-blue-100">My Agent Air messenjeri</span>
+            </div>
             <button type="button" onClick={() => setIsOpen(false)} aria-label="Yopish" className="rounded-full p-1 text-lg leading-none text-blue-100 hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-300">×</button>
           </div>
-          <div className="flex-1 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             {recentConversations.length === 0 && <p className="px-4 py-6 text-center text-xs text-slate-400">Hali suhbatlar yo‘q</p>}
             {recentConversations.map((conversation) => (
               <button
@@ -86,6 +89,15 @@ export default function FloatingMessengerPanel({ activePath }: { activePath?: st
                 </span>
               </button>
             ))}
+          </div>
+          <div className="border-t border-slate-100 bg-white p-3">
+            <button
+              type="button"
+              onClick={() => { setIsOpen(false); router.push("/messenger"); }}
+              className="w-full rounded-xl bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              Barcha chatlarni ochish
+            </button>
           </div>
         </div>
       )}
