@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import AppShell from "@/app/dashboard/components/app-shell";
 import { getStoredSession, type AuthSession } from "@/lib/supabase-auth";
-import { listAgents, loadAgentFilterOptions, type AgentFilterOptions, type AgentRecord } from "@/app/agents/agents-api";
+import { listAgents, getAgentFilterOptions, type AgentFilterOptions, type AgentRecord } from "@/app/agents/agents-api";
 
 function initials(agent: AgentRecord) {
 	return (agent.full_name || agent.company_name || "Agent").split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
@@ -21,6 +21,7 @@ function AgentCard({ agent, currentUserId }: { agent: AgentRecord; currentUserId
 
 export default function AgentsPage() {
 	const [session, setSession] = useState<AuthSession | null>(null);
+	const [page, setPage] = useState(0);
 	const [agents, setAgents] = useState<AgentRecord[]>([]);
 	const [options, setOptions] = useState<AgentFilterOptions>({ cities: [], agentTypes: [], services: [] });
 	const [search, setSearch] = useState("");
@@ -44,26 +45,31 @@ export default function AgentsPage() {
 		return () => window.clearTimeout(timeoutId);
 	}, [search]);
 
-	useEffect(() => {
-		if (!session) return;
-		const timeoutId = window.setTimeout(() => {
-			listAgents().then((loadedAgents) => { setAgents(loadedAgents); setOptions(loadAgentFilterOptions(loadedAgents)); }).catch((loadError: unknown) => {
-				if (loadError instanceof Error && (loadError.message === "AUTH_SESSION_EXPIRED" || loadError.message === "AUTH_SESSION_MISSING")) { window.location.replace("/login"); return; }
-				setError("Agentlar ro‘yxatini yuklashda xatolik yuz berdi. Qayta urinib ko‘ring.");
-			}).finally(() => setIsLoading(false));
-		}, 0);
-		return () => window.clearTimeout(timeoutId);
-	}, [session]);
+  useEffect(() => {
+    if (!session) return;
+    let active = true;
+    void getAgentFilterOptions().then((loaded) => { if (active) setOptions(loaded); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [session]);
 
-	const visibleAgents = useMemo(() => agents.filter((agent) => {
-		const haystack = [agent.full_name, agent.company_name, agent.city].filter(Boolean).join(" ").toLowerCase();
-		return (!debouncedSearch || haystack.includes(debouncedSearch)) && (!agentType || agent.agent_type === agentType) && (!city || agent.city === city) && (!service || agent.services?.includes(service)) && (!verifiedOnly || agent.is_verified);
-	}), [agents, city, agentType, service, verifiedOnly, debouncedSearch]);
+  useEffect(() => {
+    if (!session) return;
+    let active = true;
+    const timer = window.setTimeout(() => {
+      setIsLoading(true); setError("");
+      void listAgents({ search: debouncedSearch, city, agentType, service, verifiedOnly, limit: 24, offset: page * 24 })
+        .then((loaded) => { if (active) setAgents(loaded); })
+        .catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "Agentlar yuklanmadi."); })
+        .finally(() => { if (active) setIsLoading(false); });
+    }, 0);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [session, debouncedSearch, city, agentType, service, verifiedOnly, page]);
+  const visibleAgents = agents;
 
 	function clearFilters() {
-		setSearch(""); setAgentType(""); setCity(""); setService(""); setVerifiedOnly(false);
+		setPage(0); setSearch(""); setAgentType(""); setCity(""); setService(""); setVerifiedOnly(false);
 	}
 
 	const hasFilters = Boolean(search || agentType || city || service || verifiedOnly);
-	return <AppShell session={session} activePath="/agents"><div className="mx-auto max-w-7xl"><header className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end"><div><p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-600">Hamkorlar tarmog‘i</p><h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#0b1f3a] sm:text-4xl">Agentlar</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">Faol va tasdiqlangan hamkorlarni toping, xizmatlarini solishtiring.</p></div><p className="text-sm font-semibold text-slate-500">{isLoading ? "Yuklanmoqda..." : `${visibleAgents.length} ta agent`}</p></header><section aria-label="Agentlarni qidirish va filtrlash" className="mt-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="grid gap-3 lg:grid-cols-[minmax(0,1.7fr)_repeat(3,minmax(0,1fr))_auto] lg:items-end"><label className="block text-sm font-semibold text-[#0b1f3a] lg:col-span-1">Qidirish<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Ism, kompaniya yoki shahar" className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-3 text-sm font-normal outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" /></label><label className="block text-sm font-semibold text-[#0b1f3a]">Agent turi<select value={agentType} onChange={(event) => setAgentType(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-normal outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"><option value="">Barchasi</option>{options.agentTypes.map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="block text-sm font-semibold text-[#0b1f3a]">Shahar<select value={city} onChange={(event) => setCity(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-normal outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"><option value="">Barchasi</option>{options.cities.map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="block text-sm font-semibold text-[#0b1f3a]">Xizmat<select value={service} onChange={(event) => setService(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-normal outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"><option value="">Barchasi</option>{options.services.map((value) => <option key={value} value={value}>{value}</option>)}</select></label><button type="button" onClick={clearFilters} disabled={!hasFilters} className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:border-blue-300 hover:text-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-40">Filtrlarni tozalash</button></div><label className="mt-4 inline-flex cursor-pointer items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={verifiedOnly} onChange={(event) => setVerifiedOnly(event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" /> Faqat tasdiqlanganlar</label></section>{isLoading && <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{[1, 2, 3].map((item) => <div key={item} className="h-64 animate-pulse rounded-2xl bg-white" />)}</div>}{error && <div role="alert" className="mt-7 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">{error}</div>}{!isLoading && !error && !visibleAgents.length && <div className="mt-7 rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-16 text-center"><h2 className="font-semibold text-[#0b1f3a]">{agents.length ? "Mos agent topilmadi" : "Hozircha faol agentlar yo‘q"}</h2><p className="mt-2 text-sm text-slate-500">{agents.length ? "Qidiruv yoki filtrlarni o‘zgartirib ko‘ring." : "Faol agentlar qo‘shilganda ular shu yerda ko‘rinadi."}</p></div>}{!isLoading && !error && visibleAgents.length > 0 && <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{visibleAgents.map((agent) => <AgentCard key={agent.id} agent={agent} currentUserId={session?.user.id || ""} />)}</div>}</div></AppShell>;
+	return <AppShell session={session} activePath="/agents"><div className="mx-auto max-w-7xl"><header className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end"><div><p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-600">Hamkorlar tarmog‘i</p><h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#0b1f3a] sm:text-4xl">Agentlar</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">Faol va tasdiqlangan hamkorlarni toping, xizmatlarini solishtiring.</p></div><p className="text-sm font-semibold text-slate-500">{isLoading ? "Yuklanmoqda..." : `${visibleAgents.length} ta agent`}</p></header><section aria-label="Agentlarni qidirish va filtrlash" className="mt-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="grid gap-3 lg:grid-cols-[minmax(0,1.7fr)_repeat(3,minmax(0,1fr))_auto] lg:items-end"><label className="block text-sm font-semibold text-[#0b1f3a] lg:col-span-1">Qidirish<input value={search} onChange={(event) => { setSearch(event.target.value); setPage(0); }} placeholder="Ism, kompaniya yoki shahar" className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-3 text-sm font-normal outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" /></label><label className="block text-sm font-semibold text-[#0b1f3a]">Agent turi<select value={agentType} onChange={(event) => { setAgentType(event.target.value); setPage(0); }} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-normal outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"><option value="">Barchasi</option>{options.agentTypes.map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="block text-sm font-semibold text-[#0b1f3a]">Shahar<select value={city} onChange={(event) => { setCity(event.target.value); setPage(0); }} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-normal outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"><option value="">Barchasi</option>{options.cities.map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="block text-sm font-semibold text-[#0b1f3a]">Xizmat<select value={service} onChange={(event) => { setService(event.target.value); setPage(0); }} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-normal outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"><option value="">Barchasi</option>{options.services.map((value) => <option key={value} value={value}>{value}</option>)}</select></label><button type="button" onClick={clearFilters} disabled={!hasFilters} className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:border-blue-300 hover:text-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-40">Filtrlarni tozalash</button></div><label className="mt-4 inline-flex cursor-pointer items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={verifiedOnly} onChange={(event) => { setVerifiedOnly(event.target.checked); setPage(0); }} className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" /> Faqat tasdiqlanganlar</label></section>{isLoading && <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{[1, 2, 3].map((item) => <div key={item} className="h-64 animate-pulse rounded-2xl bg-white" />)}</div>}{error && <div role="alert" className="mt-7 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">{error}</div>}{!isLoading && !error && !visibleAgents.length && <div className="mt-7 rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-16 text-center"><h2 className="font-semibold text-[#0b1f3a]">{agents.length ? "Mos agent topilmadi" : "Hozircha faol agentlar yo‘q"}</h2><p className="mt-2 text-sm text-slate-500">{agents.length ? "Qidiruv yoki filtrlarni o‘zgartirib ko‘ring." : "Faol agentlar qo‘shilganda ular shu yerda ko‘rinadi."}</p></div>}{!isLoading && !error && visibleAgents.length > 0 && <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{visibleAgents.map((agent) => <AgentCard key={agent.id} agent={agent} currentUserId={session?.user.id || ""} />)}</div>}<nav aria-label="Agentlar sahifalari" className="mt-6 flex items-center justify-center gap-4 text-sm"><button disabled={isLoading || page === 0} onClick={() => setPage((value) => value - 1)} className="rounded-lg border px-4 py-2 disabled:opacity-40">← Oldingi</button><span>{page + 1}-sahifa</span><button disabled={isLoading || agents.length < 24} onClick={() => setPage((value) => value + 1)} className="rounded-lg border px-4 py-2 disabled:opacity-40">Keyingi →</button></nav></div></AppShell>;
 }

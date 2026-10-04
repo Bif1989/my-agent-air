@@ -1,3 +1,4 @@
+import { requestFreshnessFilter, searchFilterText } from "@/lib/request-freshness";
 import { authenticatedSupabaseFetch, getStoredSession } from "@/lib/supabase-auth";
 
 export const REQUEST_SELECT = "id,created_by,category,origin,destination,travel_date,adults,children,infants,baggage,budget,currency,description,status,created_at,updated_at,creator:profiles!requests_created_by_fkey(id,full_name,company_name,city,phone,agent_type,is_verified)";
@@ -53,6 +54,9 @@ export type ListRequestOptions = {
   category?: string;
   search?: string;
   createdBy?: string;
+  freshness?: "current" | "expired";
+  limit?: number;
+  offset?: number;
 };
 
 async function readJson<T>(response: Response) {
@@ -70,15 +74,16 @@ function ownerFilter() {
 }
 
 export async function listRequests(options: ListRequestOptions = {}) {
-  const filters = [`select=${encodeURIComponent(REQUEST_SELECT)}`, "order=created_at.desc", "limit=20"];
-  if (options.status && options.status !== "all") filters.push(`status=eq.${encodeFilter(options.status)}`);
-  if (options.category) filters.push(`category=eq.${encodeFilter(options.category)}`);
-  if (options.createdBy) filters.push(`created_by=eq.${encodeFilter(options.createdBy)}`);
-  if (options.search?.trim()) {
-    const search = encodeFilter(`*${options.search.trim()}*`);
-    filters.push(`or=(origin.ilike.${search},destination.ilike.${search})`);
-  }
-  const response = await authenticatedSupabaseFetch(`requests?${filters.join("&")}`);
+  const params = new URLSearchParams({ select: REQUEST_SELECT, order: "created_at.desc,id.desc", limit: String(Math.min(100, Math.max(1, options.limit || 20))), offset: String(Math.max(0, options.offset || 0)) });
+  if (options.status && options.status !== "all") params.set("status", `eq.${options.status}`);
+  if (options.category) params.set("category", `eq.${options.category}`);
+  if (options.createdBy) params.set("created_by", `eq.${options.createdBy}`);
+  const conditions: string[] = [];
+  if (options.freshness) conditions.push(requestFreshnessFilter(options.freshness));
+  const search = searchFilterText(options.search || "");
+  if (search) conditions.push(`or(origin.ilike.*${search}*,destination.ilike.*${search}*,description.ilike.*${search}*)`);
+  if (conditions.length) params.set("and", `(${conditions.join(",")})`);
+  const response = await authenticatedSupabaseFetch(`requests?${params}`);
   return readJson<RequestRecord[]>(response);
 }
 

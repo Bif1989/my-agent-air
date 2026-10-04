@@ -1,11 +1,13 @@
 "use client";
 
+import { tashkentDate } from "@/lib/request-freshness";
+import { joinServiceDetails, splitServiceDetails } from "@/lib/request-details";
 import { FormEvent, useState } from "react";
 import AviaSmartAssist from "@/app/components/avia-smart-assist";
 import AviaSmartInput from "@/app/components/avia-smart-input";
 import type { RequestPayload } from "@/app/requests/requests-api";
 
-const categories = ["Aviachipta", "Tur paket", "Mehmonxona", "Transfer", "Viza", "Boshqa"];
+const categories = ["Aviachipta", "Tur paket", "Mehmonxona", "Transfer", "Gid", "Viza", "Boshqa"];
 const currencies = ["USD", "UZS", "EUR", "RUB"];
 
 type RequestFormProps = {
@@ -30,15 +32,13 @@ export default function RequestForm({ initialValues, submitLabel, submittingLabe
   const [baggage, setBaggage] = useState(stringValue(initialValues?.baggage));
   const [budget, setBudget] = useState(initialValues?.budget == null ? "" : String(initialValues.budget));
   const [currency, setCurrency] = useState(initialValues?.currency || "USD");
-  const [description, setDescription] = useState(stringValue(initialValues?.description));
+  const [description, setDescription] = useState(() => splitServiceDetails(initialValues?.description).text);
+  const [details, setDetails] = useState(() => splitServiceDetails(initialValues?.description).details);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const today = (() => {
-    const date = new Date();
-    const offset = date.getTimezoneOffset();
-    return new Date(date.getTime() - offset * 60 * 1000).toISOString().slice(0, 10);
-  })();
+  const today = tashkentDate();
+  const isAirTravel = category === "Aviachipta" || category === "Tur paket";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -54,13 +54,18 @@ export default function RequestForm({ initialValues, submitLabel, submittingLabe
     if (!Number.isInteger(childrenNumber) || childrenNumber < 0 || !Number.isInteger(infantsNumber) || infantsNumber < 0) return setError("Bolalar va go‘daklar soni 0 yoki undan yuqori bo‘lishi kerak.");
     if (budgetNumber !== null && (!Number.isFinite(budgetNumber) || budgetNumber < 0)) return setError("Budjet manfiy bo‘lishi mumkin emas.");
     if (travelDate && travelDate < today) return setError("Safar sanasi o‘tgan sana bo‘lishi mumkin emas.");
-    if (description.length > 1000) return setError("Tavsif 1000 belgidan oshmasligi kerak.");
+    const fullDescription = joinServiceDetails(description, category, details);
+    if (category === "Mehmonxona" && (!/^\d+$/.test(details.rooms) || Number(details.rooms) < 1 || !/^\d+$/.test(details.nights) || Number(details.nights) < 1)) return setError("Xonalar va tunlar soni kamida 1 bo‘lsin.");
+    if (category === "Transfer" && !details.vehicle.trim()) return setError("Transport turini kiriting.");
+    if (category === "Gid" && !details.language.trim()) return setError("Gid tilini kiriting.");
+    if (fullDescription.length > 1000) return setError("Tavsif 1000 belgidan oshmasligi kerak.");
 
     setIsSubmitting(true);
     try {
-      await onSubmit({ category, origin: origin.trim() || null, destination: destination.trim() || null, travel_date: travelDate || null, adults: adultsNumber, children: childrenNumber, infants: infantsNumber, baggage: baggage.trim() || null, budget: budgetNumber, currency, description: description.trim() || null });
+      await onSubmit({ category, origin: origin.trim() || null, destination: destination.trim() || null, travel_date: travelDate || null, adults: adultsNumber, children: childrenNumber, infants: infantsNumber, baggage: isAirTravel ? baggage.trim() || null : null, budget: budgetNumber, currency, description: fullDescription || null });
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "So‘rovni saqlashda xatolik yuz berdi.");
+    } finally {
       setIsSubmitting(false);
     }
   }
@@ -70,13 +75,16 @@ export default function RequestForm({ initialValues, submitLabel, submittingLabe
     <form onSubmit={handleSubmit} className="space-y-7">
       <div className="grid gap-5 sm:grid-cols-2">
         <label className="text-sm font-semibold text-slate-700 sm:col-span-2">Kategoriya<select required value={category} onChange={(event) => setCategory(event.target.value)} className={inputClass}><option value="" disabled>Kategoriyani tanlang</option>{categories.map((item) => <option key={item}>{item}</option>)}</select></label>
-        <label className="text-sm font-semibold text-slate-700">Qayerdan<AviaSmartInput value={origin} onChange={setOrigin} placeholder="Toshkent" className={inputClass} mode="airport" /></label>
-        <label className="text-sm font-semibold text-slate-700">Qayerga<AviaSmartInput value={destination} onChange={setDestination} placeholder="Istanbul" className={inputClass} mode="airport" /></label>
+        <label className="text-sm font-semibold text-slate-700">{category === "Mehmonxona" || category === "Gid" ? "Shahar / joy" : "Qayerdan"}{isAirTravel ? <AviaSmartInput value={origin} onChange={setOrigin} placeholder="Toshkent" className={inputClass} mode="airport" /> : <input value={origin} maxLength={120} onChange={(event) => setOrigin(event.target.value)} placeholder="Shahar yoki manzil" className={inputClass} />}</label>
+        <label className="text-sm font-semibold text-slate-700">Qayerga{isAirTravel ? <AviaSmartInput value={destination} onChange={setDestination} placeholder="Istanbul" className={inputClass} mode="airport" /> : <input value={destination} maxLength={120} onChange={(event) => setDestination(event.target.value)} placeholder="Manzil yoki xizmat joyi" className={inputClass} />}</label>
         <label className="text-sm font-semibold text-slate-700">Safar sanasi<input type="date" min={today} value={travelDate} onChange={(event) => setTravelDate(event.target.value)} className={inputClass} /></label>
-        <label className="text-sm font-semibold text-slate-700">Bagaj<input value={baggage} onChange={(event) => setBaggage(event.target.value)} placeholder="Masalan: 1 dona 23 kg" className={inputClass} /></label>
-        <label className="text-sm font-semibold text-slate-700">Kattalar soni<input required min="1" step="1" type="number" value={adults} onChange={(event) => setAdults(event.target.value)} className={inputClass} /></label>
+        {isAirTravel && <label className="text-sm font-semibold text-slate-700">Bagaj<input value={baggage} onChange={(event) => setBaggage(event.target.value)} placeholder="Masalan: 1 dona 23 kg" className={inputClass} /></label>}
+        <label className="text-sm font-semibold text-slate-700">{isAirTravel ? "Kattalar soni" : "Ishtirokchilar soni"}<input required min="1" step="1" type="number" value={adults} onChange={(event) => setAdults(event.target.value)} className={inputClass} /></label>
         <label className="text-sm font-semibold text-slate-700">Bolalar soni<input min="0" step="1" type="number" value={children} onChange={(event) => setChildren(event.target.value)} className={inputClass} /></label>
         <label className="text-sm font-semibold text-slate-700">Go‘daklar soni<input min="0" step="1" type="number" value={infants} onChange={(event) => setInfants(event.target.value)} className={inputClass} /></label>
+        {category === "Mehmonxona" && ([['rooms', 'Xonalar soni'], ['nights', 'Tunlar soni']] as const).map(([field, label]) => <label key={field} className="text-sm font-semibold text-slate-700">{label}<input required type="number" min="1" max="365" step="1" value={details[field]} onChange={(event) => setDetails((current) => ({ ...current, [field]: event.target.value }))} className={inputClass} /></label>)}
+        {category === "Transfer" && <label className="text-sm font-semibold text-slate-700">Transport turi<input required maxLength={100} value={details.vehicle} onChange={(event) => setDetails((current) => ({ ...current, vehicle: event.target.value }))} placeholder="Sedan, miniven, avtobus…" className={inputClass} /></label>}
+        {category === "Gid" && <label className="text-sm font-semibold text-slate-700">Gid tili<input required maxLength={100} value={details.language} onChange={(event) => setDetails((current) => ({ ...current, language: event.target.value }))} placeholder="O‘zbek, rus, ingliz…" className={inputClass} /></label>}
         <div className="grid grid-cols-[1fr_110px] gap-3"><label className="text-sm font-semibold text-slate-700">Budjet<input min="0" step="0.01" type="number" value={budget} onChange={(event) => setBudget(event.target.value)} placeholder="0" className={inputClass} /></label><label className="text-sm font-semibold text-slate-700">Valyuta<select value={currency} onChange={(event) => setCurrency(event.target.value)} className={inputClass}>{currencies.map((item) => <option key={item}>{item}</option>)}</select></label></div>
         <label className="text-sm font-semibold text-slate-700 sm:col-span-2">Qo‘shimcha ma’lumot<AviaSmartAssist value={description} onChange={setDescription} maxLength={1000} rows={5} placeholder="Safar yoki xizmat tafsilotlarini yozing" className={inputClass} containerClassName="relative mt-2" /><span className="mt-1 block text-right text-xs font-normal text-slate-400">{description.length}/1000</span></label>
       </div>

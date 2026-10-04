@@ -1,3 +1,4 @@
+import { requestFreshnessFilter } from "@/lib/request-freshness";
 import { authenticatedSupabaseFetch } from "@/lib/supabase-auth";
 import { listFeedPosts, type FeedPost } from "@/app/feed/feed-api";
 
@@ -37,8 +38,8 @@ async function countRows(path: string) {
 export async function loadDashboardData(userId: string) {
   const [profileRows, requests, openRequests, offers, deals, agents, announcements] = await Promise.all([
     readJson<Profile[]>(`profiles?select=full_name,company_name,city,phone,agent_type,is_verified&id=eq.${encodeURIComponent(userId)}&limit=1`),
-    readJson<RequestItem[]>("requests?select=id,origin,destination,travel_date,adults,children,infants,category,status,created_at&order=created_at.desc&limit=5"),
-    countRows("requests?select=id&status=eq.open"),
+    readJson<RequestItem[]>(`requests?select=id,origin,destination,travel_date,adults,children,infants,category,status,created_at&status=eq.open&and=${encodeURIComponent("(" + requestFreshnessFilter("current") + ")")}&order=created_at.desc&limit=5`),
+    countRows(`requests?select=id&status=eq.open&and=${encodeURIComponent("(" + requestFreshnessFilter("current") + ")")}`),
     countRows(`offers?select=id&agent_id=eq.${encodeURIComponent(userId)}`),
     countRows("deals?select=id&status=in.(accepted,processing,issued)"),
     countRows("profiles?select=id&is_active=eq.true"),

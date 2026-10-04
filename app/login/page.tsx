@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import BrandMark from "@/app/components/brand-mark";
 import { FormEvent, useState } from "react";
 import { saveSession, signIn } from "@/lib/supabase-auth";
+import { safeNextPath } from "@/lib/navigation";
 
 export default function LoginPage() {
   const [error, setError] = useState("");
@@ -19,7 +20,7 @@ export default function LoginPage() {
     try {
       const response = await signIn(String(formData.get("email") || ""), String(formData.get("password") || ""));
       saveSession(response);
-      router.push("/dashboard");
+      router.push(safeNextPath(new URLSearchParams(window.location.search).get("next")));
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Kirishda xatolik yuz berdi.");
       setIsLoading(false);
@@ -39,7 +40,7 @@ export default function LoginPage() {
             {error && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
             <button type="submit" disabled={isLoading} className="w-full rounded-xl bg-blue-600 py-3.5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-4 focus:ring-blue-100">{isLoading ? "Kirilmoqda..." : "Kirish"}</button>
           </form>
-          <div className="mt-6 flex flex-wrap justify-end gap-3 text-sm"><Link href="/register" className="font-medium text-blue-600 hover:text-blue-700">Ro‘yxatdan o‘tish</Link></div>
+          <div className="mt-6 flex flex-wrap justify-between gap-3 text-sm"><Link href="/forgot-password" className="font-medium text-blue-600 hover:text-blue-700">Parolni unutdingizmi?</Link><Link href="/register" className="font-medium text-blue-600 hover:text-blue-700">Ro‘yxatdan o‘tish</Link></div>
         </div></section>
       </div>
     </main>

@@ -49,7 +49,7 @@ export default function AirlineSmartInput({ value, onChange, placeholder, classN
       {isOpen && suggestions.length > 0 && (
         <ul role="listbox" className="absolute left-0 top-full z-20 mt-2 max-h-64 w-full overflow-auto rounded-xl border border-slate-200 bg-white shadow-lg">
           {suggestions.map((suggestion) => (
-            <li key={suggestion.code} role="option">
+            <li key={suggestion.code} role="option" aria-selected={suggestion.code === value}>
               <button
                 type="button"
                 onMouseDown={(event) => {

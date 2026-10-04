@@ -1,3 +1,4 @@
+import RecoveryRedirect from "@/app/components/recovery-redirect";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
@@ -31,7 +32,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         <VkMiniAppBridge />
-        {children}
+        <RecoveryRedirect />{children}
         <Analytics />
       </body>
     </html>

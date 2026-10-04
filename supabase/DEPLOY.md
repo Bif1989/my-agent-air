@@ -1,102 +1,21 @@
-# Push notifications — Supabase deployment
+# Supabase operations
 
-Everything below targets the existing cloud project `fsemjqlreuzvpyvbmxzt`
-(see `SUPABASE_URL` in [lib/supabase-auth.ts](../lib/supabase-auth.ts)). There
-is no local Supabase dev stack in this repo — `supabase/config.toml` only
-configures the `push-dispatch` Edge Function for `supabase functions deploy`.
+Production project: `fsemjqlreuzvpyvbmxzt`. Its core schema, RLS, grants and RPCs are recorded in `schema/baseline-before-resume.sql`. This is a fresh-database bootstrap/reference, never a migration to replay on production. See the main README for recovery order and verification.
 
-## 0. Prerequisites
+## Applied migrations
 
-```bash
-npx supabase login                       # opens a browser, creates a CLI access token
-npx supabase link --project-ref fsemjqlreuzvpyvbmxzt
-```
+Production has the original core/group/feed migrations, `20260918103053_push_notifications`, `20260918111732_use_private_push_config_table`, `20260921031336_add_vk_identities` and `20261004113047_resume_security`. The older local `20260918120000_push_notifications.sql` is a historical setup example with a different timestamp; do not apply it again to this project.
 
-`supabase link` is required before any of the commands below will work — it
-was **not** run in this sandbox (no interactive login/secrets available
-here), so migration status could not be verified from this environment.
+## Push dispatch
 
-## 1. Check migration status
+Deploy `functions/push-dispatch` using the Supabase CLI or connector. `config.toml` disables platform JWT verification; the handler verifies the shared `x-webhook-secret` header.
 
-```bash
-npx supabase migration list
-```
+Set Edge Function secrets `PUSH_WEBHOOK_SECRET`, `PUSH_VAPID_PUBLIC_KEY`, `PUSH_VAPID_PRIVATE_KEY` and `PUSH_VAPID_SUBJECT` in the environment's secret manager. The frontend reads `NEXT_PUBLIC_PUSH_VAPID_PUBLIC_KEY`. Supabase supplies the function's Supabase URL and service role key.
 
-Confirms whether `20260918120000_push_notifications.sql` is already applied
-remotely. If it's only listed locally, apply it:
+The production trigger reads the webhook secret from `private_push.config`, unavailable to browser roles. Do not replace it with the old migration's database-setting variant or commit the secret. On a new project, update the trigger's Edge Function URL and configure the same secret in the private table and Edge Function.
 
-```bash
-npx supabase db push
-```
+The snapshot contains an empty secret, so fresh databases send no pushes until configured. Do not copy production subscriptions, user rows or credentials into development databases.
 
-## 2. Generate VAPID keys (once per project)
+## Security regression check
 
-```bash
-npx web-push generate-vapid-keys
-```
-
-Save the `Public Key` / `Private Key` pair — the public key also goes to the
-Next.js frontend (step 4).
-
-## 3. Set Edge Function secrets
-
-`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically by
-the platform for every Edge Function — do **not** set them manually. Only
-these need to be set explicitly:
-
-```bash
-npx supabase secrets set \
-  PUSH_WEBHOOK_SECRET="<generate a random 32+ byte string, e.g. openssl rand -hex 32>" \
-  PUSH_VAPID_PUBLIC_KEY="<public key from step 2>" \
-  PUSH_VAPID_PRIVATE_KEY="<private key from step 2>" \
-  PUSH_VAPID_SUBJECT="mailto:support@myagentair.com"
-```
-
-## 4. Deploy the Edge Function
-
-```bash
-npx supabase functions deploy push-dispatch
-```
-
-`supabase/config.toml` sets `verify_jwt = false` for this function — required
-because the DB trigger authenticates with the `x-webhook-secret` header, not
-a Supabase Auth JWT.
-
-## 5. Point the DB trigger at the deployed function
-
-Run once against the project's SQL editor / `psql` (uses the *same* secret
-as `PUSH_WEBHOOK_SECRET` above):
-
-```sql
-alter database postgres set app.settings.push_edge_url = 'https://fsemjqlreuzvpyvbmxzt.functions.supabase.co/push-dispatch';
-alter database postgres set app.settings.push_webhook_secret = '<same value as PUSH_WEBHOOK_SECRET>';
-```
-
-## 6. Configure the frontend
-
-Add to the Next.js deployment's environment variables (e.g. Vercel project
-settings):
-
-```
-NEXT_PUBLIC_PUSH_VAPID_PUBLIC_KEY=<public key from step 2>
-```
-
-Redeploy the frontend after adding it — it's read at build/runtime by
-[lib/push-notifications.ts](../lib/push-notifications.ts).
-
-## What still needs manual setup
-
-- [ ] Run `supabase login` + `supabase link` with real project credentials
-      (not available in this sandbox).
-- [ ] Confirm `20260918120000_push_notifications.sql` is applied remotely
-      (`supabase migration list`) and run `supabase db push` if not.
-- [ ] Generate real VAPID keys and store them securely (password manager /
-      team secrets vault) — the ones in this doc are placeholders.
-- [ ] Set the four Edge Function secrets in step 3 on the real project.
-- [ ] Deploy the function (step 4) and verify with `supabase functions logs push-dispatch`.
-- [ ] Run the two `alter database` statements in step 5 with the matching
-      secret value.
-- [ ] Add `NEXT_PUBLIC_PUSH_VAPID_PUBLIC_KEY` to the frontend hosting
-      provider's env vars and redeploy.
-- [ ] End-to-end smoke test: send a chat message / offer / request and
-      confirm a push notification is received on a subscribed device.
+Run `tests/resume_security.sql` after applying `resume_security`. Its temporary fixtures and queued notifications are rolled back. It verifies the successful deal flow and rejects unauthorized, blocked, expired and invalid-money operations.

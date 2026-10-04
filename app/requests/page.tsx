@@ -1,5 +1,6 @@
 "use client";
 
+import { isRequestCurrent } from "@/lib/request-freshness";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -10,7 +11,7 @@ import { getStoredSession, type AuthSession } from "@/lib/supabase-auth";
 import { formatAirline } from "@/data/airlines";
 import { listRequests, type RequestRecord, type RequestStatus } from "@/app/requests/requests-api";
 
-const categories = ["Aviachipta", "Tur paket", "Mehmonxona", "Transfer", "Viza", "Boshqa"];
+const categories = ["Aviachipta", "Tur paket", "Mehmonxona", "Transfer", "Gid", "Viza", "Boshqa"];
 const requestStatusLabels: Record<RequestStatus | "all", string> = { all: "Barcha statuslar", open: "Ochiq", accepted: "Qabul qilingan", closed: "Yopilgan", cancelled: "Bekor qilingan" };
 const offerStatusLabels = { pending: "Kutilmoqda", accepted: "Qabul qilingan", rejected: "Rad etilgan", withdrawn: "Qaytarib olingan" } as const;
 
@@ -43,16 +44,16 @@ function MarketRequestCard({ request, isOwner, isFormOpen, hasOffered, offerMess
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
       <Link href={`/requests/${request.id}`} className="block rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-100">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-semibold text-[#0b1f3a]">{request.origin || "—"} <span className="px-1 text-blue-500">→</span> {request.destination || "—"}</h2>{isOwner && <span className="rounded-full bg-cyan-50 px-2.5 py-1 text-[11px] font-bold text-cyan-700">Mening so‘rovim</span>}</div><p className="mt-2 text-sm text-slate-500">{request.category} · {formatDate(request.travel_date)}</p></div><span className="w-fit rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Ochiq</span></div>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-semibold text-[#0b1f3a]">{request.origin || "—"} <span className="px-1 text-blue-500">→</span> {request.destination || "—"}</h2>{isOwner && <span className="rounded-full bg-cyan-50 px-2.5 py-1 text-[11px] font-bold text-cyan-700">Mening so‘rovim</span>}</div><p className="mt-2 text-sm text-slate-500">{request.category} · {formatDate(request.travel_date)}</p></div><span className="w-fit rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">{isRequestCurrent(request) ? "Ochiq" : "Muddati o‘tgan"}</span></div>
         <div className="mt-5 grid gap-3 border-t border-slate-100 pt-4 text-sm text-slate-500 sm:grid-cols-3"><span>{request.adults} kattalar · {request.children} bolalar · {request.infants} go‘daklar</span><span>Bagaj: {request.baggage || "Ko‘rsatilmagan"}</span><span className="font-semibold text-[#0b1f3a]">{request.budget == null ? "Budjet ko‘rsatilmagan" : `${request.budget.toLocaleString("uz-UZ")} ${request.currency}`}</span></div>
         <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400"><span>{request.creator?.full_name || "Agent nomi ko‘rsatilmagan"}</span><span>{request.creator?.company_name || "Kompaniya ko‘rsatilmagan"}</span><span>{request.creator?.city || "Shahar ko‘rsatilmagan"}</span>{request.creator?.is_verified && <span className="font-semibold text-blue-600">Tasdiqlangan agent</span>}<span className="sm:ml-auto">Yaratilgan: {formatDate(request.created_at)}</span></div>
       </Link>
-      {!isOwner && <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
+      {!isOwner && isRequestCurrent(request) && <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
         {offerMessage ? <p role="status" className="rounded-xl bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700">{offerMessage}</p>
           : hasOffered ? <span className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-500">Taklif yuborilgan</span>
           : <button type="button" onClick={onToggleForm} className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100">{isFormOpen ? "Formani yopish" : "Taklif berish"}</button>}
       </div>}
-      {!isOwner && isFormOpen && !hasOffered && !offerMessage && <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 sm:p-5"><OfferForm submitLabel="Taklif yuborish" submittingLabel="Yuborilmoqda..." onSubmit={onSubmitOffer} /></div>}
+      {!isOwner && isRequestCurrent(request) && isFormOpen && !hasOffered && !offerMessage && <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 sm:p-5"><OfferForm category={request.category} submitLabel="Taklif yuborish" submittingLabel="Yuborilmoqda..." onSubmit={onSubmitOffer} /></div>}
     </div>
   );
 }
@@ -61,7 +62,7 @@ function MyRequestCard({ request, offersCount }: { request: RequestRecord; offer
   const statusClass = request.status === "open" ? "bg-emerald-50 text-emerald-700" : request.status === "cancelled" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600";
   return (
     <Link href={`/requests/${request.id}`} className="block rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-100">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-semibold text-[#0b1f3a]">{request.origin || "—"} <span className="px-1 text-blue-500">→</span> {request.destination || "—"}</h2><span className="rounded-full bg-cyan-50 px-2.5 py-1 text-[11px] font-bold text-cyan-700">Mening so‘rovim</span></div><p className="mt-2 text-sm text-slate-500">{request.category} · {formatDate(request.travel_date)}</p></div><span className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${statusClass}`}>{requestStatusLabels[request.status]}</span></div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-semibold text-[#0b1f3a]">{request.origin || "—"} <span className="px-1 text-blue-500">→</span> {request.destination || "—"}</h2><span className="rounded-full bg-cyan-50 px-2.5 py-1 text-[11px] font-bold text-cyan-700">Mening so‘rovim</span></div><p className="mt-2 text-sm text-slate-500">{request.category} · {formatDate(request.travel_date)}</p></div><span className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${statusClass}`}>{request.status === "open" && !isRequestCurrent(request) ? "Muddati o‘tgan" : requestStatusLabels[request.status]}</span></div>
       <div className="mt-5 grid gap-3 border-t border-slate-100 pt-4 text-sm text-slate-500 sm:grid-cols-3"><span>{request.adults} kattalar · {request.children} bolalar · {request.infants} go‘daklar</span><span>Bagaj: {request.baggage || "Ko‘rsatilmagan"}</span><span className="font-semibold text-[#0b1f3a]">{request.budget == null ? "Budjet ko‘rsatilmagan" : `${request.budget.toLocaleString("uz-UZ")} ${request.currency}`}</span></div>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4"><span className="text-xs text-slate-400">Yaratilgan: {formatDate(request.created_at)}</span><span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">{offersCount} ta taklif keldi</span></div>
     </Link>
@@ -102,6 +103,9 @@ export default function RequestsPage() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [tab, setTab] = useState<Tab>("market");
 
+  const [marketPage, setMarketPage] = useState(0);
+  const [myPage, setMyPage] = useState(0);
+  const [marketFreshness, setMarketFreshness] = useState<"current" | "expired">("current");
   const [marketRequests, setMarketRequests] = useState<RequestRecord[]>([]);
   const [marketCategory, setMarketCategory] = useState("");
   const [marketSearch, setMarketSearch] = useState("");
@@ -149,18 +153,19 @@ export default function RequestsPage() {
 
   useEffect(() => {
     if (!session || tab !== "market") return;
+    let active = true;
     const timeoutId = window.setTimeout(() => {
       setIsMarketLoading(true); setMarketError("");
-      listRequests({ status: "open", category: marketCategory, search: marketSearch })
-        .then(setMarketRequests)
+      listRequests({ status: "open", category: marketCategory, search: marketSearch, freshness: marketFreshness, offset: marketPage * 20 })
+        .then((rows) => { if (active) setMarketRequests(rows); })
         .catch((requestError: unknown) => {
           if (requestError instanceof Error && (requestError.message === "AUTH_SESSION_EXPIRED" || requestError.message === "AUTH_SESSION_MISSING")) { window.location.replace("/login"); return; }
-          setMarketError("So‘rovlarni yuklashda xatolik yuz berdi. Qayta urinib ko‘ring.");
+          if (active) setMarketError("So‘rovlarni yuklashda xatolik yuz berdi. Qayta urinib ko‘ring.");
         })
-        .finally(() => setIsMarketLoading(false));
+        .finally(() => { if (active) setIsMarketLoading(false); });
     }, 350);
-    return () => window.clearTimeout(timeoutId);
-  }, [session, tab, marketCategory, marketSearch]);
+    return () => { active = false; window.clearTimeout(timeoutId); };
+  }, [session, tab, marketCategory, marketSearch, marketFreshness, marketPage]);
 
   useEffect(() => {
     if (!session || tab !== "market") return;
@@ -174,18 +179,19 @@ export default function RequestsPage() {
 
   useEffect(() => {
     if (!session || tab !== "my-requests") return;
+    let active = true;
     const timeoutId = window.setTimeout(() => {
       setIsMyRequestsLoading(true); setMyRequestsError("");
-      listRequests({ status: myStatus, category: myCategory, search: mySearch, createdBy: session.user.id })
-        .then(setMyRequests)
+      listRequests({ status: myStatus, category: myCategory, search: mySearch, createdBy: session.user.id, offset: myPage * 20 })
+        .then((rows) => { if (active) setMyRequests(rows); })
         .catch((requestError: unknown) => {
           if (requestError instanceof Error && (requestError.message === "AUTH_SESSION_EXPIRED" || requestError.message === "AUTH_SESSION_MISSING")) { window.location.replace("/login"); return; }
-          setMyRequestsError("So‘rovlarni yuklashda xatolik yuz berdi. Qayta urinib ko‘ring.");
+          if (active) setMyRequestsError("So‘rovlarni yuklashda xatolik yuz berdi. Qayta urinib ko‘ring.");
         })
-        .finally(() => setIsMyRequestsLoading(false));
+        .finally(() => { if (active) setIsMyRequestsLoading(false); });
     }, 350);
-    return () => window.clearTimeout(timeoutId);
-  }, [session, tab, myStatus, myCategory, mySearch]);
+    return () => { active = false; window.clearTimeout(timeoutId); };
+  }, [session, tab, myStatus, myCategory, mySearch, myPage]);
 
   useEffect(() => {
     if (!session || (tab !== "my-requests" && tab !== "incoming-offers")) return;
@@ -250,8 +256,8 @@ export default function RequestsPage() {
   }, {});
   const pendingIncomingCount = incomingOffers.filter((offer) => offer.status === "pending").length;
 
-  function clearMarketFilters() { setMarketCategory(""); setMarketSearch(""); }
-  function clearMyFilters() { setMyStatus("all"); setMyCategory(""); setMySearch(""); }
+  function clearMarketFilters() { setMarketPage(0); setMarketCategory(""); setMarketSearch(""); }
+  function clearMyFilters() { setMyPage(0); setMyStatus("all"); setMyCategory(""); setMySearch(""); }
 
   const inputClass = "rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100";
 
@@ -270,27 +276,29 @@ export default function RequestsPage() {
 
       {tab === "market" && <section className="mt-6">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-          <div className="grid gap-3 md:grid-cols-[1fr_1.4fr_auto]"><label className="sr-only" htmlFor="market-category">Kategoriya</label><select id="market-category" value={marketCategory} onChange={(event) => setMarketCategory(event.target.value)} className={inputClass}><option value="">Barcha kategoriyalar</option>{categories.map((item) => <option key={item}>{item}</option>)}</select><label className="sr-only" htmlFor="market-search">Qidiruv</label><input id="market-search" value={marketSearch} onChange={(event) => setMarketSearch(event.target.value)} placeholder="Origin yoki destination bo‘yicha qidirish" className={inputClass} />{(marketCategory || marketSearch) && <button type="button" onClick={clearMarketFilters} className="rounded-xl px-3 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500">Filtrni tozalash</button>}</div>
-          <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-emerald-600">Status: Ochiq</p>
+          <div className="grid gap-3 md:grid-cols-[1fr_1.4fr_auto]"><label className="sr-only" htmlFor="market-category">Kategoriya</label><select id="market-category" value={marketCategory} onChange={(event) => { setMarketCategory(event.target.value); setMarketPage(0); }} className={inputClass}><option value="">Barcha kategoriyalar</option>{categories.map((item) => <option key={item}>{item}</option>)}</select><label className="sr-only" htmlFor="market-search">Qidiruv</label><input id="market-search" value={marketSearch} onChange={(event) => { setMarketSearch(event.target.value); setMarketPage(0); }} placeholder="Yo‘nalish yoki xizmat bo‘yicha qidirish" className={inputClass} />{(marketCategory || marketSearch) && <button type="button" onClick={clearMarketFilters} className="rounded-xl px-3 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500">Filtrni tozalash</button>}</div>
+          <label className="mt-3 flex items-center gap-3 text-sm text-slate-600">Ko‘rinish<select aria-label="So‘rovlar muddati" value={marketFreshness} onChange={(event) => { setMarketFreshness(event.target.value as "current" | "expired"); setMarketPage(0); }} className={inputClass}><option value="current">Amaldagi so‘rovlar</option><option value="expired">Arxiv — muddati o‘tgan</option></select></label>
         </div>
         {marketError && <p role="alert" className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">{marketError}</p>}
         {isMarketLoading ? <div className="mt-6 space-y-4" aria-label="So‘rovlar yuklanmoqda"><div className="h-44 animate-pulse rounded-2xl bg-slate-200" /><div className="h-44 animate-pulse rounded-2xl bg-slate-200" /></div>
           : marketRequests.length ? <div className="mt-6 space-y-4">{marketRequests.map((request) => <MarketRequestCard key={request.id} request={request} isOwner={session?.user.id === request.created_by} isFormOpen={openOfferRequestId === request.id} hasOffered={offeredRequestIds.has(request.id)} offerMessage={offerSuccessId === request.id ? "Taklif yuborildi" : ""} onToggleForm={() => setOpenOfferRequestId((current) => current === request.id ? null : request.id)} onSubmitOffer={(payload) => submitMarketOffer(request.id, payload)} />)}</div>
           : <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center"><p className="text-lg font-semibold text-[#0b1f3a]">Hozircha ochiq so‘rovlar yo‘q</p><p className="mt-2 text-sm text-slate-500">Filtrlarni o‘zgartirib ko‘ring.</p></div>}
+        <Pagination page={marketPage} onChange={setMarketPage} hasNext={marketRequests.length === 20} disabled={isMarketLoading} />
       </section>}
 
       {tab === "my-requests" && <section className="mt-6">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-          <div className="grid gap-3 md:grid-cols-[1fr_1fr_1.4fr_auto]"><label className="sr-only" htmlFor="my-status">Status</label><select id="my-status" value={myStatus} onChange={(event) => setMyStatus(event.target.value as RequestStatus | "all")} className={inputClass}>{Object.entries(requestStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><label className="sr-only" htmlFor="my-category">Kategoriya</label><select id="my-category" value={myCategory} onChange={(event) => setMyCategory(event.target.value)} className={inputClass}><option value="">Barcha kategoriyalar</option>{categories.map((item) => <option key={item}>{item}</option>)}</select><label className="sr-only" htmlFor="my-search">Qidiruv</label><input id="my-search" value={mySearch} onChange={(event) => setMySearch(event.target.value)} placeholder="Origin yoki destination bo‘yicha qidirish" className={inputClass} />{(myStatus !== "all" || myCategory || mySearch) && <button type="button" onClick={clearMyFilters} className="rounded-xl px-3 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500">Filtrni tozalash</button>}</div>
+          <div className="grid gap-3 md:grid-cols-[1fr_1fr_1.4fr_auto]"><label className="sr-only" htmlFor="my-status">Status</label><select id="my-status" value={myStatus} onChange={(event) => { setMyStatus(event.target.value as RequestStatus | "all"); setMyPage(0); }} className={inputClass}>{Object.entries(requestStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><label className="sr-only" htmlFor="my-category">Kategoriya</label><select id="my-category" value={myCategory} onChange={(event) => { setMyCategory(event.target.value); setMyPage(0); }} className={inputClass}><option value="">Barcha kategoriyalar</option>{categories.map((item) => <option key={item}>{item}</option>)}</select><label className="sr-only" htmlFor="my-search">Qidiruv</label><input id="my-search" value={mySearch} onChange={(event) => { setMySearch(event.target.value); setMyPage(0); }} placeholder="Yo‘nalish yoki xizmat bo‘yicha qidirish" className={inputClass} />{(myStatus !== "all" || myCategory || mySearch) && <button type="button" onClick={clearMyFilters} className="rounded-xl px-3 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500">Filtrni tozalash</button>}</div>
         </div>
         {myRequestsError && <p role="alert" className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">{myRequestsError}</p>}
         {isMyRequestsLoading || isIncomingLoading ? <div className="mt-6 space-y-4" aria-label="So‘rovlar yuklanmoqda"><div className="h-44 animate-pulse rounded-2xl bg-slate-200" /><div className="h-44 animate-pulse rounded-2xl bg-slate-200" /></div>
           : myRequests.length ? <div className="mt-6 space-y-4">{myRequests.map((request) => <MyRequestCard key={request.id} request={request} offersCount={offerCountByRequest[request.id] || 0} />)}</div>
           : <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center"><p className="text-lg font-semibold text-[#0b1f3a]">Hozircha so‘rovlar yo‘q</p><p className="mt-2 text-sm text-slate-500">Filtrlarni o‘zgartiring yoki yangi so‘rov yarating.</p><Link href="/requests/new" className="mt-6 inline-flex rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white focus:outline-none focus:ring-4 focus:ring-blue-100">Yangi so‘rov yaratish</Link></div>}
+        <Pagination page={myPage} onChange={setMyPage} hasNext={myRequests.length === 20} disabled={isMyRequestsLoading} />
       </section>}
 
       {tab === "my-offers" && <section className="mt-6">
-        {editingOffer && <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"><div className="flex items-center justify-between gap-4"><h2 className="text-lg font-semibold text-[#0b1f3a]">Taklifni tahrirlash</h2><button type="button" onClick={() => setEditingOffer(null)} className="text-sm font-semibold text-slate-500 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">Bekor qilish</button></div><div className="mt-5"><OfferForm initialValues={editingOffer} submitLabel="Saqlash" submittingLabel="Saqlanmoqda..." onSubmit={submitEdit} /></div></div>}
+        {editingOffer && <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"><div className="flex items-center justify-between gap-4"><h2 className="text-lg font-semibold text-[#0b1f3a]">Taklifni tahrirlash</h2><button type="button" onClick={() => setEditingOffer(null)} className="text-sm font-semibold text-slate-500 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">Bekor qilish</button></div><div className="mt-5"><OfferForm category={editingOffer.request?.category} initialValues={editingOffer} submitLabel="Saqlash" submittingLabel="Saqlanmoqda..." onSubmit={submitEdit} /></div></div>}
         {myOffersError && <p role="alert" className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">{myOffersError}</p>}
         {isMyOffersLoading ? <div className="space-y-4" aria-label="Takliflar yuklanmoqda"><div className="h-44 animate-pulse rounded-2xl bg-slate-200" /><div className="h-44 animate-pulse rounded-2xl bg-slate-200" /></div>
           : myOffers.length ? <div className="space-y-4">{myOffers.map((offer) => <MyOfferCard key={offer.id} offer={offer} onEdit={setEditingOffer} onWithdraw={handleWithdraw} />)}</div>
@@ -305,4 +313,8 @@ export default function RequestsPage() {
       </section>}
     </AppShell>
   );
+}
+
+function Pagination({ page, onChange, hasNext, disabled }: { page: number; onChange: (page: number) => void; hasNext: boolean; disabled: boolean }) {
+  return <nav aria-label="So‘rovlar sahifalari" className="mt-6 flex items-center justify-center gap-4 text-sm"><button disabled={disabled || page === 0} onClick={() => onChange(page - 1)} className="rounded-lg border border-slate-200 px-4 py-2 disabled:opacity-40">← Oldingi</button><span>{page + 1}-sahifa</span><button disabled={disabled || !hasNext} onClick={() => onChange(page + 1)} className="rounded-lg border border-slate-200 px-4 py-2 disabled:opacity-40">Keyingi →</button></nav>;
 }

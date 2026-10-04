@@ -47,5 +47,7 @@ export async function updateCurrentProfile(profile: EditableProfile) {
     body: JSON.stringify(profile),
   });
   const rows = await response.json() as ProfileRecord[];
+  if (!rows[0]) throw new Error("Profil saqlanmadi. Qayta urinib ko‘ring.");
+  window.dispatchEvent(new Event("my-agent-air:profile-updated"));
   return rows[0] || null;
 }

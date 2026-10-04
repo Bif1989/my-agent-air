@@ -1,5 +1,6 @@
 "use client";
 
+import { isRequestCurrent } from "@/lib/request-freshness";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -22,7 +23,7 @@ function DetailItem({ label, value }: { label: string; value: string }) {
 }
 
 function IncomingOffer({ offer, request, isAccepting, onAccept }: { offer: OfferRecord; request: RequestRecord; isAccepting: boolean; onAccept: (id: string) => void }) {
-  return <article className="rounded-2xl border border-slate-100 p-5"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"><div><p className="font-semibold text-[#0b1f3a]">{offer.agent?.full_name || "Agent nomi ko‘rsatilmagan"}</p><p className="mt-1 text-sm text-slate-500">{offer.agent?.company_name || "Kompaniya ko‘rsatilmagan"} · {offer.agent?.city || "Shahar ko‘rsatilmagan"}</p>{offer.agent?.is_verified && <p className="mt-1 text-xs font-semibold text-blue-600">Tasdiqlangan agent</p>}</div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{offerStatuses[offer.status]}</span></div><div className="mt-4 grid gap-3 text-sm sm:grid-cols-2"><p className="text-lg font-semibold text-[#0b1f3a]">{offer.price == null ? "Narx ko‘rsatilmagan" : `${offer.price.toLocaleString("uz-UZ")} ${offer.currency}`}</p><p className="text-slate-500">Aviakompaniya: {formatAirline(offer.airline)}</p><p className="text-slate-500">Bagaj: {offer.baggage || "Ko‘rsatilmagan"}</p>{offer.comment && <p className="text-slate-500 sm:col-span-2">{offer.comment}</p>}</div>{offer.status === "pending" && request.status === "open" && <button type="button" disabled={isAccepting} onClick={() => onAccept(offer.id)} className="mt-5 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-50">{isAccepting ? "Qabul qilinmoqda..." : "Taklifni qabul qilish"}</button>}</article>;
+  return <article className="rounded-2xl border border-slate-100 p-5"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"><div><p className="font-semibold text-[#0b1f3a]">{offer.agent?.full_name || "Agent nomi ko‘rsatilmagan"}</p><p className="mt-1 text-sm text-slate-500">{offer.agent?.company_name || "Kompaniya ko‘rsatilmagan"} · {offer.agent?.city || "Shahar ko‘rsatilmagan"}</p>{offer.agent?.is_verified && <p className="mt-1 text-xs font-semibold text-blue-600">Tasdiqlangan agent</p>}</div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{offerStatuses[offer.status]}</span></div><div className="mt-4 grid gap-3 text-sm sm:grid-cols-2"><p className="text-lg font-semibold text-[#0b1f3a]">{offer.price == null ? "Narx ko‘rsatilmagan" : `${offer.price.toLocaleString("uz-UZ")} ${offer.currency}`}</p><p className="text-slate-500">Aviakompaniya: {formatAirline(offer.airline)}</p><p className="text-slate-500">Bagaj: {offer.baggage || "Ko‘rsatilmagan"}</p>{offer.comment && <p className="text-slate-500 sm:col-span-2">{offer.comment}</p>}</div>{offer.status === "pending" && request.status === "open" && isRequestCurrent(request) && <button type="button" disabled={isAccepting} onClick={() => onAccept(offer.id)} className="mt-5 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-50">{isAccepting ? "Qabul qilinmoqda..." : "Taklifni qabul qilish"}</button>}</article>;
 }
 
 export default function RequestDetailPage() {
@@ -76,7 +77,7 @@ export default function RequestDetailPage() {
   }
 
   async function handleAcceptOffer(offerId: string) {
-    if (!request || request.status !== "open" || isAccepting || !window.confirm("Ushbu taklifni qabul qilasizmi?")) return;
+    if (!request || request.status !== "open" || !isRequestCurrent(request) || isAccepting || !window.confirm("Ushbu taklifni qabul qilasizmi?")) return;
     setIsAccepting(true); setError(""); setMessage("");
     try {
       const result = await acceptOffer(offerId);
@@ -90,7 +91,7 @@ export default function RequestDetailPage() {
   }
 
   const isOwner = Boolean(session && request && session.user.id === request.created_by);
-  const isOpen = request?.status === "open";
+  const isOpen = request?.status === "open" && isRequestCurrent(request);
   const canDelete = isOwner && Boolean(request && ["closed", "cancelled"].includes(request.status));
 
   return <AppShell session={session} activePath="/requests">

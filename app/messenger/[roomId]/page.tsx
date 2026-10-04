@@ -5,9 +5,9 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import AppShell from "@/app/dashboard/components/app-shell";
-import { getAccessibleMessengerRoom, getMessengerRoomDetails, listGroupMembers, listMessengerConversations, listMessengerMessages, markMessengerRoomRead, sendMessengerMessage, type GroupMember, type MessengerMessage, type MessengerRoom } from "@/app/messenger/messenger-api";
+import { getAccessibleMessengerRoom, getMessengerRoomDetails, listGroupMembers, listMessengerConversations, type GroupMember, type MessengerMessage, type MessengerRoom } from "@/app/messenger/messenger-api";
 import { getStoredSession, type AuthSession } from "@/lib/supabase-auth";
-import { subscribeToMessengerRoom } from "@/lib/supabase-realtime";
+import { useMessengerRoom } from "@/app/messenger/use-messenger-room";
 import AviaSmartAssist from "@/app/components/avia-smart-assist";
 import { isVkCurrentChatAvailable, sendTextToCurrentVkChat } from "@/lib/vk-chat";
 
@@ -41,95 +41,43 @@ function RoomHeader({ room, membersCount }: { room: MessengerRoom; membersCount?
 
 export default function MessengerRoomPage() {
   const params = useParams<{ roomId: string }>();
+  return <MessengerRoomContent key={params.roomId} roomId={params.roomId} />;
+}
+
+function MessengerRoomContent({ roomId }: { roomId: string }) {
   const router = useRouter();
   const [session] = useState<AuthSession | null>(() => getStoredSession());
   const [room, setRoom] = useState<MessengerRoom | null>(null);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
-  const [messages, setMessages] = useState<MessengerMessage[]>([]);
-  const [draft, setDraft] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState("");
-  const [sendError, setSendError] = useState("");
+  const chat = useMessengerRoom(room?.id || null);
+  const { messages, draft, setDraft, isSending, sendError } = chat;
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  async function reloadMessages(roomId: string) {
-    const loaded = await listMessengerMessages(roomId);
-    setMessages((current) => {
-      const byId = new Map(current.map((message) => [message.id, message]));
-      loaded.forEach((message) => byId.set(message.id, message));
-      return [...byId.values()].filter((message) => !message.deleted_at).sort((left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime());
-    });
-  }
-
   useEffect(() => {
-    const storedSession = getStoredSession();
-    if (!storedSession) {
-      router.replace("/login");
-      return;
-    }
-    const timeoutId = window.setTimeout(() => {
-      Promise.all([listMessengerConversations()])
-        .then(async ([conversations]) => {
-          const accessibleRoom = await getAccessibleMessengerRoom(params.roomId, conversations);
-          if (!accessibleRoom) throw new Error("ROOM_NOT_FOUND");
-          const details = await getMessengerRoomDetails(params.roomId);
-          const mergedRoom = details ? { ...accessibleRoom, ...details } : accessibleRoom;
-          setRoom(mergedRoom);
-          if (mergedRoom.room_type === "group") {
-            const members = await listGroupMembers(params.roomId);
-            setGroupMembers(members);
-          }
-          setMessages(await listMessengerMessages(params.roomId));
-          await markMessengerRoomRead(params.roomId);
-        })
-        .catch((loadError: unknown) => {
-          if (loadError instanceof Error && (loadError.message === "AUTH_SESSION_EXPIRED" || loadError.message === "AUTH_SESSION_MISSING")) { router.replace("/login"); return; }
-          setError(loadError instanceof Error && loadError.message === "ROOM_NOT_FOUND" ? "Bu suhbat mavjud emas yoki kirish huquqingiz yo‘q." : "Suhbatni yuklashda xatolik yuz berdi.");
-        })
-        .finally(() => setIsLoading(false));
+    if (!getStoredSession()) { router.replace(`/login?next=${encodeURIComponent(`/messenger/${roomId}`)}`); return; }
+    let active = true;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const conversations = await listMessengerConversations();
+        const accessible = await getAccessibleMessengerRoom(roomId, conversations);
+        if (!accessible) throw new Error("Bu suhbat mavjud emas yoki kirish huquqingiz yo‘q.");
+        const details = await getMessengerRoomDetails(roomId);
+        const loaded = details ? { ...accessible, ...details } : accessible;
+        const members = loaded.room_type === "group" ? await listGroupMembers(roomId) : [];
+        if (active) { setRoom(loaded); setGroupMembers(members); }
+      })().catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "Suhbat yuklanmadi."); }).finally(() => { if (active) setIsLoading(false); });
     }, 0);
-    return () => window.clearTimeout(timeoutId);
-  }, [params.roomId, router]);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [roomId, router]);
 
-  useEffect(() => {
-    if (!session || !room) return;
-    const realtime = subscribeToMessengerRoom(room.id, () => {
-      reloadMessages(room.id).then(() => markMessengerRoomRead(room.id)).catch(() => undefined);
-      if (room.room_type === "group") {
-        listGroupMembers(room.id).then(setGroupMembers).catch(() => undefined);
-      }
-    });
-    const refreshOnVisible = () => {
-      if (document.visibilityState === "visible") {
-        reloadMessages(room.id).then(() => markMessengerRoomRead(room.id)).catch(() => undefined);
-        if (room.room_type === "group") listGroupMembers(room.id).then(setGroupMembers).catch(() => undefined);
-      }
-    };
-    document.addEventListener("visibilitychange", refreshOnVisible);
-    return () => {
-      document.removeEventListener("visibilitychange", refreshOnVisible);
-      if (realtime) realtime.client.removeChannel(realtime.channel);
-    };
-  }, [session, room]);
-
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages.length]);
-
-  async function handleSubmit() {
-    if (!room || !draft.trim() || draft.trim().length > 4000 || isSending) return;
-    setIsSending(true); setSendError("");
-    try {
-      const created = await sendMessengerMessage(room.id, draft);
-      if (created) setMessages((current) => current.some((message) => message.id === created.id) ? current : [...current, created]);
-      setDraft("");
-    } catch (submitError: unknown) {
-      if (submitError instanceof Error && (submitError.message === "AUTH_SESSION_EXPIRED" || submitError.message === "AUTH_SESSION_MISSING")) { router.replace("/login"); return; }
-      setSendError(submitError instanceof Error && submitError.message === "MESSAGE_INVALID" ? "Xabar bo‘sh bo‘lmasligi va 4000 belgidan oshmasligi kerak." : "Xabar yuborilmadi. Qayta urinib ko‘ring.");
-    } finally { setIsSending(false); }
-  }
+  const newestId = messages.at(-1)?.id;
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [newestId]);
+  const handleSubmit = chat.send;
 
   const isGroupRoom = room?.room_type === "group";
   const vkCurrentChatAvailable = isVkCurrentChatAvailable();
 
-  return <AppShell session={session} activePath="/messenger"><div className="mx-auto max-w-5xl"><Link href="/messenger" className="mb-4 inline-flex text-sm font-semibold text-blue-600 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">← Chatga qaytish</Link>{isLoading && <div className="flex min-h-[60vh] items-center justify-center text-sm text-slate-500">Suhbat yuklanmoqda...</div>}{!isLoading && error && <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">{error}</div>}{!isLoading && room && session && <section className="flex min-h-[calc(100vh-12rem)] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"><RoomHeader room={room} membersCount={isGroupRoom ? groupMembers.length : undefined} /><div className="flex-1 overflow-y-auto bg-[#f7fbff] px-4 py-6 sm:px-6" aria-live="polite"><div className="space-y-4">{messages.length ? messages.map((message) => <MessageBubble key={message.id} message={message} userId={session.user.id} isPublic={room.room_type === "public"} isGroup={isGroupRoom} />) : <div className="py-16 text-center text-sm text-slate-500">Hali xabarlar yo‘q. Suhbatni boshlang.</div>}<div ref={bottomRef} /></div></div><div className="border-t border-slate-200 bg-white p-4 sm:p-5"><form onSubmit={(event) => { event.preventDefault(); handleSubmit().catch(() => undefined); }}><AviaSmartAssist value={draft} onChange={setDraft} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); handleSubmit().catch(() => undefined); } }} maxLength={4000} rows={3} placeholder="Xabar yozing..." className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100" /><div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><p className={`text-xs ${draft.length > 3800 ? "text-amber-600" : "text-slate-400"}`}>{draft.length}/4000</p>{vkCurrentChatAvailable && <button type="button" onClick={() => { if (draft.trim()) sendTextToCurrentVkChat(draft.trim()); }} disabled={!draft.trim()} className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#0b1f3a] transition hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50">VK chatga yuborish</button>}</div><button type="submit" disabled={!draft.trim() || isSending} className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-200 disabled:cursor-not-allowed disabled:bg-slate-300">{isSending ? "Yuborilmoqda..." : "Yuborish"}</button></div>{sendError && <p className="mt-3 text-sm text-red-600">{sendError}</p>}</form></div></section>}</div></AppShell>;
+  return <AppShell session={session} activePath="/messenger"><div className="mx-auto max-w-5xl"><Link href="/messenger" className="mb-4 inline-flex text-sm font-semibold text-blue-600 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">← Chatga qaytish</Link>{isLoading && <div className="flex min-h-[60vh] items-center justify-center text-sm text-slate-500">Suhbat yuklanmoqda...</div>}{!isLoading && error && <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">{error}</div>}{!isLoading && room && session && <section className="flex min-h-[calc(100vh-12rem)] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"><RoomHeader room={room} membersCount={isGroupRoom ? groupMembers.length : undefined} /><div className="flex-1 overflow-y-auto bg-[#f7fbff] px-4 py-6 sm:px-6" aria-live="polite"><div className="space-y-4">{chat.error && <p role="alert" className="text-sm text-red-700">{chat.error} <button type="button" onClick={chat.reload} className="underline">Qayta yuklash</button></p>}{chat.hasOlder && <button type="button" onClick={chat.loadOlder} disabled={chat.loadingOlder} className="block w-full text-sm text-blue-600">{chat.loadingOlder ? "Yuklanmoqda…" : "Oldingi xabarlar"}</button>}{chat.isLoading ? <p className="text-sm text-slate-500">Xabarlar yuklanmoqda…</p> : messages.length ? messages.map((message) => <MessageBubble key={message.id} message={message} userId={session.user.id} isPublic={room.room_type === "public"} isGroup={isGroupRoom} />) : <div className="py-16 text-center text-sm text-slate-500">Hali xabarlar yo‘q. Suhbatni boshlang.</div>}<div ref={bottomRef} /></div></div><div className="border-t border-slate-200 bg-white p-4 sm:p-5"><form onSubmit={(event) => { event.preventDefault(); handleSubmit().catch(() => undefined); }}><AviaSmartAssist value={draft} onChange={setDraft} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); handleSubmit().catch(() => undefined); } }} maxLength={4000} rows={3} placeholder="Xabar yozing..." className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100" /><div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><p className={`text-xs ${draft.length > 3800 ? "text-amber-600" : "text-slate-400"}`}>{draft.length}/4000</p>{vkCurrentChatAvailable && <button type="button" onClick={() => { if (draft.trim()) sendTextToCurrentVkChat(draft.trim()); }} disabled={!draft.trim()} className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#0b1f3a] transition hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50">VK chatga yuborish</button>}</div><button type="submit" disabled={!draft.trim() || isSending} className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-200 disabled:cursor-not-allowed disabled:bg-slate-300">{isSending ? "Yuborilmoqda..." : "Yuborish"}</button></div>{sendError && <p className="mt-3 text-sm text-red-600">{sendError}</p>}</form></div></section>}</div></AppShell>;
 }

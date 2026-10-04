@@ -7,7 +7,6 @@ import BrandMark from "@/app/components/brand-mark";
 import { FormEvent, useEffect, useState } from "react";
 import { resendSignupOtp, saveSession, signUp, verifySignupOtp } from "@/lib/supabase-auth";
 
-const agentTypes = ["Aviakassa", "Turagent", "Turoperator", "Boshqa"];
 
 function maskEmail(email: string) {
   const [localPart, domainPart] = email.split("@");
@@ -51,9 +50,9 @@ export default function RegisterPage() {
     setIsLoading(true);
     try {
       const response = await signUp({
-        email,
+        email: email.trim(),
         password,
-        full_name: String(formData.get("fullName") || ""),
+        full_name: String(formData.get("fullName") || "").trim(),
         company_name: String(formData.get("company") || ""),
         phone: String(formData.get("phone") || ""),
         city: String(formData.get("city") || ""),
@@ -62,7 +61,7 @@ export default function RegisterPage() {
       if (response.access_token && response.refresh_token && response.user?.id) {
         track("signup_completed");
         saveSession(response);
-        router.push("/dashboard");
+        router.push("/profile?complete=1");
         return;
       }
       setPendingEmail(email);
@@ -88,7 +87,7 @@ export default function RegisterPage() {
       const response = await verifySignupOtp(pendingEmail, otpCode);
       track("signup_completed");
       saveSession(response);
-      router.push("/dashboard");
+      router.push("/profile?complete=1");
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Kodni tasdiqlashda xatolik yuz berdi.");
     } finally {
@@ -131,14 +130,10 @@ export default function RegisterPage() {
           ) : (
             <form onSubmit={handleSubmit} className="mt-8 grid gap-5 sm:grid-cols-2">
               <label className="block text-sm font-medium text-slate-700">Ism va familiya<input required name="fullName" type="text" placeholder="Masalan: Ilhom Bakiyev" autoComplete="name" className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3.5 outline-none transition placeholder:text-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-100" /></label>
-              <label className="block text-sm font-medium text-slate-700">Kompaniya / aviakassa nomi<input required name="company" type="text" autoComplete="organization" className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3.5 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100" /></label>
-              <label className="block text-sm font-medium text-slate-700">Telefon raqami (+998)<input required name="phone" type="tel" placeholder="+998 90 123 45 67" autoComplete="tel" className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3.5 outline-none transition placeholder:text-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-100" /></label>
               <label className="block text-sm font-medium text-slate-700">Email<input required name="email" type="email" placeholder="agent@example.com" autoComplete="email" className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3.5 outline-none transition placeholder:text-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-100" /></label>
-              <label className="block text-sm font-medium text-slate-700">Shahar<input required name="city" type="text" placeholder="Toshkent" autoComplete="address-level2" className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3.5 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100" /></label>
-              <label className="block text-sm font-medium text-slate-700">Agent turi<select required name="agentType" defaultValue="" className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"><option value="" disabled>Agent turini tanlang</option>{agentTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
               <label className="block text-sm font-medium text-slate-700">Parol<input required name="password" type="password" minLength={8} autoComplete="new-password" className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3.5 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100" /></label>
               <label className="block text-sm font-medium text-slate-700">Parolni tasdiqlash<input required name="passwordConfirmation" type="password" minLength={8} autoComplete="new-password" className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3.5 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100" /></label>
-              <label className="flex items-start gap-3 text-sm text-slate-500 sm:col-span-2"><input required name="terms" type="checkbox" className="mt-1 h-4 w-4 accent-blue-600" /><span>Platformadan foydalanish shartlariga roziman.</span></label>
+              <label className="flex items-start gap-3 text-sm text-slate-500 sm:col-span-2"><input required name="terms" type="checkbox" className="mt-1 h-4 w-4 accent-blue-600" /><span><Link href="/terms" target="_blank" className="text-blue-600 underline">Foydalanish shartlari</Link> va <Link href="/privacy" target="_blank" className="text-blue-600 underline">maxfiylik qoidalari</Link> bilan tanishdim va roziman.</span></label>
               {error && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700 sm:col-span-2">{error}</p>}
               <button type="submit" disabled={isLoading} className="rounded-xl bg-blue-600 py-3.5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-4 focus:ring-blue-100 sm:col-span-2">{isLoading ? "Ro‘yxatdan o‘tilmoqda..." : "Ro‘yxatdan o‘tish"}</button>
             </form>

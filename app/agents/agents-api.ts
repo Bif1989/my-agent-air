@@ -1,3 +1,4 @@
+import { searchFilterText } from "@/lib/request-freshness";
 import { authenticatedSupabaseFetch } from "@/lib/supabase-auth";
 
 const AGENT_FIELDS = "id,full_name,avatar_url,company_name,city,phone,agent_type,services,is_verified,is_active,created_at";
@@ -26,9 +27,21 @@ async function readJson<T>(response: Response) {
   return response.json() as Promise<T>;
 }
 
-export async function listAgents() {
-  const response = await authenticatedSupabaseFetch(`profiles?select=${encodeURIComponent(AGENT_FIELDS)}&is_active=eq.true&order=full_name.asc,created_at.desc`);
+export async function listAgents(options: { search?: string; city?: string; agentType?: string; service?: string; verifiedOnly?: boolean; limit?: number; offset?: number } = {}) {
+  const params = new URLSearchParams({ select: AGENT_FIELDS, is_active: "eq.true", order: "full_name.asc,id.asc", limit: String(options.limit || 100), offset: String(options.offset || 0) });
+  const search = searchFilterText(options.search || "");
+  if (search) params.set("or", `(full_name.ilike.*${search}*,company_name.ilike.*${search}*,city.ilike.*${search}*)`);
+  if (options.city) params.set("city", `eq.${options.city}`);
+  if (options.agentType) params.set("agent_type", `eq.${options.agentType}`);
+  if (options.service) params.set("services", `cs.{${JSON.stringify(options.service)}}`);
+  if (options.verifiedOnly) params.set("is_verified", "eq.true");
+  const response = await authenticatedSupabaseFetch(`profiles?${params}`);
   return readJson<AgentRecord[]>(response);
+}
+
+export async function getAgentFilterOptions() {
+  const response = await authenticatedSupabaseFetch("rpc/list_agent_filter_options", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+  return readJson<AgentFilterOptions>(response);
 }
 
 export async function getAgent(id: string) {

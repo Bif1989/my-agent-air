@@ -4,7 +4,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import BrandMark from "@/app/components/brand-mark";
-import { getStoredSession, signOut, type AuthSession } from "@/lib/supabase-auth";
+import { AUTH_SESSION_CHANGED_EVENT, SESSION_STORAGE_KEY, getStoredSession, signOut, type AuthSession } from "@/lib/supabase-auth";
+import { ACTIVE_MESSENGER_ROOM_EVENT, CHAT_READ_EVENT } from "@/lib/chat-state";
+import { missingProfileFields } from "@/lib/profile-completion";
 import { getUnreadMessageCount } from "@/app/messages/messages-api";
 import { getDeal } from "@/app/deals/deals-api";
 import { disablePushNotifications, registerServiceWorker } from "@/lib/push-notifications";
@@ -17,14 +19,12 @@ import ChatToastStack, { type ChatToastData } from "@/app/dashboard/components/c
 import FloatingMessengerPanel from "@/app/dashboard/components/floating-messenger-panel";
 
 const navigation = [
-  ["Dashboard", "/dashboard"],
+  ["Ish paneli", "/dashboard"],
   ["Postlar", "/feed"],
   ["So‘rovlar va takliflar", "/requests"],
   ["Agentlar", "/agents"],
   ["Bitimlar", "/deals"],
-  ["Bitim chatlari", "/messages"],
   ["Chat", "/messenger"],
-  ["Profil", "/profile"],
 ] as const;
 
 const MAX_TOASTS = 3;
@@ -55,10 +55,13 @@ export default function AppShell({ children, session, activePath = "" }: { child
   const [profileName, setProfileName] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [role, setRole] = useState<string | null>(null);
+  const [accountActive, setAccountActive] = useState(true);
+  const [missingFields, setMissingFields] = useState<string[]>([]);
   const [toasts, setToasts] = useState<ChatToastData[]>([]);
   const unreadRefreshTimer = useRef<number | null>(null);
   const seenMessageIds = useRef<Set<string>>(new Set());
   const pathnameRef = useRef(pathname);
+  const activeFloatingRoom = useRef<string | null>(null);
   useEffect(() => {
     pathnameRef.current = pathname;
   }, [pathname]);
@@ -77,7 +80,7 @@ export default function AppShell({ children, session, activePath = "" }: { child
   useEffect(() => {
     const storedSession = getStoredSession();
     if (!storedSession) {
-      window.location.replace("/login");
+      window.location.replace(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
       return;
     }
     const timeoutId = window.setTimeout(() => {
@@ -88,13 +91,32 @@ export default function AppShell({ children, session, activePath = "" }: { child
         setProfileName(profile.full_name || "");
         setCompanyName(profile.company_name || "");
         setRole(profile.role || "agent");
+        setAccountActive(profile.is_active !== false);
+        setMissingFields(missingProfileFields(profile));
       }).catch(() => undefined);
       registerServiceWorker().catch(() => undefined);
     }, 0);
     return () => window.clearTimeout(timeoutId);
   }, []);
 
-  const visibleNavigation = role === "admin" ? [...navigation.slice(0, -1), ["Admin", "/admin"] as const, navigation[navigation.length - 1]] : navigation;
+  useEffect(() => {
+    const update = () => {
+      const stored = getStoredSession();
+      if (!stored) { window.location.replace("/login"); return; }
+      setCurrentSession((current) => current?.user.id === stored.user.id ? current : stored);
+    };
+    const onStorage = (event: StorageEvent) => { if (event.key === SESSION_STORAGE_KEY || event.key === null) update(); };
+    const updateProfile = () => { void getCurrentProfile().then((profile) => {
+      if (!profile) return;
+      setProfileName(profile.full_name || ""); setCompanyName(profile.company_name || ""); setRole(profile.role || "agent"); setAccountActive(profile.is_active !== false); setMissingFields(missingProfileFields(profile));
+    }).catch(() => undefined); };
+    window.addEventListener(AUTH_SESSION_CHANGED_EVENT, update);
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("my-agent-air:profile-updated", updateProfile);
+    return () => { window.removeEventListener(AUTH_SESSION_CHANGED_EVENT, update); window.removeEventListener("storage", onStorage); window.removeEventListener("my-agent-air:profile-updated", updateProfile); };
+  }, []);
+
+  const visibleNavigation = role === "admin" ? [...navigation, ["Admin", "/admin"] as const] : navigation;
 
   useEffect(() => {
     if (!currentSession) return;
@@ -119,14 +141,14 @@ export default function AppShell({ children, session, activePath = "" }: { child
       if (!messageId || !dealId || !senderId || senderId === currentSession.user.id) return;
       if (!rememberMessageId(seenMessageIds.current, messageId)) return;
       const activeDealId = pathnameRef.current?.match(/^\/messages\/([^/]+)/)?.[1];
-      if (activeDealId === dealId) return;
+      if (document.visibilityState === "visible" && (activeDealId === dealId || pathnameRef.current === `/deals/${dealId}`)) return;
       playNotificationSound();
       getDeal(dealId).then((deal) => {
         if (!deal) return;
         const agent = deal.buyer_id === senderId ? deal.buyer : deal.seller;
         const senderName = agent?.full_name || agent?.company_name || "Agent";
         const routeTitle = deal.request ? `${deal.request.origin || "—"} → ${deal.request.destination || "—"}` : "Bitim chati";
-        addToast({ id: messageId, sender: senderName, title: `Bitim chati: ${routeTitle}`, preview: truncatePreview(text), href: `/messages/${dealId}` });
+        addToast({ id: messageId, sender: senderName, title: `Bitim chati: ${routeTitle}`, preview: truncatePreview(text), href: `/deals/${dealId}` });
       }).catch(() => undefined);
     };
 
@@ -140,7 +162,7 @@ export default function AppShell({ children, session, activePath = "" }: { child
       if (!messageId || !roomId || !senderId || senderId === currentSession.user.id) return;
       if (!rememberMessageId(seenMessageIds.current, messageId)) return;
       const activeRoomId = pathnameRef.current?.match(/^\/messenger\/([^/]+)/)?.[1];
-      if (activeRoomId === roomId) return;
+      if (document.visibilityState === "visible" && (activeRoomId === roomId || activeFloatingRoom.current === roomId)) return;
       playNotificationSound();
       Promise.all([listMessengerConversations(), getAgent(senderId)]).then(([conversations, agent]) => {
         const conversation = conversations.find((item) => item.room_id === roomId);
@@ -154,9 +176,14 @@ export default function AppShell({ children, session, activePath = "" }: { child
     const messengerRealtime = subscribeToMessengerMessages(handleMessengerMessage);
     refreshUnread();
     window.addEventListener("focus", refreshUnread);
+    window.addEventListener(CHAT_READ_EVENT, refreshUnread);
+    const onActiveRoom = (event: Event) => { activeFloatingRoom.current = (event as CustomEvent<string | null>).detail; };
+    window.addEventListener(ACTIVE_MESSENGER_ROOM_EVENT, onActiveRoom);
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
       window.removeEventListener("focus", refreshUnread);
+      window.removeEventListener(CHAT_READ_EVENT, refreshUnread);
+      window.removeEventListener(ACTIVE_MESSENGER_ROOM_EVENT, onActiveRoom);
       document.removeEventListener("visibilitychange", handleVisibility);
       if (realtime) realtime.client.removeChannel(realtime.channel);
       if (messengerRealtime) messengerRealtime.client.removeChannel(messengerRealtime.channel);
@@ -184,8 +211,8 @@ export default function AppShell({ children, session, activePath = "" }: { child
         </Link>
         <nav aria-label="Asosiy navigatsiya" className="mt-12 space-y-1">
             {visibleNavigation.map(([label, href]) => (
-            <Link key={href} href={href} className={`flex items-center justify-between rounded-xl px-4 py-3 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-cyan-300 ${activePath === href ? "bg-blue-600 text-white shadow-lg shadow-blue-950/30" : "text-blue-100 hover:bg-white/10 hover:text-white"}`}>
-              <span>{label}</span>{href === "/messages" && unreadMessages > 0 && <span aria-label={`${unreadMessages} ta o‘qilmagan xabar`} className="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold text-white">{unreadMessages > 99 ? "99+" : unreadMessages}</span>}{href === "/messenger" && unreadMessenger > 0 && <span aria-label={`${unreadMessenger} ta o‘qilmagan chat xabari`} className="rounded-full bg-cyan-300 px-2 py-0.5 text-[10px] font-bold text-[#0b1f3a]">{unreadMessenger > 99 ? "99+" : unreadMessenger}</span>}
+            <Link key={href} href={href} className={`flex items-center justify-between rounded-xl px-4 py-3 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-cyan-300 ${(activePath === href || (href === "/deals" && activePath === "/messages")) ? "bg-blue-600 text-white shadow-lg shadow-blue-950/30" : "text-blue-100 hover:bg-white/10 hover:text-white"}`}>
+              <span>{label}</span>{href === "/deals" && unreadMessages > 0 && <span aria-label={`${unreadMessages} ta o‘qilmagan xabar`} className="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold text-white">{unreadMessages > 99 ? "99+" : unreadMessages}</span>}{href === "/messenger" && unreadMessenger > 0 && <span aria-label={`${unreadMessenger} ta o‘qilmagan chat xabari`} className="rounded-full bg-cyan-300 px-2 py-0.5 text-[10px] font-bold text-[#0b1f3a]">{unreadMessenger > 99 ? "99+" : unreadMessenger}</span>}
             </Link>
           ))}
         </nav>
@@ -202,10 +229,15 @@ export default function AppShell({ children, session, activePath = "" }: { child
             <button type="button" onClick={handleLogout} disabled={isSigningOut} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">Chiqish</button>
           </div>
           <nav aria-label="Mobil navigatsiya" className="mt-4 flex gap-2 overflow-x-auto pb-1">
-            {visibleNavigation.map(([label, href]) => <Link key={href} href={href} className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${activePath === href ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}><span>{label}</span>{href === "/messages" && unreadMessages > 0 && <span aria-label={`${unreadMessages} ta o‘qilmagan xabar`} className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] text-white">{unreadMessages > 99 ? "99+" : unreadMessages}</span>}{href === "/messenger" && unreadMessenger > 0 && <span aria-label={`${unreadMessenger} ta o‘qilmagan chat xabari`} className="rounded-full bg-cyan-300 px-1.5 py-0.5 text-[10px] font-bold text-[#0b1f3a]">{unreadMessenger > 99 ? "99+" : unreadMessenger}</span>}</Link>)}
+            {visibleNavigation.map(([label, href]) => <Link key={href} href={href} className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${(activePath === href || (href === "/deals" && activePath === "/messages")) ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}><span>{label}</span>{href === "/deals" && unreadMessages > 0 && <span aria-label={`${unreadMessages} ta o‘qilmagan xabar`} className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] text-white">{unreadMessages > 99 ? "99+" : unreadMessages}</span>}{href === "/messenger" && unreadMessenger > 0 && <span aria-label={`${unreadMessenger} ta o‘qilmagan chat xabari`} className="rounded-full bg-cyan-300 px-1.5 py-0.5 text-[10px] font-bold text-[#0b1f3a]">{unreadMessenger > 99 ? "99+" : unreadMessenger}</span>}</Link>)}
           </nav>
         </header>
-        <main className="mx-auto w-full max-w-[1440px] px-4 py-6 sm:px-8 sm:py-8">{children}</main>
+        <main className="mx-auto w-full max-w-[1440px] px-4 py-6 sm:px-8 sm:py-8">
+          {!accountActive && <div role="alert" className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">Hisobingiz bloklangan. Yangi so‘rov, taklif va xabar yuborish to‘xtatilgan. Mavjud bitimlar tarixini ko‘rishingiz mumkin.</div>}
+          {missingFields.length > 0 && activePath !== "/profile" && <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Hamkorlikni boshlash uchun profilingizni to‘ldiring: {missingFields.join(", ")}. <Link href="/profile?complete=1" className="font-semibold underline">Profilni to‘ldirish →</Link></div>}
+          {children}
+          <footer className="mt-10 flex flex-wrap gap-4 border-t border-slate-200 pt-4 text-xs text-slate-500"><Link href="/terms">Foydalanish shartlari</Link><Link href="/privacy">Maxfiylik</Link><Link href="/help">Yordam</Link></footer>
+        </main>
       </div>
       <ChatToastStack toasts={toasts} onClose={closeToast} onOpen={openToast} />
       <FloatingMessengerPanel activePath={activePath} />

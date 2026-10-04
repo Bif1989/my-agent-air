@@ -1,4 +1,5 @@
 import { authenticatedSupabaseFetch, getStoredSession } from "@/lib/supabase-auth";
+import { CHAT_READ_EVENT } from "@/lib/chat-state";
 import type { DealProfile, DealRecord } from "@/app/deals/deals-api";
 
 export type MessageType = "text" | "system" | "ticket" | "pnr" | "file";
@@ -63,21 +64,28 @@ export async function listConversations(deals: DealRecord[]) {
     .sort((left, right) => new Date(right.last_message_at || right.deal.updated_at).getTime() - new Date(left.last_message_at || left.deal.updated_at).getTime());
 }
 
-export async function listMessages(dealId: string) {
-  const response = await authenticatedSupabaseFetch(`messages?select=${encode(MESSAGE_SELECT)}&deal_id=eq.${encode(dealId)}&order=created_at.asc`);
-  return readJson<MessageRecord[]>(response);
+export async function listMessages(dealId: string, options: { before?: { created_at: string; id: string } } = {}) {
+  const params = new URLSearchParams({ select: MESSAGE_SELECT, deal_id: `eq.${dealId}`, order: "created_at.desc,id.desc", limit: "50" });
+  if (options.before) params.set("or", `(created_at.lt.${options.before.created_at},and(created_at.eq.${options.before.created_at},id.lt.${options.before.id}))`);
+  const response = await authenticatedSupabaseFetch(`messages?${params}`);
+  return (await readJson<MessageRecord[]>(response)).reverse();
 }
 
-export async function sendMessage(dealId: string, message: string) {
+export async function sendMessage(dealId: string, message: string, messageId = crypto.randomUUID()) {
   const text = message.trim();
   if (!text || text.length > 4000) throw new Error("MESSAGE_INVALID");
-  const response = await authenticatedSupabaseFetch("messages", {
+  const senderId = currentUserId();
+  const response = await authenticatedSupabaseFetch("messages?on_conflict=id", {
     method: "POST",
-    headers: { "Content-Type": "application/json", Prefer: "return=representation" },
-    body: JSON.stringify({ deal_id: dealId, sender_id: currentUserId(), message: text, message_type: "text" }),
+    headers: { "Content-Type": "application/json", Prefer: "return=representation,resolution=ignore-duplicates" },
+    body: JSON.stringify({ id: messageId, deal_id: dealId, sender_id: senderId, message: text, message_type: "text" }),
   });
   const rows = await readJson<MessageRecord[]>(response);
-  return rows[0];
+  if (rows[0]) return rows[0];
+  const existing = await authenticatedSupabaseFetch(`messages?select=${encode(MESSAGE_SELECT)}&id=eq.${encode(messageId)}&sender_id=eq.${encode(senderId)}&deal_id=eq.${encode(dealId)}`);
+  const saved = await readJson<MessageRecord[]>(existing);
+  if (!saved[0]) throw new Error("Xabar yuborilmadi. Qayta urinib ko‘ring.");
+  return saved[0];
 }
 
 export async function markDealMessagesRead(dealId: string) {
@@ -86,4 +94,5 @@ export async function markDealMessagesRead(dealId: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ p_deal_id: dealId }),
   });
+  window.dispatchEvent(new Event(CHAT_READ_EVENT));
 }

@@ -218,22 +218,30 @@ export async function getOrCreateDirectChat(otherUserId: string) {
   return typeof roomId === "string" ? roomId : roomId.room_id || "";
 }
 
-export async function listMessengerMessages(roomId: string) {
-  const response = await authenticatedSupabaseFetch(`chat_messages?select=${encode(MESSAGE_SELECT)}&room_id=eq.${encode(roomId)}&deleted_at=is.null&order=created_at.desc&limit=100`);
+export const MESSAGE_PAGE_SIZE = 50;
+
+export async function listMessengerMessages(roomId: string, options: { before?: Pick<MessengerMessage, "created_at" | "id">; limit?: number } = {}) {
+  const cursor = options.before ? `&or=${encode(`(created_at.lt.${options.before.created_at},and(created_at.eq.${options.before.created_at},id.lt.${options.before.id}))`)}` : "";
+  const limit = Math.min(100, Math.max(1, options.limit || MESSAGE_PAGE_SIZE));
+  const response = await authenticatedSupabaseFetch(`chat_messages?select=${encode(MESSAGE_SELECT)}&room_id=eq.${encode(roomId)}&deleted_at=is.null&order=created_at.desc,id.desc&limit=${limit}${cursor}`);
   const rows = await readJson<MessengerMessage[]>(response);
   return rows.reverse();
 }
 
-export async function sendMessengerMessage(roomId: string, message: string) {
+export async function sendMessengerMessage(roomId: string, message: string, messageId = crypto.randomUUID()) {
   const text = message.trim();
   if (!text || text.length > 4000) throw new Error("MESSAGE_INVALID");
-  const response = await authenticatedSupabaseFetch("chat_messages", {
+  const response = await authenticatedSupabaseFetch("chat_messages?on_conflict=id", {
     method: "POST",
-    headers: { "Content-Type": "application/json", Prefer: "return=representation" },
-    body: JSON.stringify({ room_id: roomId, sender_id: currentUserId(), message: text, message_type: "text" }),
+    headers: { "Content-Type": "application/json", Prefer: "return=representation,resolution=ignore-duplicates" },
+    body: JSON.stringify({ id: messageId, room_id: roomId, sender_id: currentUserId(), message: text, message_type: "text" }),
   });
   const rows = await readJson<MessengerMessage[]>(response);
-  return rows[0] || null;
+  if (rows[0]) return rows[0];
+  const existing = await authenticatedSupabaseFetch(`chat_messages?select=${encode(MESSAGE_SELECT)}&id=eq.${encode(messageId)}&room_id=eq.${encode(roomId)}&sender_id=eq.${encode(currentUserId())}&limit=1`);
+  const saved = await readJson<MessengerMessage[]>(existing);
+  if (!saved[0]) throw new Error("Xabar yuborilmadi. Qayta urinib ko‘ring.");
+  return saved[0];
 }
 
 export async function markMessengerRoomRead(roomId: string) {
@@ -242,4 +250,5 @@ export async function markMessengerRoomRead(roomId: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ p_room_id: roomId }),
   });
+  window.dispatchEvent(new Event("my-agent-air:chat-read"));
 }

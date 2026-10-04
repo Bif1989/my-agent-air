@@ -213,5 +213,5 @@ export function computeAviaSuggestions(value: string, cursorPos: number): AviaSu
   return [...airportMatches, ...airlineMatches]
     .sort((left, right) => left.score - right.score || left.code.localeCompare(right.code))
     .slice(0, MAX_SUGGESTIONS)
-    .map(({ score: _score, ...suggestion }) => suggestion);
+    .map((entry) => { const { score, ...suggestion } = entry; void score; return suggestion; });
 }
