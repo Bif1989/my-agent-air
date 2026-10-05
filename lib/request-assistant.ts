@@ -7,13 +7,37 @@ export const REQUEST_CATEGORIES = ["Aviachipta", "Tur paket", "Mehmonxona", "Tra
 export type AssistantDraft = Partial<RequestPayload>;
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+const CATEGORY_PATTERNS: Array<{ category: string; pattern: RegExp }> = [
+  { category: "Aviachipta", pattern: /\b(?:aviachipta|avia|chipta|bilet|reys|flight|air\s*ticket)\b/i },
+  { category: "Tur paket", pattern: /\b(?:tur\s*paket|turpaket|tour\s*package|putyovka|paket\s*tur)\b/i },
+  { category: "Mehmonxona", pattern: /\b(?:mehmonxona|hotel|otel|gostinitsa|hostel|apartament)\b/i },
+  { category: "Transfer", pattern: /\b(?:transfer|taksi|taxi|airport\s*transfer|aeroportdan\s*olib)\b/i },
+  { category: "Gid", pattern: /\b(?:gid|guide|ekskursovod)\b/i },
+  { category: "Viza", pattern: /\b(?:viza|visa)\b/i },
+];
+
+export function detectRequestCategories(text: string) {
+  const normalized = normalizeAirportSearch(text.replace(/[–—→]/g, "-"));
+  const matches = CATEGORY_PATTERNS.map(({ category, pattern }) => {
+    const match = pattern.exec(normalized);
+    return match ? { category, index: match.index } : null;
+  }).filter((item): item is { category: string; index: number } => Boolean(item));
+
+  if (matches.length) return matches.sort((a, b) => a.index - b.index).map((item) => item.category);
+  if (/\b[A-Z]{3}\s*[-–—→]\s*[A-Z]{3}\b/i.test(text)) return ["Aviachipta"];
+  return [];
+}
+
 export function parseRequestDraft(text: string, previous: AssistantDraft = {}, now = new Date()) {
   const normalized = normalizeAirportSearch(text.replace(/[–—→]/g, "-"));
   const draft: AssistantDraft = { adults: 1, children: 0, infants: 0, currency: "USD", ...previous };
   const notes: string[] = [];
-  const categories: [RegExp, string][] = [[/mehmonxona|hotel|otel|gostinitsa/, "Mehmonxona"], [/transfer|taksi/, "Transfer"], [/\bgid\b|guide/, "Gid"], [/viza|visa/, "Viza"], [/tur paket|turpaket|\btour\b/, "Tur paket"], [/avia|chipta|bilet|reys/, "Aviachipta"]];
-  const category = categories.find(([pattern]) => pattern.test(normalized));
-  if (category) draft.category = category[1];
+
+  if (!draft.category) {
+    const category = detectRequestCategories(text)[0];
+    if (category) draft.category = category;
+  }
+
   const locations: { index: number; city: string; value: string }[] = [];
   for (const airport of AIRPORTS) {
     for (const alias of [airport.code, airport.city, ...(airport.aliases || [])]) {
@@ -57,6 +81,12 @@ export function parseRequestDraft(text: string, previous: AssistantDraft = {}, n
   draft.description = [previous.description, text.trim()].filter(Boolean).join("\n").slice(-700);
   const missing = [!draft.category && "xizmat turi", !draft.origin && "qayerdan / shahar", !draft.destination && draft.category === "Aviachipta" && "qayerga", !draft.travel_date && "sana"].filter(Boolean);
   return { draft, notes, missing };
+}
+
+export function parseRequestDrafts(text: string, previous: AssistantDraft = {}, now = new Date()) {
+  const categories = detectRequestCategories(text);
+  if (!categories.length) return [parseRequestDraft(text, previous, now)];
+  return categories.map((category) => parseRequestDraft(text, { ...previous, category }, now));
 }
 
 // URL input is reconstructed from allowed fields before becoming a request payload.
