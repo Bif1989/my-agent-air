@@ -1,8 +1,16 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   --background: #f7fbff;
   --foreground: #0b1f3a;
+  color-scheme: light;
+}
+
+.dark {
+  --background: #08111f;
+  --foreground: #e5edf7;
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -16,9 +24,49 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), sans-serif;
+  transition: background-color 160ms ease, color 160ms ease;
 }
 
 ::selection {
   background: #bfdbfe;
   color: #0b1f3a;
 }
+
+.dark ::selection {
+  background: #1d4ed8;
+  color: #eff6ff;
+}
+
+/* Existing screens use utility colors directly. These aliases make the whole app
+   participate in dark mode while screens are progressively moved to semantic tokens. */
+.dark .bg-white { background-color: #0f172a !important; }
+.dark .bg-slate-50 { background-color: #111c2f !important; }
+.dark .bg-slate-100 { background-color: #172033 !important; }
+.dark .bg-blue-50 { background-color: #10213b !important; }
+.dark .bg-blue-50\/40 { background-color: rgba(16, 33, 59, 0.52) !important; }
+.dark .bg-blue-50\/80 { background-color: rgba(16, 33, 59, 0.88) !important; }
+.dark [class*="bg-[#eef5fb]"],
+.dark [class*="bg-[#f4f8fc]"],
+.dark [class*="bg-[#f7fbff]"] { background-color: #08111f !important; }
+.dark [class*="text-[#0b1f3a]"] { color: #e5edf7 !important; }
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-slate-700 { color: #dbe7f5 !important; }
+.dark .text-slate-600 { color: #c2cfdf !important; }
+.dark .text-slate-500 { color: #9fb0c5 !important; }
+.dark .text-slate-400 { color: #8395aa !important; }
+.dark .border-slate-100,
+.dark .border-slate-200 { border-color: #27364b !important; }
+.dark .border-blue-100,
+.dark .border-blue-200 { border-color: #24466f !important; }
+.dark .border-amber-200 { border-color: #74551d !important; }
+.dark .border-red-200 { border-color: #7f3038 !important; }
+.dark .bg-amber-50 { background-color: #2c2414 !important; }
+.dark .bg-red-50 { background-color: #32181d !important; }
+.dark .text-amber-900 { color: #f5d58a !important; }
+.dark .text-red-700 { color: #fda4af !important; }
+.dark input,
+.dark textarea,
+.dark select { background-color: #0b1424; color: #e5edf7; border-color: #334155; }
+.dark input::placeholder,
+.dark textarea::placeholder { color: #64748b; }
