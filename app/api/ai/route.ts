@@ -42,7 +42,7 @@ function sanitizeHistory(history: HistoryItem[] | undefined) {
     .slice(-18)
     .map((item) => ({
       role: item.role as "user" | "assistant",
-      content: [{ type: "input_text" as const, text: String(item.content).trim().slice(0, 3000) }],
+      content: String(item.content).trim().slice(0, 3000),
     }));
 }
 
@@ -104,9 +104,9 @@ export async function POST(request: NextRequest) {
     body: JSON.stringify({
       model,
       input: [
-        { role: "system", content: [{ type: "input_text", text: systemInstruction }] },
+        { role: "system", content: systemInstruction },
         ...history,
-        { role: "user", content: [{ type: "input_text", text: message }] },
+        { role: "user", content: message },
       ],
       text: {
         format: {
