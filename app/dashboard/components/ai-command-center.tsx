@@ -6,6 +6,7 @@ import { parseRequestDrafts } from "@/lib/request-assistant";
 import { parseDomesticItineraryRequests } from "@/lib/domestic-itinerary-parser";
 import { domesticTourAdvice, isUzbekistanDomesticTourism } from "@/lib/uzbekistan-tourism";
 import { listAiChatHistory, saveAiChatMessage, type AiHistoryAction } from "@/lib/ai-chat-history";
+import { useUiSettings } from "@/lib/ui-settings";
 import type { AuthSession } from "@/lib/supabase-auth";
 
 type DashboardStats = { openRequests: number; offers: number; deals: number; agents: number };
@@ -13,37 +14,34 @@ type AiActionKey = "create_request" | "open_requests" | "open_agents" | "open_de
 type ChatEntry = { id: string; sender: "user" | "assistant"; text: string; actions?: AiHistoryAction[] };
 type AiResponse = { message?: string; action?: AiActionKey; code?: string };
 
-const actionMap: Record<Exclude<AiActionKey, "none">, AiHistoryAction> = {
-  create_request: { label: "Yangi so‘rov yaratish", href: "/requests/new" },
-  open_requests: { label: "So‘rovlar va takliflar", href: "/requests" },
-  open_agents: { label: "Agentlarni ko‘rish", href: "/agents" },
-  open_deals: { label: "Bitimlarni ko‘rish", href: "/deals" },
-  open_chat: { label: "Chatni ochish", href: "/messenger" },
-  open_profile: { label: "Profilni ochish", href: "/profile" },
-  open_feed: { label: "Postlarni ko‘rish", href: "/feed" },
-};
+const categoryRu: Record<string, string> = { Aviachipta: "Авиабилет", "Tur paket": "Турпакет", Mehmonxona: "Отель", Transfer: "Трансфер", Gid: "Гид", Viza: "Виза", Boshqa: "Другое" };
 
-const quickPrompts = [
-  { title: "Ichki tur", detail: "Yo‘nalish + guruh + xizmatlar", prompt: "10 noyabrga Samarqand+Buxoro 20 kishiga Chustdan tur. Miniven kerak, Samarqandda 2 kecha nonushta bilan hotel 250 ming so‘m kishi boshiga, Buxoroda 1 kecha 300 ming so‘m kishi boshiga" },
-  { title: "Ochiq so‘rovlar", detail: "Hozirgi talablarni ko‘rish", prompt: "Ochiq so‘rovlarni ko‘rsat" },
-  { title: "Agent topish", detail: "Mos hamkorni topishga yordam", prompt: "Agent topishga yordam ber" },
-  { title: "Qanday ishlaydi?", detail: "So‘rovdan bitimgacha yo‘l", prompt: "So‘rovdan bitimgacha qanday ishlaydi?" },
-];
+function actionMap(isRu: boolean): Record<Exclude<AiActionKey, "none">, AiHistoryAction> {
+  return {
+    create_request: { label: isRu ? "Создать новый запрос" : "Yangi so‘rov yaratish", href: "/requests/new" },
+    open_requests: { label: isRu ? "Запросы и предложения" : "So‘rovlar va takliflar", href: "/requests" },
+    open_agents: { label: isRu ? "Открыть агентов" : "Agentlarni ko‘rish", href: "/agents" },
+    open_deals: { label: isRu ? "Открыть сделки" : "Bitimlarni ko‘rish", href: "/deals" },
+    open_chat: { label: isRu ? "Открыть чат" : "Chatni ochish", href: "/messenger" },
+    open_profile: { label: isRu ? "Открыть профиль" : "Profilni ochish", href: "/profile" },
+    open_feed: { label: isRu ? "Открыть посты" : "Postlarni ko‘rish", href: "/feed" },
+  };
+}
 
 function normalizeIntent(text: string) {
   return text.toLowerCase().replace(/[ʻ’`´]/g, "'").replace(/\s+/g, " ").trim();
 }
 
-function localAction(text: string): { text: string; action?: AiHistoryAction } | null {
+function localAction(text: string, isRu: boolean, actions: ReturnType<typeof actionMap>): { text: string; action?: AiHistoryAction } | null {
   const value = normalizeIntent(text);
-  if (/profil|akkaunt/.test(value)) return { text: "Profil ma’lumotlaringizni shu bo‘limda ko‘rish va to‘ldirish mumkin.", action: actionMap.open_profile };
-  if (/chat|xabar|yozish/.test(value)) return { text: "Agentlar bilan yozishmalar Chat bo‘limida. O‘qilmagan xabarlar ham shu yerda ko‘rinadi.", action: actionMap.open_chat };
-  if (/bitim|deal/.test(value)) return { text: "Qabul qilingan takliflar Bitimlar bo‘limiga o‘tadi. Holat va bitim chatini shu yerdan boshqarasiz.", action: actionMap.open_deals };
-  if (/agent.*(top|qidir|ko'r|kor)|hamkor/.test(value)) return { text: "Agentlar katalogidan mos hamkorni topishingiz mumkin.", action: actionMap.open_agents };
-  if (/post|e'lon|elon|lenta/.test(value)) return { text: "Platformadagi e’lon va postlar shu bo‘limda.", action: actionMap.open_feed };
-  if (/so'rov.*(ko'r|kor|ochiq)|taklif.*ko'r|takliflar/.test(value)) return { text: "Amaldagi so‘rovlar va yuborilgan takliflarni shu bo‘limdan boshqarasiz.", action: actionMap.open_requests };
-  if (/so'rov.*(yarat|och)|yangi so'rov/.test(value)) return { text: "Yangi so‘rov ochamiz. Bir xabarning o‘zida bir nechta alohida yo‘nalish yoki xizmatni yozishingiz mumkin.", action: actionMap.create_request };
-  if (/qanday ishlay|o'rgat|orgat|nima qilay/.test(value)) return { text: "Ish tartibi: 1) so‘rov yaratasiz; 2) agentlar taklif yuboradi; 3) mos taklifni qabul qilasiz; 4) bitim ochiladi; 5) holat va yozishmani Bitimlar ichida boshqarasiz." };
+  if (/profil|akkaunt|профил|аккаунт/.test(value)) return { text: isRu ? "Данные профиля можно посмотреть и заполнить в этом разделе." : "Profil ma’lumotlaringizni shu bo‘limda ko‘rish va to‘ldirish mumkin.", action: actions.open_profile };
+  if (/chat|xabar|yozish|чат|сообщен/.test(value)) return { text: isRu ? "Переписка с агентами находится в разделе Чат. Там же видны непрочитанные сообщения." : "Agentlar bilan yozishmalar Chat bo‘limida. O‘qilmagan xabarlar ham shu yerda ko‘rinadi.", action: actions.open_chat };
+  if (/bitim|deal|сделк/.test(value)) return { text: isRu ? "Принятые предложения переходят в Сделки. Там можно отслеживать статус и чат сделки." : "Qabul qilingan takliflar Bitimlar bo‘limiga o‘tadi. Holat va bitim chatini shu yerdan boshqarasiz.", action: actions.open_deals };
+  if (/agent.*(top|qidir|ko'r|kor)|hamkor|агент.*(най|поиск|показ)|партн[её]р/.test(value)) return { text: isRu ? "Подходящего партнёра можно найти в каталоге агентов." : "Agentlar katalogidan mos hamkorni topishingiz mumkin.", action: actions.open_agents };
+  if (/post|e'lon|elon|lenta|пост|объявлен|лента/.test(value)) return { text: isRu ? "Посты и объявления платформы находятся в этом разделе." : "Platformadagi e’lon va postlar shu bo‘limda.", action: actions.open_feed };
+  if (/so'rov.*(ko'r|kor|ochiq)|taklif.*ko'r|takliflar|запрос.*(показ|откр)|предложен/.test(value)) return { text: isRu ? "Текущие запросы и предложения можно управлять в этом разделе." : "Amaldagi so‘rovlar va yuborilgan takliflarni shu bo‘limdan boshqarasiz.", action: actions.open_requests };
+  if (/so'rov.*(yarat|och)|yangi so'rov|созда.*запрос|новый запрос/.test(value)) return { text: isRu ? "Создадим новый запрос. В одном сообщении можно указать несколько маршрутов или услуг." : "Yangi so‘rov ochamiz. Bir xabarning o‘zida bir nechta alohida yo‘nalish yoki xizmatni yozishingiz mumkin.", action: actions.create_request };
+  if (/qanday ishlay|o'rgat|orgat|nima qilay|как.*работ|что.*делать|объясни/.test(value)) return { text: isRu ? "Порядок работы: 1) создаёте запрос; 2) агенты отправляют предложения; 3) принимаете подходящее; 4) открывается сделка; 5) статус и переписка ведутся внутри Сделки." : "Ish tartibi: 1) so‘rov yaratasiz; 2) agentlar taklif yuboradi; 3) mos taklifni qabul qilasiz; 4) bitim ochiladi; 5) holat va yozishmani Bitimlar ichida boshqarasiz." };
   return null;
 }
 
@@ -51,18 +49,25 @@ function looksLikeTravelRequest(text: string) {
   const explicit = /\b[A-Z]{3}\s*[-–—→]\s*[A-Z]{3}\b/i.test(text) || /(avia|chipta|bilet|mehmonxona|mexmonxona|hotel|otel|transfer|transport|miniven|minivan|mikroavtobus|avtobus|gid|viza|visa|tur\b|sayohat|тур\b|авиа|чипта|билет|ме[ҳх]монхона|отель|трансфер|транспорт|минив[эе]н|автобус|гид|виза)/i.test(text);
   if (explicit) return true;
   if (!isUzbekistanDomesticTourism(text)) return false;
-  return /(kerak|so['’`]?rov|tashkil|bormoqch|sayohat|tur\b|guruh|bron|buyurtma|olib bor|jo['’`]?nash|кетиш|саёхат|сафар|керак|гуру[ҳх]|\d+\s*(?:kishi|odam|kun|tun|kecha|киши|одам|кун|дн|ноч))/i.test(text);
+  return /(kerak|so['’`]?rov|tashkil|bormoqch|sayohat|tur\b|guruh|bron|buyurtma|olib bor|jo['’`]?nash|кетиш|саёхат|сафар|керак|гуру[ҳх]|нуж|организ|поездк|тур\b|брон|\d+\s*(?:kishi|odam|kun|tun|kecha|киши|одам|кун|дн|ноч|человек))/i.test(text);
 }
 
-function formatDraftLabel(draft: ReturnType<typeof parseRequestDrafts>[number]["draft"]) {
+function formatDraftLabel(draft: ReturnType<typeof parseRequestDrafts>[number]["draft"], isRu: boolean) {
   const route = [draft.origin, draft.destination].filter(Boolean).join(" → ");
   const date = draft.travel_date ? draft.travel_date.split("-").reverse().join(".") : "";
-  return [draft.category || "So‘rov", route, date].filter(Boolean).join(" · ");
+  const category = draft.category ? (isRu ? categoryRu[draft.category] || draft.category : draft.category) : (isRu ? "Запрос" : "So‘rov");
+  return [category, route, date].filter(Boolean).join(" · ");
 }
 
-function domesticAdviceSuffix(text: string) {
+function domesticAdviceSuffix(text: string, isRu: boolean) {
   const advice = domesticTourAdvice(text);
   if (!advice) return "";
+  if (isRu) {
+    const parts: string[] = [];
+    if (advice.attractions.length) parts.push(`Можно включить в маршрут: ${advice.attractions.slice(0, 5).join(", ")}.`);
+    if (advice.reminders.length) parts.push("Дополнительно можно создать отдельные запросы на гида, питание/ресторан, билеты в музеи и локальный транспорт.");
+    return parts.length ? `\n\nСовет по внутреннему туризму: ${parts.join(" ")}` : "";
+  }
   const parts: string[] = [];
   if (advice.attractions.length) parts.push(`Yo‘nalishda ko‘rib chiqish mumkin: ${advice.attractions.slice(0, 5).join(", ")}.`);
   if (advice.reminders.length) parts.push(`Qo‘shimcha so‘rov yaratish mumkin: ${advice.reminders.join(", ")}.`);
@@ -80,13 +85,25 @@ function safeLocalEntries(value: string | null): ChatEntry[] {
       text: item.text.slice(0, 8000),
       actions: Array.isArray(item.actions) ? item.actions.filter((action: unknown) => Boolean(action && typeof action === "object" && typeof (action as AiHistoryAction).label === "string" && typeof (action as AiHistoryAction).href === "string")).slice(0, 12) : [],
     }));
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
 
 export default function AiCommandCenter({ session, displayName, stats }: { session: AuthSession; displayName: string; stats: DashboardStats }) {
-  const greeting: ChatEntry = { id: "greeting", sender: "assistant", text: `${displayName || "Hamkor"}, salom. Men My Agent Air AI yordamchisiman. O‘zbekiston bo‘ylab ichki turlarni ham tushunaman: yo‘nalish, gid, ovqatlanish, mehmonxona, transfer va diqqatga sazovor joylar bo‘yicha yordam beraman.` };
+  const { isRu, locale } = useUiSettings();
+  const actions = actionMap(isRu);
+  const greeting: ChatEntry = { id: "greeting", sender: "assistant", text: isRu ? `${displayName || "Партнёр"}, здравствуйте. Я AI-помощник My Agent Air. Понимаю внутренний туризм по Узбекистану: маршруты, транспорт, отели, гиды, питание и достопримечательности.` : `${displayName || "Hamkor"}, salom. Men My Agent Air AI yordamchisiman. O‘zbekiston bo‘ylab ichki turlarni ham tushunaman: yo‘nalish, gid, ovqatlanish, mehmonxona, transfer va diqqatga sazovor joylar bo‘yicha yordam beraman.` };
+  const quickPrompts = isRu ? [
+    { title: "Внутренний тур", detail: "Маршрут + группа + услуги", prompt: "На 10 ноября организуем тур Чуст–Самарканд–Бухара для 20 человек. Нужен минивэн, в Самарканде отель на 2 ночи с завтраком до 250 тысяч сум на человека, в Бухаре 1 ночь до 300 тысяч сум на человека" },
+    { title: "Открытые запросы", detail: "Посмотреть текущие запросы", prompt: "Покажи открытые запросы" },
+    { title: "Найти агента", detail: "Найти подходящего партнёра", prompt: "Помоги найти агента" },
+    { title: "Как работает?", detail: "От запроса до сделки", prompt: "Как работает процесс от запроса до сделки?" },
+  ] : [
+    { title: "Ichki tur", detail: "Yo‘nalish + guruh + xizmatlar", prompt: "10 noyabrga Samarqand+Buxoro 20 kishiga Chustdan tur. Miniven kerak, Samarqandda 2 kecha nonushta bilan hotel 250 ming so‘m kishi boshiga, Buxoroda 1 kecha 300 ming so‘m kishi boshiga" },
+    { title: "Ochiq so‘rovlar", detail: "Hozirgi talablarni ko‘rish", prompt: "Ochiq so‘rovlarni ko‘rsat" },
+    { title: "Agent topish", detail: "Mos hamkorni topishga yordam", prompt: "Agent topishga yordam ber" },
+    { title: "Qanday ishlaydi?", detail: "So‘rovdan bitimgacha yo‘l", prompt: "So‘rovdan bitimgacha qanday ishlaydi?" },
+  ];
+
   const [entries, setEntries] = useState<ChatEntry[]>([greeting]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -101,15 +118,17 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
     if (local.length) setEntries(local);
     listAiChatHistory(session).then((rows) => {
       if (!active) return;
-      if (rows.length) {
-        setEntries(rows.map((row) => ({ id: row.id, sender: row.role, text: row.content, actions: row.actions })));
-      } else if (!local.length) {
-        setEntries([greeting]);
-      }
+      if (rows.length) setEntries(rows.map((row) => ({ id: row.id, sender: row.role, text: row.content, actions: row.actions })));
+      else if (!local.length) setEntries([greeting]);
     }).catch(() => undefined).finally(() => { if (active) setHistoryReady(true); });
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.user.id]);
+
+  useEffect(() => {
+    setEntries((current) => current.length === 1 && current[0]?.id === "greeting" ? [greeting] : current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locale]);
 
   useEffect(() => {
     if (!historyReady) return;
@@ -117,81 +136,64 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
     bottomRef.current?.scrollIntoView({ block: "end" });
   }, [entries, historyReady, localHistoryKey]);
 
-  function appendEntry(sender: "user" | "assistant", text: string, actions: AiHistoryAction[] = []) {
-    const entry: ChatEntry = { id: `${Date.now()}-${++sequence.current}`, sender, text, actions };
+  function appendEntry(sender: "user" | "assistant", text: string, entryActions: AiHistoryAction[] = []) {
+    const entry: ChatEntry = { id: `${Date.now()}-${++sequence.current}`, sender, text, actions: entryActions };
     setEntries((current) => [...current.filter((item) => item.id !== "greeting" || current.length === 1), entry].slice(-80));
-    void saveAiChatMessage(session, sender, text, actions).catch(() => undefined);
+    void saveAiChatMessage(session, sender, text, entryActions).catch(() => undefined);
     return entry;
   }
 
   async function send(message?: string) {
     const text = (message ?? input).trim();
     if (!text || busy) return;
-    setInput("");
-    setBusy(true);
-    appendEntry("user", text);
+    setInput(""); setBusy(true); appendEntry("user", text);
 
     try {
       if (looksLikeTravelRequest(text)) {
         const itineraryDrafts = parseDomesticItineraryRequests(text);
         const parsedDrafts = (itineraryDrafts.length ? itineraryDrafts : parseRequestDrafts(text)).filter((item) => item.draft.category || item.draft.origin || item.draft.destination);
         if (parsedDrafts.length) {
-          const actions = parsedDrafts.map(({ draft }) => ({
-            label: formatDraftLabel(draft),
-            href: `/requests/new?draft=${encodeURIComponent(JSON.stringify(draft))}`,
-          }));
+          const draftActions = parsedDrafts.map(({ draft }) => ({ label: formatDraftLabel(draft, isRu), href: `/requests/new?draft=${encodeURIComponent(JSON.stringify(draft))}` }));
           const missing = Array.from(new Set(parsedDrafts.flatMap((item) => item.missing)));
           const advice = itineraryDrafts.length
-            ? "\n\nIchki turizm tavsiyasi: gid/ekskursovod, tushlik yoki kechki ovqat uchun guruh restorani hamda muzey va obyektlarga kirish chiptalari uchun ham alohida so‘rov yaratish mumkin."
-            : domesticAdviceSuffix(text);
-          const reply = parsedDrafts.length > 1
-            ? `${parsedDrafts.length} ta alohida so‘rov qoralamasi tayyorladim.${missing.length ? ` Yetishmayotgan ma’lumot: ${missing.join(", ")}.` : " Har birini alohida ochib tekshirib e’lon qilishingiz mumkin."}${advice}`
-            : `${parsedDrafts[0]?.draft.category || "So‘rov"} qoralamasi tayyor.${missing.length ? ` Aniqlashtirish kerak: ${missing.join(", ")}.` : " Formani ochib tekshiring va keyin e’lon qiling."}${advice}`;
-          appendEntry("assistant", reply, actions);
+            ? (isRu ? "\n\nСовет: можно также создать отдельные запросы на гида/экскурсовода, ресторан для обеда или ужина, а также входные билеты в музеи и объекты." : "\n\nIchki turizm tavsiyasi: gid/ekskursovod, tushlik yoki kechki ovqat uchun guruh restorani hamda muzey va obyektlarga kirish chiptalari uchun ham alohida so‘rov yaratish mumkin.")
+            : domesticAdviceSuffix(text, isRu);
+          const reply = isRu
+            ? (parsedDrafts.length > 1 ? `Подготовил ${parsedDrafts.length} отдельных черновика запроса.${missing.length ? ` Нужно уточнить: ${missing.join(", ")}.` : " Каждый можно открыть, проверить и опубликовать отдельно."}${advice}` : `Черновик запроса готов.${missing.length ? ` Нужно уточнить: ${missing.join(", ")}.` : " Откройте форму, проверьте и опубликуйте."}${advice}`)
+            : (parsedDrafts.length > 1 ? `${parsedDrafts.length} ta alohida so‘rov qoralamasi tayyorladim.${missing.length ? ` Yetishmayotgan ma’lumot: ${missing.join(", ")}.` : " Har birini alohida ochib tekshirib e’lon qilishingiz mumkin."}${advice}` : `${parsedDrafts[0]?.draft.category || "So‘rov"} qoralamasi tayyor.${missing.length ? ` Aniqlashtirish kerak: ${missing.join(", ")}.` : " Formani ochib tekshiring va keyin e’lon qiling."}${advice}`);
+          appendEntry("assistant", reply, draftActions);
           return;
         }
       }
 
-      const local = localAction(text);
-      if (local) {
-        appendEntry("assistant", local.text, local.action ? [local.action] : []);
-        return;
-      }
+      const local = localAction(text, isRu, actions);
+      if (local) { appendEntry("assistant", local.text, local.action ? [local.action] : []); return; }
 
       const response = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ message: text, context: { path: "/dashboard", stats } }),
+        body: JSON.stringify({ message: text, context: { path: "/dashboard", stats, locale } }),
       });
       const data = (await response.json().catch(() => ({}))) as AiResponse;
       if (!response.ok) {
         const fallback = data.code === "AI_NOT_CONFIGURED"
-          ? "AI modeli uchun server kaliti hali ulanmagan. Hozircha so‘rov qoralamasi, navigatsiya va platforma bo‘yicha yo‘l-yo‘riq ishlaydi."
-          : "AI xizmatiga ulanishda vaqtinchalik xatolik bo‘ldi. Platformaning asosiy bo‘limlari ishlashda davom etadi.";
-        appendEntry("assistant", fallback);
-        return;
+          ? (isRu ? "AI-модель ещё не подключена на сервере. Черновики запросов и навигация продолжают работать." : "AI modeli uchun server kaliti hali ulanmagan. Hozircha so‘rov qoralamasi, navigatsiya va platforma bo‘yicha yo‘l-yo‘riq ishlaydi.")
+          : (isRu ? "Временная ошибка подключения к AI. Основные разделы платформы продолжают работать." : "AI xizmatiga ulanishda vaqtinchalik xatolik bo‘ldi. Platformaning asosiy bo‘limlari ishlashda davom etadi.");
+        appendEntry("assistant", fallback); return;
       }
-      const action = data.action && data.action !== "none" ? actionMap[data.action] : undefined;
-      appendEntry("assistant", data.message || "Buyruqni tushundim.", action ? [action] : []);
+      const action = data.action && data.action !== "none" ? actions[data.action] : undefined;
+      appendEntry("assistant", data.message || (isRu ? "Команду понял." : "Buyruqni tushundim."), action ? [action] : []);
     } catch {
-      appendEntry("assistant", "AI xizmatiga ulanishda xatolik bo‘ldi. Platformaning asosiy bo‘limlari ishlashda davom etadi.");
-    } finally {
-      setBusy(false);
-    }
+      appendEntry("assistant", isRu ? "Ошибка подключения к AI. Основные разделы платформы продолжают работать." : "AI xizmatiga ulanishda xatolik bo‘ldi. Platformaning asosiy bo‘limlari ishlashda davom etadi.");
+    } finally { setBusy(false); }
   }
 
   return (
     <section className="grid h-full min-h-0 gap-3 xl:min-h-[620px] xl:grid-cols-[minmax(0,1fr)_220px]">
       <div className="flex h-[calc(100dvh-8.25rem)] min-h-[430px] max-h-[760px] flex-col overflow-hidden rounded-[22px] border-2 border-blue-200 bg-white shadow-[0_20px_70px_rgba(37,99,235,0.16)] xl:h-auto xl:min-h-[620px] xl:rounded-[28px]">
         <div className="flex shrink-0 items-center justify-between bg-gradient-to-r from-blue-600 to-cyan-500 px-3 py-2.5 text-white sm:px-5 sm:py-3">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/20 text-xs font-bold ring-1 ring-white/30 sm:h-9 sm:w-9 sm:text-sm">AI</div>
-            <div>
-              <p className="text-sm font-semibold">My Agent Air AI</p>
-              <p className="hidden text-[11px] text-blue-50 sm:block">Asosiy boshqaruv markazi</p>
-            </div>
-          </div>
-          <span className="rounded-full bg-white/20 px-2.5 py-1 text-[10px] font-semibold ring-1 ring-white/20 sm:px-3 sm:text-[11px]">● AI faol</span>
+          <div className="flex items-center gap-2.5"><div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/20 text-xs font-bold ring-1 ring-white/30 sm:h-9 sm:w-9 sm:text-sm">AI</div><div><p className="text-sm font-semibold">My Agent Air AI</p><p className="hidden text-[11px] text-blue-50 sm:block">{isRu ? "Главный центр управления" : "Asosiy boshqaruv markazi"}</p></div></div>
+          <span className="rounded-full bg-white/20 px-2.5 py-1 text-[10px] font-semibold ring-1 ring-white/20 sm:px-3 sm:text-[11px]">● {isRu ? "AI активен" : "AI faol"}</span>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-blue-50/40 via-white to-white px-3 py-3 sm:px-5 sm:py-5" aria-live="polite">
@@ -202,62 +204,32 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
                   {entry.sender === "assistant" && <div className="mt-1 hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-[11px] font-bold text-white sm:flex">AI</div>}
                   <div className={entry.sender === "user" ? "max-w-[90%] sm:max-w-[78%]" : "max-w-[96%] sm:max-w-[84%]"}>
                     <div className={`whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[13px] leading-5 sm:px-4 sm:py-3 sm:text-sm sm:leading-6 ${entry.sender === "user" ? "bg-[#0b1f3a] text-white shadow-sm" : "border border-blue-100 bg-blue-50 text-slate-700"}`}>{entry.text}</div>
-                    {Boolean(entry.actions?.length) && <div className="mt-2 flex flex-wrap gap-2">{entry.actions?.map((action) => <Link key={`${entry.id}-${action.href}`} href={action.href} className="inline-flex rounded-xl bg-blue-600 px-3 py-2 text-[11px] font-semibold text-white shadow-sm transition hover:bg-blue-700 sm:px-4 sm:text-xs">{action.label} →</Link>)}</div>}
+                    {Boolean(entry.actions?.length) && <div className="mt-2 flex flex-wrap gap-2">{entry.actions?.map((entryAction) => <Link key={`${entry.id}-${entryAction.href}`} href={entryAction.href} className="inline-flex rounded-xl bg-blue-600 px-3 py-2 text-[11px] font-semibold text-white shadow-sm transition hover:bg-blue-700 sm:px-4 sm:text-xs">{entryAction.label} →</Link>)}</div>}
                   </div>
                 </div>
               ))}
-              {busy && <div className="flex items-center gap-3"><div className="hidden h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-[11px] font-bold text-white sm:flex">AI</div><div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">AI o‘ylayapti…</div></div>}
+              {busy && <div className="flex items-center gap-3"><div className="hidden h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-[11px] font-bold text-white sm:flex">AI</div><div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">{isRu ? "AI думает…" : "AI o‘ylayapti…"}</div></div>}
               <div ref={bottomRef} />
             </div>
 
             {entries.length === 1 && entries[0]?.id === "greeting" && (
-              <div className="mt-auto pt-3 sm:pt-5 xl:pt-8">
-                <p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-400">Tez boshlash</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {quickPrompts.map((item, index) => (
-                    <button key={item.prompt} type="button" onClick={() => void send(item.prompt)} className={`min-h-12 rounded-xl border p-2 text-left transition sm:min-h-0 sm:rounded-2xl sm:p-3 ${index === 0 ? "border-blue-200 bg-blue-50 hover:bg-blue-100" : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/50"}`}>
-                      <p className="text-[11px] font-semibold text-[#0b1f3a] sm:text-xs">{item.title}</p>
-                      <p className="mt-1 hidden text-[11px] leading-4 text-slate-400 sm:block">{item.detail}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <div className="mt-auto pt-3 sm:pt-5 xl:pt-8"><p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-400">{isRu ? "БЫСТРЫЙ СТАРТ" : "Tez boshlash"}</p><div className="grid grid-cols-2 gap-2">{quickPrompts.map((item, index) => <button key={item.prompt} type="button" onClick={() => void send(item.prompt)} className={`min-h-12 rounded-xl border p-2 text-left transition sm:min-h-0 sm:rounded-2xl sm:p-3 ${index === 0 ? "border-blue-200 bg-blue-50 hover:bg-blue-100" : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/50"}`}><p className="text-[11px] font-semibold text-[#0b1f3a] sm:text-xs">{item.title}</p><p className="mt-1 hidden text-[11px] leading-4 text-slate-400 sm:block">{item.detail}</p></button>)}</div></div>
             )}
           </div>
         </div>
 
         <div className="shrink-0 border-t border-blue-100 bg-blue-50/80 px-2.5 pb-2.5 pt-2.5 backdrop-blur sm:px-5 sm:pb-4 sm:pt-3">
           <form onSubmit={(event) => { event.preventDefault(); void send(); }} className="mx-auto max-w-3xl rounded-[22px] border-2 border-blue-300 bg-white p-1.5 shadow-[0_8px_30px_rgba(37,99,235,0.12)] transition focus-within:border-blue-500 focus-within:shadow-[0_10px_35px_rgba(37,99,235,0.2)] sm:rounded-[26px] sm:p-2">
-            <textarea
-              aria-label="AI yordamchiga yozing"
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }}
-              rows={1}
-              maxLength={1500}
-              placeholder="Masalan: Chustdan Samarqand+Buxoro 20 kishi, miniven + 2 ta hotel"
-              className="w-full resize-none bg-transparent px-3 py-2 text-sm text-[#0b1f3a] outline-none placeholder:text-blue-300 sm:py-2.5"
-            />
-            <div className="flex items-center justify-end px-1.5 pb-1 sm:justify-between sm:px-2">
-              <p className="hidden text-[11px] text-slate-400 sm:block">Enter — yuborish · Shift+Enter — yangi qator</p>
-              <button type="submit" disabled={busy || !input.trim()} className="flex h-8 min-w-8 items-center justify-center rounded-xl bg-blue-600 px-3 text-[11px] font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40 sm:h-9 sm:px-4 sm:text-xs">Yuborish</button>
-            </div>
+            <textarea aria-label={isRu ? "Напишите AI-помощнику" : "AI yordamchiga yozing"} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} rows={1} maxLength={1500} placeholder={isRu ? "Например: Чуст–Самарканд–Бухара, 20 человек, минивэн + 2 отеля" : "Masalan: Chustdan Samarqand+Buxoro 20 kishi, miniven + 2 ta hotel"} className="w-full resize-none bg-transparent px-3 py-2 text-sm text-[#0b1f3a] outline-none placeholder:text-blue-300 sm:py-2.5" />
+            <div className="flex items-center justify-end px-1.5 pb-1 sm:justify-between sm:px-2"><p className="hidden text-[11px] text-slate-400 sm:block">{isRu ? "Enter — отправить · Shift+Enter — новая строка" : "Enter — yuborish · Shift+Enter — yangi qator"}</p><button type="submit" disabled={busy || !input.trim()} className="flex h-8 min-w-8 items-center justify-center rounded-xl bg-blue-600 px-3 text-[11px] font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40 sm:h-9 sm:px-4 sm:text-xs">{isRu ? "Отправить" : "Yuborish"}</button></div>
           </form>
-          <p className="mx-auto mt-1 max-w-3xl text-center text-[9px] text-blue-400 sm:text-[10px]">Ichki turlarda AI transport va har bir shahardagi mehmonxonani alohida so‘rovga ajratadi.</p>
+          <p className="mx-auto mt-1 max-w-3xl text-center text-[9px] text-blue-400 sm:text-[10px]">{isRu ? "Для внутренних туров AI разделяет транспорт и отели по городам на отдельные запросы." : "Ichki turlarda AI transport va har bir shahardagi mehmonxonani alohida so‘rovga ajratadi."}</p>
         </div>
       </div>
 
       <aside className="hidden xl:block xl:space-y-2.5">
-        <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Joriy holat</p>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <Link href="/requests" className="rounded-xl bg-blue-50 p-2.5"><p className="text-[10px] text-blue-500">So‘rov</p><p className="mt-0.5 text-lg font-semibold text-[#0b1f3a]">{stats.openRequests}</p></Link>
-            <Link href="/deals" className="rounded-xl bg-emerald-50 p-2.5"><p className="text-[10px] text-emerald-600">Bitim</p><p className="mt-0.5 text-lg font-semibold text-[#0b1f3a]">{stats.deals}</p></Link>
-            <Link href="/agents" className="rounded-xl bg-violet-50 p-2.5"><p className="text-[10px] text-violet-600">Agent</p><p className="mt-0.5 text-lg font-semibold text-[#0b1f3a]">{stats.agents}</p></Link>
-            <Link href="/requests" className="rounded-xl bg-amber-50 p-2.5"><p className="text-[10px] text-amber-600">Taklif</p><p className="mt-0.5 text-lg font-semibold text-[#0b1f3a]">{stats.offers}</p></Link>
-          </div>
-        </section>
-        <section className="rounded-2xl border border-blue-100 bg-blue-50/80 p-3"><h2 className="text-[11px] font-semibold text-blue-900">Ichki turizm AI</h2><p className="mt-1.5 text-[10px] leading-4 text-blue-700">Murakkab marshrutni transport va shaharma-shahar xizmat so‘rovlariga ajratadi.</p></section>
+        <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{isRu ? "ТЕКУЩЕЕ СОСТОЯНИЕ" : "Joriy holat"}</p><div className="mt-2 grid grid-cols-2 gap-2"><Link href="/requests" className="rounded-xl bg-blue-50 p-2.5"><p className="text-[10px] text-blue-500">{isRu ? "Запросы" : "So‘rov"}</p><p className="mt-0.5 text-lg font-semibold text-[#0b1f3a]">{stats.openRequests}</p></Link><Link href="/deals" className="rounded-xl bg-emerald-50 p-2.5"><p className="text-[10px] text-emerald-600">{isRu ? "Сделки" : "Bitim"}</p><p className="mt-0.5 text-lg font-semibold text-[#0b1f3a]">{stats.deals}</p></Link><Link href="/agents" className="rounded-xl bg-violet-50 p-2.5"><p className="text-[10px] text-violet-600">{isRu ? "Агенты" : "Agent"}</p><p className="mt-0.5 text-lg font-semibold text-[#0b1f3a]">{stats.agents}</p></Link><Link href="/requests" className="rounded-xl bg-amber-50 p-2.5"><p className="text-[10px] text-amber-600">{isRu ? "Предложения" : "Taklif"}</p><p className="mt-0.5 text-lg font-semibold text-[#0b1f3a]">{stats.offers}</p></Link></div></section>
+        <section className="rounded-2xl border border-blue-100 bg-blue-50/80 p-3"><h2 className="text-[11px] font-semibold text-blue-900">{isRu ? "AI для внутреннего туризма" : "Ichki turizm AI"}</h2><p className="mt-1.5 text-[10px] leading-4 text-blue-700">{isRu ? "Разбивает сложный маршрут на запросы транспорта и услуг по каждому городу." : "Murakkab marshrutni transport va shaharma-shahar xizmat so‘rovlariga ajratadi."}</p></section>
       </aside>
     </section>
   );
