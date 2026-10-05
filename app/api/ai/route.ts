@@ -7,13 +7,16 @@ const OPENAI_API_URL = "https://api.openai.com/v1/responses";
 const ACTIONS = ["create_request", "open_requests", "open_agents", "open_deals", "open_chat", "open_profile", "open_feed", "none"] as const;
 
 type AiAction = (typeof ACTIONS)[number];
+type HistoryItem = { role?: "user" | "assistant"; content?: string };
 
 type RequestBody = {
   message?: string;
+  history?: HistoryItem[];
   context?: {
     path?: string;
     stats?: Record<string, number>;
     locale?: "uz" | "ru";
+    conversationTitle?: string;
   };
 };
 
@@ -30,6 +33,17 @@ function extractOutputText(data: OpenAiResponse) {
     }
   }
   return "";
+}
+
+function sanitizeHistory(history: HistoryItem[] | undefined) {
+  if (!Array.isArray(history)) return [];
+  return history
+    .filter((item) => (item?.role === "user" || item?.role === "assistant") && typeof item.content === "string" && item.content.trim())
+    .slice(-18)
+    .map((item) => ({
+      role: item.role as "user" | "assistant",
+      content: [{ type: "input_text" as const, text: String(item.content).trim().slice(0, 3000) }],
+    }));
 }
 
 async function verifyUser(request: NextRequest) {
@@ -59,22 +73,30 @@ export async function POST(request: NextRequest) {
   const stats = body.context?.stats || {};
   const today = tashkentDate();
   const locale = body.context?.locale === "ru" ? "ru" : "uz";
+  const conversationTitle = typeof body.context?.conversationTitle === "string" ? body.context.conversationTitle.slice(0, 120) : "";
+  const history = sanitizeHistory(body.history);
+
   const systemInstruction = [
     "You are My Agent Air AI, an assistant inside a B2B travel-agent platform for Uzbekistan.",
     locale === "ru" ? "The selected interface language is Russian. Reply in Russian unless the user explicitly asks for another language." : "The selected interface language is Uzbek. Reply in Uzbek unless the user explicitly asks for another language.",
+    "This is a persistent conversation thread. Treat the messages in this thread as one ongoing task or topic unless the user clearly says they are switching topics.",
+    "Always use the supplied conversation history. Resolve references such as 'shu', 'o‘sha', 'oldingi', 'narxini o‘zgartir', 'hotelni 4* qil', 'это', 'тот', 'предыдущий', 'измени цену' against the earlier messages in this same thread.",
+    "When the user changes one detail, preserve the rest of the previously agreed plan unless the new instruction conflicts with it.",
+    "Do not make the user repeat facts that already appear in the current thread.",
+    "When useful, briefly state what changed from the previous version and continue from there instead of restarting from zero.",
+    conversationTitle ? `Conversation title: ${conversationTitle}.` : "",
     "Be concise, practical and action-oriented.",
     "Understand travel-agent shorthand, IATA airport codes, Uzbek Latin, Uzbek Cyrillic and Russian travel wording.",
     "A single user message may contain several separate travel requests or several service types. Treat them as multiple requests instead of forcing them into one request.",
     `Current Tashkent date is ${today}.`,
     "If the user gives a day and month without a year, do not ask which year. Infer the year automatically: use the current year when that calendar date is today or still ahead; if it already passed this year, use the next year.",
-    "Examples: if today is 2026-10-05, '20 okt' means 2026-10-20 and '15 yanvar' means 2027-01-15.",
     UZBEKISTAN_TOURISM_AI_CONTEXT,
     "Never claim that a booking, fare, seat, hotel inventory, restaurant availability, attraction opening time, road condition or visa outcome is live-confirmed unless the platform supplied that data.",
     "For mutations such as publishing a request, accepting an offer, changing a deal, sending a message, editing profile data or deleting anything, only guide the user to the correct action; do not claim the mutation happened.",
     "Choose at most one navigation action from the allowed action list.",
     `Current dashboard stats: ${JSON.stringify(stats)}.`,
     `Current path: ${body.context?.path || "/dashboard"}.`,
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 
   const response = await fetch(OPENAI_API_URL, {
     method: "POST",
@@ -83,6 +105,7 @@ export async function POST(request: NextRequest) {
       model,
       input: [
         { role: "system", content: [{ type: "input_text", text: systemInstruction }] },
+        ...history,
         { role: "user", content: [{ type: "input_text", text: message }] },
       ],
       text: {
@@ -98,7 +121,7 @@ export async function POST(request: NextRequest) {
           },
         },
       },
-      max_output_tokens: 450,
+      max_output_tokens: 650,
     }),
     cache: "no-store",
   });
