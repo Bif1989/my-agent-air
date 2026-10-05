@@ -80,7 +80,7 @@ export default function FloatingMessengerPanel({ activePath }: { activePath?: st
   if (hidden) return null;
   const unread = conversations.reduce((total, conversation) => total + (conversation.unread_count || 0), 0);
 
-  return <div className="fixed bottom-4 right-3 z-40 flex w-[min(23rem,calc(100vw-1.5rem))] flex-col items-end sm:right-4">
+  return <div className="fixed bottom-4 right-3 z-40 hidden w-[min(23rem,calc(100vw-1.5rem))] flex-col items-end lg:flex lg:right-4">
     {isOpen && <section aria-label="My Agent Air messenjeri" className="mb-3 flex h-[min(42rem,calc(100dvh-7rem))] w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/15">
       <div className="flex items-start justify-between gap-2 bg-[#0b1f3a] px-4 py-3 text-white">
         <div className="flex min-w-0 gap-2">{selected && <button type="button" onClick={() => setSelected(null)} aria-label="Chatlar ro‘yxatiga qaytish" className="rounded-lg px-1 text-xl focus:outline-none focus:ring-2 focus:ring-cyan-300">←</button>}
