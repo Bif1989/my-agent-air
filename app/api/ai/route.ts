@@ -13,17 +13,13 @@ type RequestBody = {
   context?: {
     path?: string;
     stats?: Record<string, number>;
+    locale?: "uz" | "ru";
   };
 };
 
 type OpenAiResponse = {
   output_text?: string;
-  output?: Array<{
-    content?: Array<{
-      type?: string;
-      text?: string;
-    }>;
-  }>;
+  output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
 };
 
 function extractOutputText(data: OpenAiResponse) {
@@ -39,15 +35,10 @@ function extractOutputText(data: OpenAiResponse) {
 async function verifyUser(request: NextRequest) {
   const authorization = request.headers.get("authorization") || "";
   if (!authorization.startsWith("Bearer ")) return null;
-
   const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: authorization,
-    },
+    headers: { apikey: SUPABASE_KEY, Authorization: authorization },
     cache: "no-store",
   });
-
   if (!response.ok) return null;
   const user = (await response.json().catch(() => null)) as { id?: string; email?: string } | null;
   return user?.id ? user : null;
@@ -67,19 +58,18 @@ export async function POST(request: NextRequest) {
   const model = process.env.OPENAI_AI_MODEL || "gpt-6-luna";
   const stats = body.context?.stats || {};
   const today = tashkentDate();
+  const locale = body.context?.locale === "ru" ? "ru" : "uz";
   const systemInstruction = [
     "You are My Agent Air AI, an assistant inside a B2B travel-agent platform for Uzbekistan.",
-    "Reply in Uzbek unless the user clearly writes in another language.",
-    "Be concise, practical and action-oriented, but reason like an experienced Uzbekistan tour operator.",
+    locale === "ru" ? "The selected interface language is Russian. Reply in Russian unless the user explicitly asks for another language." : "The selected interface language is Uzbek. Reply in Uzbek unless the user explicitly asks for another language.",
+    "Be concise, practical and action-oriented.",
     "Understand travel-agent shorthand, IATA airport codes, Uzbek Latin, Uzbek Cyrillic and Russian travel wording.",
     "A single user message may contain several separate travel requests or several service types. Treat them as multiple requests instead of forcing them into one request.",
     `Current Tashkent date is ${today}.`,
     "If the user gives a day and month without a year, do not ask which year. Infer the year automatically: use the current year when that calendar date is today or still ahead; if it already passed this year, use the next year.",
     "Examples: if today is 2026-10-05, '20 okt' means 2026-10-20 and '15 yanvar' means 2027-01-15.",
     UZBEKISTAN_TOURISM_AI_CONTEXT,
-    "When discussing an Uzbekistan domestic trip, actively check whether the user mentioned guide, meals/restaurants, hotel if multi-day, local transport, museum/attraction entrance tickets, guide language, and group size. Mention useful missing items as optional extra requests.",
-    "For domestic itineraries, suggest a practical route and a short list of relevant sights when useful. Keep pacing realistic and do not overload the traveler with too many places in one day.",
-    "Never claim that a booking, fare, seat, hotel inventory, museum opening time, current ticket price, restaurant availability, road condition or visa outcome is live-confirmed unless the platform supplied fresh data.",
+    "Never claim that a booking, fare, seat, hotel inventory, restaurant availability, attraction opening time, road condition or visa outcome is live-confirmed unless the platform supplied that data.",
     "For mutations such as publishing a request, accepting an offer, changing a deal, sending a message, editing profile data or deleting anything, only guide the user to the correct action; do not claim the mutation happened.",
     "Choose at most one navigation action from the allowed action list.",
     `Current dashboard stats: ${JSON.stringify(stats)}.`,
@@ -88,10 +78,7 @@ export async function POST(request: NextRequest) {
 
   const response = await fetch(OPENAI_API_URL, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model,
       input: [
@@ -106,15 +93,12 @@ export async function POST(request: NextRequest) {
           schema: {
             type: "object",
             additionalProperties: false,
-            properties: {
-              message: { type: "string" },
-              action: { type: "string", enum: ACTIONS },
-            },
+            properties: { message: { type: "string" }, action: { type: "string", enum: ACTIONS } },
             required: ["message", "action"],
           },
         },
       },
-      max_output_tokens: 650,
+      max_output_tokens: 450,
     }),
     cache: "no-store",
   });
@@ -128,12 +112,9 @@ export async function POST(request: NextRequest) {
   const data = (await response.json()) as OpenAiResponse;
   const outputText = extractOutputText(data);
   let parsed: { message?: string; action?: AiAction } = {};
-  try {
-    parsed = JSON.parse(outputText) as { message?: string; action?: AiAction };
-  } catch {
-    parsed = { message: outputText || "Savolni tushundim.", action: "none" };
-  }
+  try { parsed = JSON.parse(outputText) as { message?: string; action?: AiAction }; }
+  catch { parsed = { message: outputText || (locale === "ru" ? "Понял вопрос." : "Savolni tushundim."), action: "none" }; }
 
   const action: AiAction = ACTIONS.includes(parsed.action as AiAction) ? (parsed.action as AiAction) : "none";
-  return NextResponse.json({ message: parsed.message || "Savolni tushundim.", action });
+  return NextResponse.json({ message: parsed.message || (locale === "ru" ? "Понял вопрос." : "Savolni tushundim."), action });
 }
