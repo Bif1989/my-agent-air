@@ -1,7 +1,7 @@
 import { authenticatedSupabaseFetch, getStoredSession } from "@/lib/supabase-auth";
 import type { RequestRecord } from "@/app/requests/requests-api";
 
-const REQUEST_FIELDS = "id,created_by,origin,destination,travel_date,category,status";
+const REQUEST_FIELDS = "id,created_by,origin,destination,travel_date,category,status,service_details";
 const PROFILE_FIELDS = "id,full_name,company_name,city,is_verified";
 const OFFER_FIELDS = `id,request_id,agent_id,price,currency,airline,baggage,comment,status,created_at,agent:profiles!offers_agent_id_fkey(${PROFILE_FIELDS}),request:requests!offers_request_id_fkey!inner(${REQUEST_FIELDS})`;
 
@@ -15,7 +15,7 @@ export type OfferAgent = {
   is_verified: boolean | null;
 };
 
-export type OfferRequest = Pick<RequestRecord, "id" | "created_by" | "origin" | "destination" | "travel_date" | "category" | "status">;
+export type OfferRequest = Pick<RequestRecord, "id" | "created_by" | "origin" | "destination" | "travel_date" | "category" | "status" | "service_details">;
 
 export type OfferRecord = {
   id: string;

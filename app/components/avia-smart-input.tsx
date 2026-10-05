@@ -11,6 +11,9 @@ type AviaSmartInputProps = {
   maxLength?: number;
   disabled?: boolean;
   mode?: "airport" | "text";
+  id?: string;
+  required?: boolean;
+  invalid?: boolean;
 };
 
 export default function AviaSmartInput({
@@ -21,6 +24,9 @@ export default function AviaSmartInput({
   maxLength,
   disabled,
   mode = "text",
+  id,
+  required,
+  invalid,
 }: AviaSmartInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [suggestions, setSuggestions] = useState<AviaSuggestion[]>([]);
@@ -115,6 +121,9 @@ export default function AviaSmartInput({
   return (
     <div className="relative">
       <input
+        id={id}
+        required={required}
+        aria-invalid={invalid || undefined}
         ref={inputRef}
         type="text"
         value={value}

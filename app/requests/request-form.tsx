@@ -1,105 +1,127 @@
 "use client";
 
-import { tashkentDate } from "@/lib/request-freshness";
-import { joinServiceDetails, splitServiceDetails } from "@/lib/request-details";
+import { type FormEvent, useRef, useState } from "react";
 import { useUiSettings } from "@/lib/ui-settings";
-import { FormEvent, useState } from "react";
-import AviaSmartAssist from "@/app/components/avia-smart-assist";
+import { tashkentDate } from "@/lib/request-freshness";
+import { addCalendarDays, cleanServiceData, COMMON_SERVICE_FIELDS, daysBetween, fieldVisible, hydrateServiceRequest, localize, requestIssues, SERVICE_CATEGORIES, SERVICE_DEFINITIONS, serviceDefinition, type RequestIssue, type ServiceField, type ServiceRequestInput } from "@/lib/service-request";
 import AviaSmartInput from "@/app/components/avia-smart-input";
-import type { RequestPayload } from "@/app/requests/requests-api";
+import RequestAiFill from "./request-ai-fill";
+import type { RequestPayload } from "./requests-api";
 
-const categories = ["Aviachipta", "Tur paket", "Mehmonxona", "Transfer", "Gid", "Viza", "Boshqa"];
-const currencies = ["USD", "UZS", "EUR", "RUB"];
-const categoryRu: Record<string, string> = {
-  Aviachipta: "Авиабилет",
-  "Tur paket": "Турпакет",
-  Mehmonxona: "Отель",
-  Transfer: "Трансфер",
-  Gid: "Гид",
-  Viza: "Виза",
-  Boshqa: "Другое",
-};
+type RequestFormProps = { initialValues?: Partial<RequestPayload>; submitLabel: string; submittingLabel: string; onSubmit: (payload: RequestPayload) => Promise<void> };
+const fieldId = (key: string) => `request-${key.replaceAll(".", "-")}`;
 
-type RequestFormProps = {
-  initialValues?: Partial<RequestPayload>;
-  submitLabel: string;
-  submittingLabel: string;
-  onSubmit: (payload: RequestPayload) => Promise<void>;
-};
-
-function stringValue(value: string | null | undefined) { return value || ""; }
+function initialForm(initial?: Partial<RequestPayload>): ServiceRequestInput {
+  return hydrateServiceRequest({ category: "", adults: initial ? undefined : 1, children: 0, infants: 0, currency: initial?.budget && !initial.currency ? "" : "USD", ...initial });
+}
 
 export default function RequestForm({ initialValues, submitLabel, submittingLabel, onSubmit }: RequestFormProps) {
   const { isRu } = useUiSettings();
-  const [category, setCategory] = useState(initialValues?.category || "");
-  const [origin, setOrigin] = useState(stringValue(initialValues?.origin));
-  const [destination, setDestination] = useState(stringValue(initialValues?.destination));
-  const [travelDate, setTravelDate] = useState(stringValue(initialValues?.travel_date));
-  const [adults, setAdults] = useState(String(initialValues?.adults ?? 1));
-  const [children, setChildren] = useState(String(initialValues?.children ?? 0));
-  const [infants, setInfants] = useState(String(initialValues?.infants ?? 0));
-  const [baggage, setBaggage] = useState(stringValue(initialValues?.baggage));
-  const [budget, setBudget] = useState(initialValues?.budget == null ? "" : String(initialValues.budget));
-  const [currency, setCurrency] = useState(initialValues?.currency || "USD");
-  const [description, setDescription] = useState(() => splitServiceDetails(initialValues?.description).text);
-  const [details, setDetails] = useState(() => splitServiceDetails(initialValues?.description).details);
+  const [values, setValues] = useState(() => initialForm(initialValues));
+  const [issues, setIssues] = useState<RequestIssue[]>([]);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-
+  const [aiBusy, setAiBusy] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(Boolean(initialValues));
+  const [beforeAi, setBeforeAi] = useState<ServiceRequestInput | null>(null);
+  const categoryDrafts = useRef<Record<string, ServiceRequestInput>>({});
+  const submission = useRef(false);
+  const definition = serviceDefinition(values.category);
+  const details = values.service_details || {};
   const today = tashkentDate();
-  const isAirTravel = category === "Aviachipta" || category === "Tur paket";
+  const airBaggage = values.category === "Aviachipta" || values.category === "Tur paket" && details.transport === "flight";
+  const tr = (uz: string, ru: string) => isRu ? ru : uz;
+  const hasIssue = (key: string) => issues.some((item) => item.field === key);
+  const inputClass = (key: string) => `mt-2 w-full min-w-0 rounded-xl border bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-blue-200 dark:bg-slate-900 dark:text-slate-100 ${hasIssue(key) ? "border-red-400" : "border-slate-200 dark:border-slate-700"}`;
+  const labelClass = "min-w-0 text-sm font-semibold text-slate-700 dark:text-slate-200";
+  const gridClass = "grid gap-5 sm:grid-cols-2";
+
+  function setValue<K extends keyof ServiceRequestInput>(key: K, value: ServiceRequestInput[K]) {
+    setValues((current) => ({ ...current, [key]: value }));
+    setIssues((current) => current.filter((item) => item.field !== key));
+  }
+  function setDetail(key: string, value: string) {
+    setValues((current) => ({ ...current, service_details: { ...current.service_details, [key]: value } }));
+    setIssues((current) => current.filter((item) => item.field !== `service_details.${key}`));
+  }
+  function changeCategory(category: string) {
+    if (values.category) categoryDrafts.current[values.category] = values;
+    setValues(categoryDrafts.current[category] || initialForm({ category, adults: values.adults, children: values.children, infants: values.infants, travel_date: values.travel_date }));
+    setIssues([]); setError(""); setBeforeAi(null);
+  }
+  function fieldError(key: string) {
+    const issue = issues.find((item) => item.field === key);
+    return issue ? <span id={`${fieldId(key)}-error`} className="mt-1 block text-xs font-normal text-red-700 dark:text-red-300">{issue.message}</span> : null;
+  }
+  function renderDetail(item: ServiceField) {
+    if (!fieldVisible(item, details)) return null;
+    const key = `service_details.${item.key}`;
+    const shared = { id: fieldId(key), value: details[item.key] || "", required: item.required, "aria-invalid": hasIssue(key) || undefined, "aria-describedby": hasIssue(key) ? `${fieldId(key)}-error` : undefined, className: inputClass(key), onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setDetail(item.key, event.target.value) };
+    return <label key={item.key} htmlFor={shared.id} className={`${labelClass} ${item.type === "textarea" ? "sm:col-span-2" : ""}`}>
+      {localize(item.label, isRu)}{item.required && <span className="ml-1 text-blue-600">*</span>}
+      {item.type === "select" ? <select {...shared}><option value="">{tr("Tanlang", "Выберите")}</option>{item.options?.map(([value, uz, ru]) => <option key={value} value={value}>{isRu ? ru : uz}</option>)}</select>
+        : item.type === "textarea" ? <textarea {...shared} rows={3} maxLength={item.maxLength ?? 600} />
+          : <input {...shared} type={item.type || "text"} min={item.type === "date" ? values.travel_date || today : item.min} max={item.max} step={item.step ?? 1} maxLength={item.maxLength ?? 160} inputMode={item.type === "number" ? "decimal" : undefined} />}
+      {item.hint && <span className="mt-1 block text-xs font-normal leading-5 text-slate-500 dark:text-slate-400">{localize(item.hint, isRu)}</span>}
+      {fieldError(key)}
+    </label>;
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isSubmitting) return;
-    setError("");
-    const adultsNumber = Number(adults);
-    const childrenNumber = Number(children);
-    const infantsNumber = Number(infants);
-    const budgetNumber = budget === "" ? null : Number(budget);
-    if (!category) return setError(isRu ? "Выберите категорию." : "Kategoriya tanlanishi kerak.");
-    if (!origin.trim() && !destination.trim()) return setError(isRu ? "Укажите хотя бы город отправления или назначения." : "Qayerdan yoki qayerga maydonidan kamida bittasini kiriting.");
-    if (!Number.isInteger(adultsNumber) || adultsNumber < 1) return setError(isRu ? "Количество участников должно быть не меньше 1." : "Kattalar soni kamida 1 bo‘lishi kerak.");
-    if (!Number.isInteger(childrenNumber) || childrenNumber < 0 || !Number.isInteger(infantsNumber) || infantsNumber < 0) return setError(isRu ? "Количество детей и младенцев не может быть отрицательным." : "Bolalar va go‘daklar soni 0 yoki undan yuqori bo‘lishi kerak.");
-    if (budgetNumber !== null && (!Number.isFinite(budgetNumber) || budgetNumber < 0)) return setError(isRu ? "Бюджет не может быть отрицательным." : "Budjet manfiy bo‘lishi mumkin emas.");
-    if (travelDate && travelDate < today) return setError(isRu ? "Дата поездки не может быть в прошлом." : "Safar sanasi o‘tgan sana bo‘lishi mumkin emas.");
-    const fullDescription = joinServiceDetails(description, category, details);
-    if (category === "Mehmonxona" && (!/^\d+$/.test(details.rooms) || Number(details.rooms) < 1 || !/^\d+$/.test(details.nights) || Number(details.nights) < 1)) return setError(isRu ? "Укажите минимум 1 номер и 1 ночь." : "Xonalar va tunlar soni kamida 1 bo‘lsin.");
-    if (category === "Transfer" && !details.vehicle.trim()) return setError(isRu ? "Укажите тип транспорта." : "Transport turini kiriting.");
-    if (category === "Gid" && !details.language.trim()) return setError(isRu ? "Укажите язык гида." : "Gid tilini kiriting.");
-    if (fullDescription.length > 1000) return setError(isRu ? "Описание не должно превышать 1000 символов." : "Tavsif 1000 belgidan oshmasligi kerak.");
-
-    setIsSubmitting(true);
+    if (submission.current || aiBusy) return;
+    const normalized = { ...values, service_details: cleanServiceData(values) };
+    const problems = requestIssues(normalized, isRu);
+    setIssues(problems); setError("");
+    if (problems.length) {
+      setAdvancedOpen(true);
+      requestAnimationFrame(() => document.getElementById(fieldId(problems[0].field))?.focus());
+      return;
+    }
+    submission.current = true; setIsSubmitting(true);
     try {
-      await onSubmit({ category, origin: origin.trim() || null, destination: destination.trim() || null, travel_date: travelDate || null, adults: adultsNumber, children: childrenNumber, infants: infantsNumber, baggage: isAirTravel ? baggage.trim() || null : null, budget: budgetNumber, currency, description: fullDescription || null });
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : (isRu ? "Не удалось сохранить запрос." : "So‘rovni saqlashda xatolik yuz berdi."));
-    } finally { setIsSubmitting(false); }
+      await onSubmit({
+        category: values.category!, origin: definition?.origin ? values.origin!.trim() : null, destination: values.destination!.trim(), travel_date: values.travel_date!,
+        adults: values.adults!, children: values.children ?? 0, infants: values.infants ?? 0,
+        baggage: airBaggage ? values.baggage?.trim() || null : null,
+        budget: values.budget ?? null, currency: values.currency || "USD", description: values.description?.trim() || null,
+        service_details: normalized.service_details, form_version: 1,
+      });
+    } catch (failure) { setError(failure instanceof Error ? failure.message : tr("So‘rovni saqlab bo‘lmadi.", "Не удалось сохранить запрос.")); }
+    finally { submission.current = false; setIsSubmitting(false); }
   }
 
-  const inputClass = "mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-[#0b1f3a] outline-none transition placeholder:text-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-100";
-  const localizedSubmit = isRu ? (submitLabel === "So‘rovni yaratish" ? "Создать запрос" : submitLabel) : submitLabel;
-  const localizedSubmitting = isRu ? (submittingLabel === "Yaratilmoqda..." ? "Создание..." : submittingLabel) : submittingLabel;
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-7">
-      <div className="grid gap-5 sm:grid-cols-2">
-        <label className="text-sm font-semibold text-slate-700 sm:col-span-2">{isRu ? "Категория" : "Kategoriya"}<select required value={category} onChange={(event) => setCategory(event.target.value)} className={inputClass}><option value="" disabled>{isRu ? "Выберите категорию" : "Kategoriyani tanlang"}</option>{categories.map((item) => <option key={item} value={item}>{isRu ? categoryRu[item] : item}</option>)}</select></label>
-        <label className="text-sm font-semibold text-slate-700">{category === "Mehmonxona" || category === "Gid" ? (isRu ? "Город / место" : "Shahar / joy") : (isRu ? "Откуда" : "Qayerdan")}{isAirTravel ? <AviaSmartInput value={origin} onChange={setOrigin} placeholder={isRu ? "Ташкент" : "Toshkent"} className={inputClass} mode="airport" /> : <input value={origin} maxLength={120} onChange={(event) => setOrigin(event.target.value)} placeholder={isRu ? "Город или адрес" : "Shahar yoki manzil"} className={inputClass} />}</label>
-        <label className="text-sm font-semibold text-slate-700">{isRu ? "Куда" : "Qayerga"}{isAirTravel ? <AviaSmartInput value={destination} onChange={setDestination} placeholder={isRu ? "Стамбул" : "Istanbul"} className={inputClass} mode="airport" /> : <input value={destination} maxLength={120} onChange={(event) => setDestination(event.target.value)} placeholder={isRu ? "Пункт назначения или место услуги" : "Manzil yoki xizmat joyi"} className={inputClass} />}</label>
-        <label className="text-sm font-semibold text-slate-700">{isRu ? "Дата поездки" : "Safar sanasi"}<input type="date" min={today} value={travelDate} onChange={(event) => setTravelDate(event.target.value)} className={inputClass} /></label>
-        {isAirTravel && <label className="text-sm font-semibold text-slate-700">{isRu ? "Багаж" : "Bagaj"}<input value={baggage} onChange={(event) => setBaggage(event.target.value)} placeholder={isRu ? "Например: 1 место 23 кг" : "Masalan: 1 dona 23 kg"} className={inputClass} /></label>}
-        <label className="text-sm font-semibold text-slate-700">{isAirTravel ? (isRu ? "Взрослые" : "Kattalar soni") : (isRu ? "Участники" : "Ishtirokchilar soni")}<input required min="1" step="1" type="number" value={adults} onChange={(event) => setAdults(event.target.value)} className={inputClass} /></label>
-        <label className="text-sm font-semibold text-slate-700">{isRu ? "Дети" : "Bolalar soni"}<input min="0" step="1" type="number" value={children} onChange={(event) => setChildren(event.target.value)} className={inputClass} /></label>
-        <label className="text-sm font-semibold text-slate-700">{isRu ? "Младенцы" : "Go‘daklar soni"}<input min="0" step="1" type="number" value={infants} onChange={(event) => setInfants(event.target.value)} className={inputClass} /></label>
-        {category === "Mehmonxona" && ([['rooms', isRu ? 'Количество номеров' : 'Xonalar soni'], ['nights', isRu ? 'Количество ночей' : 'Tunlar soni']] as const).map(([field, label]) => <label key={field} className="text-sm font-semibold text-slate-700">{label}<input required type="number" min="1" max="365" step="1" value={details[field]} onChange={(event) => setDetails((current) => ({ ...current, [field]: event.target.value }))} className={inputClass} /></label>)}
-        {category === "Transfer" && <label className="text-sm font-semibold text-slate-700">{isRu ? "Тип транспорта" : "Transport turi"}<input required maxLength={100} value={details.vehicle} onChange={(event) => setDetails((current) => ({ ...current, vehicle: event.target.value }))} placeholder={isRu ? "Седан, минивэн, автобус…" : "Sedan, miniven, avtobus…"} className={inputClass} /></label>}
-        {category === "Gid" && <label className="text-sm font-semibold text-slate-700">{isRu ? "Язык гида" : "Gid tili"}<input required maxLength={100} value={details.language} onChange={(event) => setDetails((current) => ({ ...current, language: event.target.value }))} placeholder={isRu ? "Узбекский, русский, английский…" : "O‘zbek, rus, ingliz…"} className={inputClass} /></label>}
-        <div className="grid grid-cols-[1fr_110px] gap-3"><label className="text-sm font-semibold text-slate-700">{isRu ? "Бюджет" : "Budjet"}<input min="0" step="0.01" type="number" value={budget} onChange={(event) => setBudget(event.target.value)} placeholder="0" className={inputClass} /></label><label className="text-sm font-semibold text-slate-700">{isRu ? "Валюта" : "Valyuta"}<select value={currency} onChange={(event) => setCurrency(event.target.value)} className={inputClass}>{currencies.map((item) => <option key={item}>{item}</option>)}</select></label></div>
-        <label className="text-sm font-semibold text-slate-700 sm:col-span-2">{isRu ? "Дополнительная информация" : "Qo‘shimcha ma’lumot"}<AviaSmartAssist value={description} onChange={setDescription} maxLength={1000} rows={5} placeholder={isRu ? "Опишите детали поездки или услуги" : "Safar yoki xizmat tafsilotlarini yozing"} className={inputClass} containerClassName="relative mt-2" /><span className="mt-1 block text-right text-xs font-normal text-slate-400">{description.length}/1000</span></label>
-      </div>
-      {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
-      <button type="submit" disabled={isSubmitting} className="w-full rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60">{isSubmitting ? localizedSubmitting : localizedSubmit}</button>
-    </form>
-  );
+  return <form onSubmit={handleSubmit} noValidate className="space-y-7">
+    <RequestAiFill values={values} disabled={isSubmitting} onBusyChange={setAiBusy} onApply={(draft) => { setBeforeAi(values); setValues(initialForm(draft)); setIssues([]); setError(""); setAdvancedOpen(true); }} />
+    {beforeAi && <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200"><span>{tr("AI qoralamasi joylandi. Barcha maydonlarni tekshiring.", "Черновик AI перенесён. Проверьте все поля.")}</span><button type="button" disabled={aiBusy || isSubmitting} onClick={() => { setValues(beforeAi); setBeforeAi(null); setIssues([]); }} className="font-semibold underline">{tr("Oldingi ma’lumotga qaytish", "Вернуть прежние данные")}</button></div>}
+    <fieldset disabled={isSubmitting || aiBusy} className="min-w-0 space-y-7 disabled:opacity-70">
+      <label className={`${labelClass} block`} htmlFor={fieldId("category")}>{tr("Xizmat turi", "Вид услуги")} *<select id={fieldId("category")} value={values.category || ""} onChange={(event) => changeCategory(event.target.value)} className={inputClass("category")} aria-invalid={hasIssue("category")}><option value="">{tr("Xizmat turini tanlang", "Выберите вид услуги")}</option>{SERVICE_CATEGORIES.map((category) => <option key={category} value={category}>{localize(SERVICE_DEFINITIONS[category].label, isRu)}</option>)}</select>{fieldError("category")}</label>
+      {definition && <>
+        <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-blue-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200"><p className="font-semibold">{localize(definition.label, isRu)} · {tr("so‘rov anketasi", "анкета запроса")}</p><p className="mt-1">{localize(definition.example, isRu)}</p><p className="mt-2 text-xs">{tr("* belgilangan maydonlar majburiy. Qo‘shimcha talablar ixtiyoriy.", "Поля со * обязательны. Дополнительные требования — по желанию.")}</p></div>
+        <section aria-label={tr("Joy va sana", "Место и дата")} className={gridClass}>
+          {(["origin", "destination"] as const).map((key) => {
+            const label = definition[key];
+            if (!label) return null;
+            return <label key={key} htmlFor={fieldId(key)} className={labelClass}>{localize(label, isRu)} *{values.category === "Aviachipta" ? <AviaSmartInput id={fieldId(key)} required invalid={hasIssue(key)} mode="airport" value={values[key] || ""} maxLength={120} onChange={(value) => setValue(key, value)} className={inputClass(key)} /> : <input id={fieldId(key)} value={values[key] || ""} onChange={(event) => setValue(key, event.target.value)} maxLength={120} className={inputClass(key)} aria-invalid={hasIssue(key)} />}{fieldError(key)}</label>;
+          })}
+          <label htmlFor={fieldId("travel_date")} className={labelClass}>{localize(definition.date, isRu)} *<input id={fieldId("travel_date")} type="date" min={today} value={values.travel_date || ""} onChange={(event) => setValue("travel_date", event.target.value)} className={inputClass("travel_date")} aria-invalid={hasIssue("travel_date")} />{fieldError("travel_date")}</label>
+          {definition.fields.filter((item) => item.required).map(renderDetail)}
+        </section>
+        {values.category === "Mehmonxona" && (daysBetween(values.travel_date, details.check_out) || 0) > 0 && <p className="text-sm font-semibold text-blue-700 dark:text-blue-300">{tr("Tunlar soni", "Количество ночей")}: {daysBetween(values.travel_date, details.check_out)}</p>}
+        {values.category === "Tur paket" && values.travel_date && Number(details.duration_days) > 0 && <p className="text-sm text-slate-500">{tr("Tur yakuni", "Окончание тура")}: {addCalendarDays(values.travel_date, Number(details.duration_days) - 1)}</p>}
+        <section className="space-y-4 border-t border-slate-100 pt-6 dark:border-slate-800"><h2 className="font-semibold text-slate-900 dark:text-slate-100">{tr("Ishtirokchilar", "Участники")}</h2><div className="grid gap-4 sm:grid-cols-3">{(["adults", "children", "infants"] as const).map((key) => <label key={key} htmlFor={fieldId(key)} className={labelClass}>{key === "adults" ? tr("Kattalar", "Взрослые") : key === "children" ? tr("Bolalar", "Дети") : tr("Go‘daklar (2 yoshgacha)", "Младенцы (до 2 лет)")}<input id={fieldId(key)} type="number" min={key === "adults" ? 1 : 0} max={500} step={1} value={values[key] ?? ""} onChange={(event) => setValue(key, event.target.value === "" ? key === "adults" ? undefined : 0 : Number(event.target.value))} className={inputClass(key)} aria-invalid={hasIssue(key)} />{fieldError(key)}</label>)}</div><div className={gridClass}>{Boolean(values.children) && renderDetail({ ...COMMON_SERVICE_FIELDS[0], required: ["Aviachipta", "Mehmonxona", "Tur paket"].includes(values.category || "") })}{Boolean(values.infants) && renderDetail({ ...COMMON_SERVICE_FIELDS[1], required: ["Aviachipta", "Mehmonxona", "Tur paket"].includes(values.category || "") })}</div>{values.category === "Aviachipta" && <p className="text-xs text-slate-500">{tr("Kattalar: 12 yoshdan. Bolalar: 2–11 yosh, alohida o‘rin. Go‘dak: 2 yoshgacha, alohida o‘rinsiz. Yakuniy tarif shartini aviakompaniya bilan tekshiring.", "Взрослые: от 12 лет. Дети: 2–11 лет с местом. Младенцы: до 2 лет без места. Окончательные условия тарифа уточните у авиакомпании.")}</p>}</section>
+        <details open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700"><summary className="cursor-pointer text-sm font-semibold text-blue-700 dark:text-blue-300">{tr("Qo‘shimcha talablar", "Дополнительные требования")}</summary><div className={`${gridClass} mt-5`}>{definition.fields.filter((item) => !item.required).map(renderDetail)}{airBaggage && <label htmlFor={fieldId("baggage")} className={labelClass}>{tr("Bagaj talabi", "Требования к багажу")}<input id={fieldId("baggage")} value={values.baggage || ""} onChange={(event) => setValue("baggage", event.target.value)} maxLength={120} placeholder={tr("Bagajsiz / 1 dona 23 kg", "Без багажа / 1 место 23 кг")} className={inputClass("baggage")} /></label>}</div></details>
+        <section className="space-y-4"><h2 className="font-semibold text-slate-900 dark:text-slate-100">{tr("Budjet va izoh", "Бюджет и комментарий")}</h2><div className={gridClass}>
+          <label htmlFor={fieldId("budget")} className={labelClass}>{tr("Taxminiy budjet (ixtiyoriy)", "Примерный бюджет (необязательно)")}<input id={fieldId("budget")} type="number" min="0.01" max="1000000000000" step="0.01" value={values.budget ?? ""} onChange={(event) => setValue("budget", event.target.value === "" ? null : Number(event.target.value))} placeholder={tr("Aniq bo‘lmasa, bo‘sh qoldiring", "Можно оставить пустым")} className={inputClass("budget")} aria-invalid={hasIssue("budget")} />{fieldError("budget")}</label>
+          <label htmlFor={fieldId("currency")} className={labelClass}>{tr("Valyuta", "Валюта")}<select id={fieldId("currency")} value={values.currency || ""} onChange={(event) => setValue("currency", event.target.value)} className={inputClass("currency")}><option value="">{tr("Tanlang", "Выберите")}</option>{["USD", "UZS", "EUR", "RUB"].map((currency) => <option key={currency}>{currency}</option>)}</select>{fieldError("currency")}</label>
+          {values.budget != null && renderDetail({ ...COMMON_SERVICE_FIELDS[2], required: true })}
+          <label htmlFor={fieldId("description")} className={`${labelClass} sm:col-span-2`}>{tr("Qo‘shimcha izoh", "Дополнительный комментарий")}<textarea id={fieldId("description")} maxLength={1000} rows={4} value={values.description || ""} onChange={(event) => setValue("description", event.target.value)} className={inputClass("description")} placeholder={tr("Yuqoridagi maydonlarga sig‘magan shartlar", "Условия, не указанные в полях выше")} /><span className="mt-1 block text-right text-xs font-normal text-slate-400">{values.description?.length || 0}/1000</span>{fieldError("description")}</label>
+        </div></section>
+        {values.category === "Viza" && <p className="rounded-xl bg-amber-50 p-4 text-xs leading-5 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">{tr("Bu viza bo‘yicha xizmat so‘rovi. Pasport raqami va hujjat rasmlarini ochiq so‘rovga kiritmang. Viza berish qarorini vakolatli organ qabul qiladi.", "Это запрос на визовую услугу. Не публикуйте номер и копии паспорта. Решение о выдаче визы принимает уполномоченный орган.")}</p>}
+      </>}
+    </fieldset>
+    {issues.length > 0 && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:bg-red-950/30 dark:text-red-200"><p className="font-semibold">{tr("Yuborishdan oldin tekshiring:", "Проверьте перед отправкой:")}</p><ul className="mt-2 list-inside list-disc space-y-1">{issues.map((item) => <li key={item.field}><button type="button" onClick={() => { setAdvancedOpen(true); requestAnimationFrame(() => document.getElementById(fieldId(item.field))?.focus()); }} className="text-left underline">{item.message}</button></li>)}</ul></div>}
+    {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</p>}
+    <button type="submit" disabled={isSubmitting || aiBusy} className="w-full rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-semibold text-white hover:bg-blue-700 focus:ring-4 focus:ring-blue-200 disabled:opacity-50">{isSubmitting ? (isRu ? "Сохранение…" : submittingLabel) : (isRu ? initialValues?.form_version !== undefined ? "Сохранить изменения" : "Создать запрос" : submitLabel)}</button>
+  </form>;
 }

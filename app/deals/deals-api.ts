@@ -1,10 +1,11 @@
+import type { RequestRecord } from "@/app/requests/requests-api";
 import { authenticatedSupabaseFetch, getStoredSession } from "@/lib/supabase-auth";
 
 export const DEAL_STATUSES = ["accepted", "processing", "issued", "completed", "cancelled"] as const;
 export type DealStatus = (typeof DEAL_STATUSES)[number];
 
 const PROFILE_FIELDS = "id,full_name,company_name,city,phone,agent_type,is_verified";
-const REQUEST_FIELDS = "id,origin,destination,category,travel_date,description";
+const REQUEST_FIELDS = "id,origin,destination,category,travel_date,description,adults,children,infants,baggage,budget,currency,service_details,form_version";
 const OFFER_FIELDS = "id,airline,baggage,comment,price,currency,status,created_at";
 const DEAL_FIELDS = `id,request_id,offer_id,buyer_id,seller_id,agreed_price,currency,status,created_at,updated_at,request:requests!deals_request_id_fkey(${REQUEST_FIELDS}),offer:offers!deals_offer_id_fkey(${OFFER_FIELDS}),buyer:profiles!deals_buyer_id_fkey(${PROFILE_FIELDS}),seller:profiles!deals_seller_id_fkey(${PROFILE_FIELDS})`;
 
@@ -18,14 +19,7 @@ export type DealProfile = {
   is_verified: boolean | null;
 };
 
-export type DealRequest = {
-  id: string;
-  origin: string | null;
-  destination: string | null;
-  category: string | null;
-  travel_date: string | null;
-  description: string | null;
-};
+export type DealRequest = Pick<RequestRecord, "id" | "origin" | "destination" | "category" | "travel_date" | "description" | "adults" | "children" | "infants" | "baggage" | "budget" | "currency" | "service_details" | "form_version">;
 
 export type DealOffer = {
   id: string;

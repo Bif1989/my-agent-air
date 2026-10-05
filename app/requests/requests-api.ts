@@ -1,7 +1,8 @@
 import { requestFreshnessFilter, searchFilterText } from "@/lib/request-freshness";
 import { authenticatedSupabaseFetch, getStoredSession } from "@/lib/supabase-auth";
+import type { ServiceData } from "@/lib/service-request";
 
-export const REQUEST_SELECT = "id,created_by,category,origin,destination,travel_date,adults,children,infants,baggage,budget,currency,description,status,created_at,updated_at,creator:profiles!requests_created_by_fkey(id,full_name,company_name,city,phone,agent_type,is_verified)";
+export const REQUEST_SELECT = "id,created_by,category,origin,destination,travel_date,adults,children,infants,baggage,budget,currency,description,service_details,form_version,status,created_at,updated_at,creator:profiles!requests_created_by_fkey(id,full_name,company_name,city,phone,agent_type,is_verified)";
 
 export type RequestStatus = "open" | "accepted" | "closed" | "cancelled";
 
@@ -29,6 +30,8 @@ export type RequestRecord = {
   budget: number | null;
   currency: string;
   description: string | null;
+  service_details?: ServiceData;
+  form_version?: number;
   status: RequestStatus;
   created_at: string;
   updated_at: string;
@@ -47,6 +50,8 @@ export type RequestPayload = {
   budget: number | null;
   currency: string;
   description: string | null;
+  service_details?: ServiceData;
+  form_version?: number;
 };
 
 export type ListRequestOptions = {

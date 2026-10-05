@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useSyncExternalStore } from "react";
 
 export type UiLocale = "uz" | "ru";
 export type UiTheme = "light" | "dark";
@@ -19,36 +19,53 @@ type UiSettingsContextValue = {
 
 const UiSettingsContext = createContext<UiSettingsContextValue | null>(null);
 
+const SETTINGS_EVENT = "my-agent-air:settings";
+const memorySettings: Record<string, string> = {};
+function readSetting(key: string) {
+  if (memorySettings[key] !== undefined) return memorySettings[key];
+  try { return window.localStorage.getItem(key); }
+  catch { return memorySettings[key]; }
+}
+function writeSetting(key: string, value: string) {
+  memorySettings[key] = value;
+  try { window.localStorage.setItem(key, value); } catch { /* Settings still work when storage is unavailable. */ }
+  window.dispatchEvent(new Event(SETTINGS_EVENT));
+}
+function subscribeSettings(notify: () => void) {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key) delete memorySettings[event.key];
+    else for (const key of Object.keys(memorySettings)) delete memorySettings[key];
+    notify();
+  };
+  window.addEventListener("storage", onStorage);
+  window.addEventListener(SETTINGS_EVENT, notify);
+  return () => { window.removeEventListener("storage", onStorage); window.removeEventListener(SETTINGS_EVENT, notify); };
+}
+const readLocale = (): UiLocale => readSetting(LOCALE_KEY) === "ru" ? "ru" : "uz";
+const readTheme = (): UiTheme => {
+  const stored = readSetting(THEME_KEY);
+  return stored === "dark" || stored === "light" ? stored : window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+};
+const serverLocale = (): UiLocale => "uz";
+const serverTheme = (): UiTheme => "light";
+
 export function UiSettingsProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocaleState] = useState<UiLocale>("uz");
-  const [theme, setThemeState] = useState<UiTheme>("light");
+  const locale = useSyncExternalStore(subscribeSettings, readLocale, serverLocale);
+  const theme = useSyncExternalStore(subscribeSettings, readTheme, serverTheme);
 
-  useEffect(() => {
-    const storedLocale = window.localStorage.getItem(LOCALE_KEY);
-    const storedTheme = window.localStorage.getItem(THEME_KEY);
-    if (storedLocale === "ru" || storedLocale === "uz") setLocaleState(storedLocale);
-    if (storedTheme === "dark" || storedTheme === "light") setThemeState(storedTheme);
-    else if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) setThemeState("dark");
-  }, []);
-
-  useEffect(() => {
-    document.documentElement.lang = locale;
-    window.localStorage.setItem(LOCALE_KEY, locale);
-  }, [locale]);
-
+  useEffect(() => { document.documentElement.lang = locale; }, [locale]);
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
     document.documentElement.dataset.theme = theme;
-    window.localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
 
   const value = useMemo<UiSettingsContextValue>(() => ({
     locale,
     theme,
     isRu: locale === "ru",
-    setLocale: (next) => setLocaleState(next),
-    setTheme: (next) => setThemeState(next),
-    toggleTheme: () => setThemeState((current) => current === "dark" ? "light" : "dark"),
+    setLocale: (next) => writeSetting(LOCALE_KEY, next),
+    setTheme: (next) => writeSetting(THEME_KEY, next),
+    toggleTheme: () => writeSetting(THEME_KEY, theme === "dark" ? "light" : "dark"),
   }), [locale, theme]);
 
   return <UiSettingsContext.Provider value={value}>{children}</UiSettingsContext.Provider>;

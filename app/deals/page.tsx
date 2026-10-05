@@ -1,5 +1,7 @@
 "use client";
 
+import { requestTitle } from "@/lib/service-request";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import AppShell from "@/app/dashboard/components/app-shell";
@@ -37,7 +39,7 @@ function DealCard({ deal, userId }: { deal: DealRecord; userId: string }) {
   const isBuyer = deal.buyer_id === userId;
   return <Link href={`/deals/${deal.id}`} className="block rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-100 sm:p-6">
     <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
-      <div><p className="text-lg font-semibold text-[#0b1f3a]">{deal.request?.origin || "—"} <span className="px-1 text-blue-400">→</span> {deal.request?.destination || "—"}</p><p className="mt-1 text-sm text-slate-500">{deal.request?.category || "Kategoriya ko‘rsatilmagan"} · {formatDate(deal.request?.travel_date || null)}</p></div>
+      <div><p className="text-lg font-semibold text-[#0b1f3a]">{requestTitle(deal.request || {})}</p><p className="mt-1 text-sm text-slate-500">{deal.request?.category || "Kategoriya ko‘rsatilmagan"} · {formatDate(deal.request?.travel_date || null)}</p></div>
       <span className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${statusClasses[deal.status]}`}>{statusLabels[deal.status]}</span>
     </div>
     <div className="mt-5 grid gap-4 border-t border-slate-100 pt-4 sm:grid-cols-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Kelishilgan narx</p><p className="mt-1 font-semibold text-[#0b1f3a]">{formatPrice(deal.agreed_price, deal.currency)}</p></div><div><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{isBuyer ? "Sotuvchi" : "Xaridor"}</p><p className="mt-1 text-sm font-medium text-slate-700">{(isBuyer ? deal.seller?.full_name : deal.buyer?.full_name) || "Profil ko‘rsatilmagan"}</p></div><div><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Sizning rolingiz</p><p className="mt-1 text-sm font-medium text-slate-700">{isBuyer ? "Xaridor" : "Sotuvchi"}</p></div></div>

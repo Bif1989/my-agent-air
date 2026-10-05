@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useUiSettings } from "@/lib/ui-settings";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import AppShell from "@/app/dashboard/components/app-shell";
@@ -9,6 +10,7 @@ import { getRequest, updateRequest, type RequestRecord } from "@/app/requests/re
 import { getStoredSession, type AuthSession } from "@/lib/supabase-auth";
 
 export default function EditRequestPage() {
+  const { isRu } = useUiSettings();
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const [session, setSession] = useState<AuthSession | null>(null);
@@ -40,8 +42,8 @@ export default function EditRequestPage() {
       const updated = await updateRequest(params.id, payload);
       if (!updated) throw new Error("So‘rov yangilanmadi.");
       router.push(`/requests/${params.id}`);
-    } catch {
-      throw new Error("So‘rovni yangilab bo‘lmadi. Ma’lumotlarni tekshirib, qayta urinib ko‘ring.");
+    } catch (error) {
+      throw error instanceof Error ? error : new Error(isRu ? "Не удалось обновить запрос. Проверьте данные." : "So‘rovni yangilab bo‘lmadi. Ma’lumotlarni tekshirib, qayta urinib ko‘ring.");
     }
   }
 
@@ -49,7 +51,7 @@ export default function EditRequestPage() {
     <AppShell session={session} activePath="/requests">
       {isLoading && <div className="flex min-h-[60vh] items-center justify-center text-sm text-slate-500">So‘rov yuklanmoqda...</div>}
       {error && <p role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">{error}</p>}
-      {request && <div className="mx-auto max-w-4xl"><Link href={`/requests/${request.id}`} className="text-sm font-semibold text-blue-600 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">← So‘rov tafsilotlariga qaytish</Link><header className="mt-7"><p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-600">So‘rovni boshqarish</p><h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#0b1f3a]">So‘rovni tahrirlash</h1><p className="mt-2 text-sm text-slate-500">So‘rov identifikatori va yaratuvchi ma’lumotlari o‘zgarmaydi.</p></header><section className="mt-8 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8"><RequestForm key={request.id} initialValues={request} submitLabel="O‘zgarishlarni saqlash" submittingLabel="Saqlanmoqda..." onSubmit={handleUpdate} /></section></div>}
+      {request && <div className="mx-auto max-w-4xl"><Link href={`/requests/${request.id}`} className="text-sm font-semibold text-blue-600 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">← So‘rov tafsilotlariga qaytish</Link><header className="mt-7"><p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-600">So‘rovni boshqarish</p><h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#0b1f3a]">{isRu ? "Редактировать запрос" : "So‘rovni tahrirlash"}</h1><p className="mt-2 text-sm text-slate-500">So‘rov identifikatori va yaratuvchi ma’lumotlari o‘zgarmaydi.</p></header><section className="mt-8 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8"><RequestForm key={request.id} initialValues={request} submitLabel={isRu ? "Сохранить изменения" : "O‘zgarishlarni saqlash"} submittingLabel={isRu ? "Сохранение..." : "Saqlanmoqda..."} onSubmit={handleUpdate} /></section></div>}
     </AppShell>
   );
 }

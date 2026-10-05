@@ -3,6 +3,7 @@ import { normalizeAirportSearch } from "@/lib/aviation-assist";
 import { tashkentDate } from "@/lib/request-freshness";
 import { detectDomesticDestinations, isUzbekistanDomesticTourism } from "@/lib/uzbekistan-tourism";
 import type { RequestPayload } from "@/app/requests/requests-api";
+import { hydrateServiceRequest, isCalendarDate, sanitizeServiceData } from "@/lib/service-request";
 
 export const REQUEST_CATEGORIES = ["Aviachipta", "Tur paket", "Mehmonxona", "Transfer", "Gid", "Viza", "Boshqa"];
 export type AssistantDraft = Partial<RequestPayload>;
@@ -235,17 +236,18 @@ export function parseRequestDrafts(text: string, previous: AssistantDraft = {}, 
 }
 
 export function readRequestDraft(value: string | null): AssistantDraft | undefined {
-  if (!value || value.length > 6000) return;
+  if (!value || value.length > 16000) return;
   try {
     const input = JSON.parse(value);
     if (!input || typeof input !== "object" || Array.isArray(input)) return;
     const output: AssistantDraft = {};
     if (REQUEST_CATEGORIES.includes(input.category)) output.category = input.category;
     for (const key of ["origin", "destination", "baggage", "description"] as const) if (typeof input[key] === "string") output[key] = input[key].slice(0, key === "description" ? 1000 : 120);
-    if (typeof input.travel_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.travel_date)) output.travel_date = input.travel_date;
+    if (isCalendarDate(input.travel_date)) output.travel_date = input.travel_date;
     if (["USD", "UZS", "EUR", "RUB"].includes(input.currency)) output.currency = input.currency;
     for (const key of ["adults", "children", "infants"] as const) if (Number.isInteger(input[key]) && input[key] >= (key === "adults" ? 1 : 0) && input[key] <= 500) output[key] = input[key];
     if (typeof input.budget === "number" && Number.isFinite(input.budget) && input.budget >= 0) output.budget = input.budget;
-    return output;
+    if (input.service_details && output.category) output.service_details = sanitizeServiceData(output.category, input.service_details);
+    return input.service_details || input.description?.includes("Xizmat tafsilotlari:") ? hydrateServiceRequest(output) : output;
   } catch { return; }
 }

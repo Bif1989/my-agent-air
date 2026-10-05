@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { stageRequestDraft } from "@/lib/request-draft-storage";
 import { useEffect, useRef, useState } from "react";
 import { parseRequestDrafts, type AssistantDraft } from "@/lib/request-assistant";
 import { parseDomesticItineraryRequests } from "@/lib/domestic-itinerary-parser";
-import { joinServiceDetails } from "@/lib/request-details";
+import { aiErrorMessage } from "@/lib/ai-error-message";
+import { aiRequestToDraft } from "@/lib/ai-request-draft";
 import { AiResponseText } from "@/app/dashboard/components/ai-response-text";
 import { domesticTourAdvice, isUzbekistanDomesticTourism } from "@/lib/uzbekistan-tourism";
 import {
@@ -39,12 +42,11 @@ type AiStructuredRequest = {
   vehicle: string;
   language: string;
   missing: string[];
+  service_details?: Record<string, string>;
 };
 type AiResponse = { message?: string; action?: AiActionKey; code?: string; requests?: AiStructuredRequest[] };
 
 const categoryRu: Record<string, string> = { Aviachipta: "Авиабилет", "Tur paket": "Турпакет", Mehmonxona: "Отель", Transfer: "Трансфер", Gid: "Гид", Viza: "Виза", Boshqa: "Другое" };
-const validCategories = new Set(["Aviachipta", "Tur paket", "Mehmonxona", "Transfer", "Gid", "Viza", "Boshqa"]);
-const validCurrencies = new Set(["USD", "UZS", "EUR", "RUB"]);
 
 function actionMap(isRu: boolean): Record<Exclude<AiActionKey, "none">, AiHistoryAction> {
   return {
@@ -89,33 +91,6 @@ function formatDraftLabel(draft: AssistantDraft, isRu: boolean) {
   return [category, route, date].filter(Boolean).join(" · ");
 }
 
-function aiRequestToDraft(item: AiStructuredRequest): AssistantDraft | null {
-  if (!item || !validCategories.has(item.category)) return null;
-  const adults = Number.isFinite(item.adults) ? Math.min(500, Math.max(1, Math.round(item.adults))) : 1;
-  const children = Number.isFinite(item.children) ? Math.min(500, Math.max(0, Math.round(item.children))) : 0;
-  const infants = Number.isFinite(item.infants) ? Math.min(500, Math.max(0, Math.round(item.infants))) : 0;
-  const budget = Number.isFinite(item.budget) && item.budget > 0 ? item.budget : null;
-  const currency = validCurrencies.has(item.currency) ? item.currency : "USD";
-  const description = joinServiceDetails(item.description || "", item.category, {
-    rooms: item.rooms || "",
-    nights: item.nights || "",
-    vehicle: item.vehicle || "",
-    language: item.language || "",
-  });
-  return {
-    category: item.category,
-    origin: item.origin?.trim() || null,
-    destination: item.destination?.trim() || null,
-    travel_date: /^20\d{2}-\d{2}-\d{2}$/.test(item.travel_date || "") ? item.travel_date : null,
-    adults,
-    children,
-    infants,
-    baggage: item.baggage?.trim() || null,
-    budget,
-    currency,
-    description: description.trim() || null,
-  };
-}
 
 function draftFromActionHref(href: string) {
   if (!href.startsWith("/requests/new?")) return null;
@@ -161,6 +136,7 @@ function isDefaultConversationTitle(title: string) {
 }
 
 export default function AiCommandCenter({ session, displayName, stats }: { session: AuthSession; displayName: string; stats: DashboardStats }) {
+  const router = useRouter();
   const { isRu, locale } = useUiSettings();
   const actions = actionMap(isRu);
   const greeting: ChatEntry = { id: "greeting", sender: "assistant", text: isRu ? `${displayName || "Партнёр"}, здравствуйте. Начните одну задачу или тур в этом чате. Я буду помнить весь текущий диалог. Для другой задачи нажмите «Новый чат».` : `${displayName || "Hamkor"}, salom. Shu chatda bitta masala yoki tur paketini boshlang. Men shu chat tarixini eslab davom ettiraman. Boshqa masala uchun “Yangi chat” bosing.` };
@@ -216,7 +192,6 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
   useEffect(() => {
     if (!activeConversationId) return;
     let active = true;
-    setHistoryReady(false);
     listAiChatHistory(session, activeConversationId).then((rows) => {
       if (!active) return;
       setEntries(rows.length ? rows.map((row) => ({ id: row.id, sender: row.role, text: row.content, actions: row.actions })) : [greeting]);
@@ -227,10 +202,6 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConversationId]);
 
-  useEffect(() => {
-    setEntries((current) => current.length === 1 && current[0]?.id === "greeting" ? [greeting] : current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locale]);
 
   useEffect(() => {
     if (!historyReady) return;
@@ -243,6 +214,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
     try {
       const created = await createAiConversation(session, isRu ? "Новый чат" : "Yangi chat");
       setConversations((current) => [created, ...current]);
+      setHistoryReady(false);
       setActiveConversationId(created.id);
       setEntries([greeting]);
       setInput("");
@@ -253,14 +225,23 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
   }
 
   function openConversation(id: string) {
+    if (busy) return;
     if (id === activeConversationId) { setThreadsOpen(false); return; }
     setInput("");
+    setHistoryReady(false);
     setActiveConversationId(id);
     setThreadsOpen(false);
   }
 
+  function openRequestDraft(action: AiHistoryAction) {
+    const draft = draftFromActionHref(action.href);
+    if (!draft) return;
+    try { router.push(stageRequestDraft(draft, session.user.id, window.sessionStorage)); }
+    catch { setThreadError(isRu ? "Не удалось открыть черновик. Разрешите хранение данных сайта и попробуйте снова." : "Qoralamani ochib bo‘lmadi. Brauzerda sayt ma’lumotlarini saqlashga ruxsat bering va qayta urining."); }
+  }
+
   function appendEntry(conversationId: string, sender: "user" | "assistant", text: string, entryActions: AiHistoryAction[] = []) {
-    const entry: ChatEntry = { id: `${Date.now()}-${++sequence.current}`, sender, text, actions: entryActions };
+    const entry: ChatEntry = { id: `local-${++sequence.current}`, sender, text, actions: entryActions };
     setEntries((current) => [...current.filter((item) => item.id !== "greeting"), entry].slice(-80));
     void saveAiChatMessage(session, conversationId, sender, text, entryActions).catch(() => undefined);
     return entry;
@@ -276,7 +257,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
 
   async function send(message?: string) {
     const text = (message ?? input).trim();
-    if (!text || busy) return;
+    if (!text || busy || !historyReady) return;
     setBusy(true);
     setInput("");
 
@@ -336,9 +317,9 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
       const data = (await response.json().catch(() => ({}))) as AiResponse;
       if (!response.ok) {
         if (!hasPriorUserMessage && travelTurn && appendLocalTravelFallback()) return;
-        const fallback = data.code === "AI_NOT_CONFIGURED"
+        const fallback = aiErrorMessage(data.code, isRu) || (data.code === "AI_NOT_CONFIGURED"
           ? (isRu ? "AI-модель ещё не подключена на сервере. История этого чата сохранена и продолжит работать после подключения модели." : "AI modeli hali serverga ulanmagan. Bu chat tarixi saqlandi va model ulangach shu yerdan davom etadi.")
-          : (isRu ? "Временная ошибка подключения к AI. История чата сохранена — повторите сообщение позже." : "AI xizmatiga ulanishda vaqtinchalik xatolik. Chat tarixi saqlandi — keyinroq qayta yuboring.");
+          : (isRu ? "Временная ошибка подключения к AI. История чата сохранена — повторите сообщение позже." : "AI xizmatiga ulanishda vaqtinchalik xatolik. Chat tarixi saqlandi — keyinroq qayta yuboring."));
         appendEntry(conversationId, "assistant", fallback);
         return;
       }
@@ -440,8 +421,8 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
                 <div key={entry.id} className={`flex gap-3 ${entry.sender === "user" ? "justify-end" : "justify-start"}`}>
                   {entry.sender === "assistant" && <div className="mt-1 hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-[11px] font-bold text-white sm:flex">AI</div>}
                   <div className={entry.sender === "user" ? "max-w-[90%] sm:max-w-[78%]" : "max-w-[96%] sm:max-w-[84%]"}>
-                    <div className={`whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[13px] leading-5 sm:px-4 sm:py-3 sm:text-sm sm:leading-6 ${entry.sender === "user" ? "bg-[#0b1f3a] text-white shadow-sm" : "border border-blue-100 bg-blue-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"}`}>{entry.sender === "assistant" ? <AiResponseText text={entry.text} isRu={isRu} /> : entry.text}</div>
-                    {Boolean(entry.actions?.length) && <div className="mt-2 flex flex-wrap gap-2">{entry.actions?.map((entryAction) => <Link key={`${entry.id}-${entryAction.href}`} href={entryAction.href} className="inline-flex rounded-xl bg-blue-600 px-3 py-2 text-[11px] font-semibold text-white shadow-sm transition hover:bg-blue-700 sm:px-4 sm:text-xs">{entryAction.label} →</Link>)}</div>}
+                    <div className={`whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[13px] leading-5 sm:px-4 sm:py-3 sm:text-sm sm:leading-6 ${entry.sender === "user" ? "bg-[#0b1f3a] text-white shadow-sm" : "border border-blue-100 bg-blue-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"}`}>{entry.sender === "assistant" ? <AiResponseText text={entry.id === "greeting" ? greeting.text : entry.text} isRu={isRu} /> : entry.text}</div>
+                    {Boolean(entry.actions?.length) && <div className="mt-2 flex flex-wrap gap-2">{entry.actions?.map((entryAction) => <span key={`${entry.id}-${entryAction.href}`}>{entryAction.href.startsWith("/requests/new?draft=") ? <button type="button" onClick={() => openRequestDraft(entryAction)} className="inline-flex rounded-xl bg-blue-600 px-3 py-2 text-[11px] font-semibold text-white shadow-sm transition hover:bg-blue-700 sm:px-4 sm:text-xs">{entryAction.label} →</button> : <Link href={entryAction.href} className="inline-flex rounded-xl bg-blue-600 px-3 py-2 text-[11px] font-semibold text-white shadow-sm transition hover:bg-blue-700 sm:px-4 sm:text-xs">{entryAction.label} →</Link>}</span>)}</div>}
                   </div>
                 </div>
               ))}
