@@ -1,6 +1,7 @@
 import { AIRPORTS } from "@/data/airports";
 import { normalizeAirportSearch } from "@/lib/aviation-assist";
 import { tashkentDate } from "@/lib/request-freshness";
+import { detectDomesticDestinations, isUzbekistanDomesticTourism } from "@/lib/uzbekistan-tourism";
 import type { RequestPayload } from "@/app/requests/requests-api";
 
 export const REQUEST_CATEGORIES = ["Aviachipta", "Tur paket", "Mehmonxona", "Transfer", "Gid", "Viza", "Boshqa"];
@@ -92,8 +93,12 @@ function splitRequestSegments(text: string) {
 
   const lines = clean.split(/\n+/).map((item) => item.replace(/^\s*\d+[.)-]\s*/, "").trim()).filter(Boolean);
   if (lines.length > 1) {
-    const requestLines = lines.filter((line) => ROUTE_CODE_PATTERN.test(line) || detectRequestCategories(line).length);
-    ROUTE_CODE_PATTERN.lastIndex = 0;
+    const requestLines = lines.filter((line) => {
+      ROUTE_CODE_PATTERN.lastIndex = 0;
+      const hasRoute = ROUTE_CODE_PATTERN.test(line);
+      ROUTE_CODE_PATTERN.lastIndex = 0;
+      return hasRoute || detectRequestCategories(line).length > 0 || isUzbekistanDomesticTourism(line);
+    });
     if (requestLines.length >= 2 && requestLines.length === lines.length) return lines.slice(0, 12);
   }
 
@@ -132,29 +137,54 @@ export function parseRequestDraft(text: string, previous: AssistantDraft = {}, n
   const normalized = normalizeAirportSearch(text.replace(/[–—→]/g, "-"));
   const draft: AssistantDraft = { adults: 1, children: 0, infants: 0, currency: "USD", ...previous };
   const notes: string[] = [];
+  const domestic = detectDomesticDestinations(text);
 
   if (!draft.category) {
     const category = detectRequestCategories(text)[0];
     if (category) draft.category = category;
+    else if (domestic.length) draft.category = "Tur paket";
   }
 
-  const locations: { index: number; city: string; value: string }[] = [];
+  const locations: { index: number; city: string; role: "from" | "to" | "" }[] = [];
   for (const airport of AIRPORTS) {
     for (const alias of [airport.code, airport.city, ...(airport.aliases || [])]) {
       const value = normalizeAirportSearch(alias);
       if (!value) continue;
-      const match = new RegExp(`(?:^|[\\s-])(${escapeRegex(value)})(?:dan|ga|gacha)?(?=$|[\\s-])`).exec(normalized);
-      if (match) locations.push({ index: match.index, city: airport.city, value: airport.city });
+      const match = new RegExp(`(?:^|[\\s,;:-])(${escapeRegex(value)})(dan|ga|gacha)?(?=$|[\\s,;:.-])`).exec(normalized);
+      if (!match) continue;
+      const ending = (match[2] || "").toLowerCase();
+      const role = ending === "dan" ? "from" : ending === "ga" || ending === "gacha" ? "to" : "";
+      locations.push({ index: match.index, city: airport.city, role });
     }
   }
+  for (const item of domestic) locations.push({ index: item.index, city: item.destination.name, role: item.suffix });
+
   const unique = locations.sort((a, b) => a.index - b.index).filter((item, index, items) => items.findIndex((other) => other.city === item.city) === index);
   if (unique.length > 2) notes.push("Bir nechta yo‘nalish topildi. Alohida so‘rovlar sifatida yozish uchun ularni nuqtali vergul bilan ajrating.");
-  if (unique.length >= 2) { draft.origin = unique[0].value; draft.destination = unique[1].value; }
-  else if (unique.length === 1) {
-    if (!draft.origin) draft.origin = unique[0].value;
-    else if (!draft.destination && unique[0].value !== draft.origin) draft.destination = unique[0].value;
+
+  const explicitFrom = unique.find((item) => item.role === "from");
+  const explicitTo = unique.find((item) => item.role === "to");
+  if (explicitFrom) draft.origin = explicitFrom.city;
+  if (explicitTo) draft.destination = explicitTo.city;
+
+  if (!explicitFrom && !explicitTo && unique.length >= 2) {
+    draft.origin = unique[0].city;
+    draft.destination = unique[1].city;
+  } else if (unique.length === 1) {
+    const only = unique[0];
+    if (only.role === "from") draft.origin = only.city;
+    else if (only.role === "to" || (domestic.length && draft.category !== "Aviachipta")) draft.destination = only.city;
+    else if (!draft.origin) draft.origin = only.city;
+  } else {
+    if (!draft.origin) {
+      const fallbackOrigin = unique.find((item) => item.city !== draft.destination);
+      if (fallbackOrigin && fallbackOrigin.role !== "to") draft.origin = fallbackOrigin.city;
+    }
+    if (!draft.destination) {
+      const fallbackDestination = unique.find((item) => item.city !== draft.origin);
+      if (fallbackDestination && fallbackDestination.role !== "from") draft.destination = fallbackDestination.city;
+    }
   }
-  if (!draft.category && unique.length >= 2) draft.category = "Aviachipta";
 
   const parsedDate = parseTravelDate(text, normalized, now);
   if (parsedDate.invalid) notes.push("Sana noto‘g‘ri. Kun va oyni tekshiring.");
@@ -179,7 +209,7 @@ export function parseRequestDraft(text: string, previous: AssistantDraft = {}, n
   if (baggage) draft.baggage = `${baggage[1]} kg`;
 
   draft.description = [previous.description, text.trim()].filter(Boolean).join("\n").slice(-700);
-  const missing = [!draft.category && "xizmat turi", !draft.origin && "qayerdan / shahar", !draft.destination && draft.category === "Aviachipta" && "qayerga", !draft.travel_date && "sana"].filter(Boolean);
+  const missing = [!draft.category && "xizmat turi", !draft.origin && "qayerdan / shahar", !draft.destination && (draft.category === "Aviachipta" || draft.category === "Tur paket") && "qayerga", !draft.travel_date && "sana"].filter(Boolean);
   return { draft, notes, missing };
 }
 
@@ -204,7 +234,6 @@ export function parseRequestDrafts(text: string, previous: AssistantDraft = {}, 
   return results;
 }
 
-// URL input is reconstructed from allowed fields before becoming a request payload.
 export function readRequestDraft(value: string | null): AssistantDraft | undefined {
   if (!value || value.length > 6000) return;
   try {
