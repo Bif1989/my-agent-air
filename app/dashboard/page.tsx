@@ -43,15 +43,15 @@ export default function DashboardPage() {
       {isLoading && <div className="flex min-h-[70vh] items-center justify-center text-sm text-slate-500">AI boshqaruv markazi yuklanmoqda...</div>}
       {error && <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">{error}</div>}
       {data && session && (
-        <div className="flex min-h-[calc(100dvh-9rem)] flex-col">
-          <header className="mb-4 flex flex-wrap items-center justify-between gap-3 px-1">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-600">AI boshqaruv markazi</p>
-              <h1 className="mt-1 text-xl font-semibold tracking-tight text-[#0b1f3a] sm:text-2xl">Xush kelibsiz, {displayName}</h1>
+        <div className="flex min-h-[calc(100dvh-7rem)] flex-col lg:min-h-[calc(100dvh-9rem)]">
+          <header className="mb-2 flex items-center justify-between gap-2 px-1 sm:mb-4 sm:flex-wrap sm:gap-3">
+            <div className="min-w-0">
+              <p className="hidden text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-600 sm:block">AI boshqaruv markazi</p>
+              <h1 className="truncate text-lg font-semibold tracking-tight text-[#0b1f3a] sm:mt-1 sm:text-2xl"><span className="sm:hidden">Salom, </span><span className="hidden sm:inline">Xush kelibsiz, </span>{displayName}</h1>
             </div>
-            <div className="flex gap-2">
-              <Link href="/requests/new" className="rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 sm:text-sm">+ So‘rov</Link>
-              <Link href="/profile" className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-[#0b1f3a] transition hover:border-blue-300 sm:text-sm">Profil</Link>
+            <div className="flex shrink-0 gap-2">
+              <Link href="/requests/new" className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 sm:px-4 sm:py-2.5 sm:text-sm">+ So‘rov</Link>
+              <Link href="/profile" className="hidden rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-[#0b1f3a] transition hover:border-blue-300 sm:inline-flex sm:text-sm">Profil</Link>
             </div>
           </header>
 
