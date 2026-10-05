@@ -284,19 +284,25 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
   const historyList = (
     <div className="space-y-1.5">
       {conversations.map((conversation) => (
-        <button key={conversation.id} type="button" onClick={() => openConversation(conversation.id)} className={`w-full rounded-xl px-3 py-2.5 text-left transition ${conversation.id === activeConversationId ? "bg-blue-600 text-white" : "bg-slate-50 text-slate-700 hover:bg-blue-50 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"}`}>
-          <p className="truncate text-xs font-semibold">{conversation.title}</p>
-          <p className={`mt-1 text-[10px] ${conversation.id === activeConversationId ? "text-blue-100" : "text-slate-400"}`}>{new Intl.DateTimeFormat(isRu ? "ru-RU" : "uz-UZ", { day: "2-digit", month: "short" }).format(new Date(conversation.updated_at))}</p>
+        <button key={conversation.id} type="button" onClick={() => openConversation(conversation.id)} className={`w-full rounded-xl px-2.5 py-2 text-left transition ${conversation.id === activeConversationId ? "bg-blue-600 text-white" : "bg-slate-50 text-slate-700 hover:bg-blue-50 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"}`}>
+          <p className="truncate text-[11px] font-semibold">{conversation.title}</p>
+          <p className={`mt-0.5 text-[9px] ${conversation.id === activeConversationId ? "text-blue-100" : "text-slate-400"}`}>{new Intl.DateTimeFormat(isRu ? "ru-RU" : "uz-UZ", { day: "2-digit", month: "short" }).format(new Date(conversation.updated_at))}</p>
         </button>
       ))}
     </div>
   );
 
   return (
-    <section className="grid h-full min-h-0 gap-3 xl:min-h-[620px] xl:grid-cols-[minmax(0,1fr)_220px]">
-      <div className="relative flex h-[calc(100dvh-8.25rem)] min-h-[430px] max-h-[760px] flex-col overflow-hidden rounded-[22px] border-2 border-blue-200 bg-white shadow-[0_20px_70px_rgba(37,99,235,0.16)] dark:border-blue-900 dark:bg-slate-950 xl:h-auto xl:min-h-[620px] xl:rounded-[28px]">
+    <section className="grid h-full min-h-0 gap-3 md:grid-cols-[170px_minmax(0,1fr)] md:min-h-[620px]">
+      <aside className="hidden min-h-[620px] flex-col rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:flex">
+        <button type="button" onClick={() => void startNewConversation()} className="rounded-xl bg-blue-600 px-2.5 py-2.5 text-[11px] font-semibold text-white hover:bg-blue-700">+ {isRu ? "Новый чат" : "Yangi chat"}</button>
+        <p className="mb-2 mt-3 px-1 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{isRu ? "ИСТОРИЯ" : "TARIX"}</p>
+        <div className="min-h-0 flex-1 overflow-y-auto">{historyList}</div>
+      </aside>
+
+      <div className="relative flex h-[calc(100dvh-8.25rem)] min-h-[430px] max-h-[760px] flex-col overflow-hidden rounded-[22px] border-2 border-blue-200 bg-white shadow-[0_20px_70px_rgba(37,99,235,0.16)] dark:border-blue-900 dark:bg-slate-950 md:h-auto md:min-h-[620px] md:rounded-[28px]">
         {threadsOpen && (
-          <div className="absolute inset-0 z-30 flex bg-slate-950/35" onClick={() => setThreadsOpen(false)}>
+          <div className="absolute inset-0 z-30 flex bg-slate-950/35 md:hidden" onClick={() => setThreadsOpen(false)}>
             <aside className="flex h-full w-[min(92%,320px)] flex-col bg-white p-3 shadow-2xl dark:bg-slate-950" onClick={(event) => event.stopPropagation()}>
               <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
                 <div>
@@ -320,9 +326,16 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <button type="button" onClick={() => setThreadsOpen(true)} className="rounded-lg bg-white/15 px-2.5 py-1.5 text-[10px] font-semibold ring-1 ring-white/20 hover:bg-white/25">{isRu ? "История" : "Tarix"}</button>
+            <button type="button" onClick={() => setThreadsOpen(true)} className="rounded-lg bg-white/15 px-2.5 py-1.5 text-[10px] font-semibold ring-1 ring-white/20 hover:bg-white/25 md:hidden">{isRu ? "История" : "Tarix"}</button>
             <button type="button" onClick={() => void startNewConversation()} className="rounded-lg bg-white px-2.5 py-1.5 text-[10px] font-bold text-blue-700">+ {isRu ? "Новый" : "Yangi"}</button>
           </div>
+        </div>
+
+        <div className="hidden shrink-0 grid-cols-4 divide-x divide-slate-100 border-b border-slate-100 bg-white text-center dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900 sm:grid">
+          <Link href="/requests" className="px-2 py-1.5 text-[9px] text-slate-500 hover:bg-blue-50 dark:text-slate-400 dark:hover:bg-slate-800"><span>{isRu ? "Запросы" : "So‘rov"}</span><strong className="ml-1 text-[11px] text-blue-600 dark:text-blue-300">{stats.openRequests}</strong></Link>
+          <Link href="/requests" className="px-2 py-1.5 text-[9px] text-slate-500 hover:bg-amber-50 dark:text-slate-400 dark:hover:bg-slate-800"><span>{isRu ? "Предложения" : "Taklif"}</span><strong className="ml-1 text-[11px] text-amber-600 dark:text-amber-300">{stats.offers}</strong></Link>
+          <Link href="/deals" className="px-2 py-1.5 text-[9px] text-slate-500 hover:bg-emerald-50 dark:text-slate-400 dark:hover:bg-slate-800"><span>{isRu ? "Сделки" : "Bitim"}</span><strong className="ml-1 text-[11px] text-emerald-600 dark:text-emerald-300">{stats.deals}</strong></Link>
+          <Link href="/agents" className="px-2 py-1.5 text-[9px] text-slate-500 hover:bg-violet-50 dark:text-slate-400 dark:hover:bg-slate-800"><span>{isRu ? "Агенты" : "Agent"}</span><strong className="ml-1 text-[11px] text-violet-600 dark:text-violet-300">{stats.agents}</strong></Link>
         </div>
 
         {threadError && <div className="border-b border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{threadError}</div>}
@@ -344,7 +357,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
               <div ref={bottomRef} />
             </div>}
 
-            {historyReady && entries.length === 1 && entries[0]?.id === "greeting" && <div className="mt-auto pt-3 sm:pt-5 xl:pt-8"><p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-400">{isRu ? "БЫСТРЫЙ СТАРТ" : "Tez boshlash"}</p><div className="grid grid-cols-2 gap-2">{quickPrompts.map((item, index) => <button key={item.prompt} type="button" onClick={() => void send(item.prompt)} className={`min-h-12 rounded-xl border p-2 text-left transition sm:min-h-0 sm:rounded-2xl sm:p-3 ${index === 0 ? "border-blue-200 bg-blue-50 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950/40" : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"}`}><p className="text-[11px] font-semibold text-[#0b1f3a] dark:text-slate-100 sm:text-xs">{item.title}</p><p className="mt-1 hidden text-[11px] leading-4 text-slate-400 sm:block">{item.detail}</p></button>)}</div></div>}
+            {historyReady && entries.length === 1 && entries[0]?.id === "greeting" && <div className="mt-auto pt-3 sm:pt-5 md:pt-8"><p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-400">{isRu ? "БЫСТРЫЙ СТАРТ" : "Tez boshlash"}</p><div className="grid grid-cols-2 gap-2">{quickPrompts.map((item, index) => <button key={item.prompt} type="button" onClick={() => void send(item.prompt)} className={`min-h-12 rounded-xl border p-2 text-left transition sm:min-h-0 sm:rounded-2xl sm:p-3 ${index === 0 ? "border-blue-200 bg-blue-50 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950/40" : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"}`}><p className="text-[11px] font-semibold text-[#0b1f3a] dark:text-slate-100 sm:text-xs">{item.title}</p><p className="mt-1 hidden text-[11px] leading-4 text-slate-400 sm:block">{item.detail}</p></button>)}</div></div>}
           </div>
         </div>
 
@@ -353,25 +366,9 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
             <textarea aria-label={isRu ? "Напишите AI-помощнику" : "AI yordamchiga yozing"} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} rows={1} maxLength={1500} placeholder={entries.some((entry) => entry.sender === "user") ? (isRu ? "Продолжите текущую задачу: измените, уточните или дополните…" : "Joriy masalani davom ettiring: o‘zgartiring, aniqlik kiriting…") : (isRu ? "Опишите одну задачу или турпакет…" : "Bitta masala yoki tur paketini yozing…")} className="w-full resize-none bg-transparent px-3 py-2 text-sm text-[#0b1f3a] outline-none placeholder:text-blue-300 dark:text-slate-100 sm:py-2.5" />
             <div className="flex items-center justify-end px-1.5 pb-1 sm:justify-between sm:px-2"><p className="hidden text-[11px] text-slate-400 sm:block">{isRu ? "Этот чат помнит текущую задачу · Новый чат — новая задача" : "Bu chat joriy masalani eslaydi · Yangi chat — yangi masala"}</p><button type="submit" disabled={busy || !input.trim() || !historyReady} className="flex h-8 min-w-8 items-center justify-center rounded-xl bg-blue-600 px-3 text-[11px] font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40 sm:h-9 sm:px-4 sm:text-xs">{isRu ? "Отправить" : "Yuborish"}</button></div>
           </form>
+          <p className="mx-auto mt-1.5 hidden max-w-3xl text-center text-[9px] text-blue-400 md:block">{isRu ? "AI внутреннего туризма разделяет сложный маршрут на отдельные запросы по транспорту и услугам в городах." : "Ichki turizm AI murakkab marshrutni transport va shaharma-shahar xizmat so‘rovlariga ajratadi."}</p>
         </div>
       </div>
-
-      <aside className="hidden space-y-2.5 xl:block">
-        <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{isRu ? "ТЕКУЩЕЕ СОСТОЯНИЕ" : "Joriy holat"}</p>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <Link href="/requests" className="rounded-xl bg-blue-50 p-2.5 dark:bg-blue-950/40"><p className="text-[10px] text-blue-500">{isRu ? "Запросы" : "So‘rov"}</p><p className="mt-0.5 text-lg font-semibold text-[#0b1f3a] dark:text-slate-100">{stats.openRequests}</p></Link>
-            <Link href="/deals" className="rounded-xl bg-emerald-50 p-2.5 dark:bg-emerald-950/30"><p className="text-[10px] text-emerald-600">{isRu ? "Сделки" : "Bitim"}</p><p className="mt-0.5 text-lg font-semibold text-[#0b1f3a] dark:text-slate-100">{stats.deals}</p></Link>
-            <Link href="/agents" className="rounded-xl bg-violet-50 p-2.5 dark:bg-violet-950/30"><p className="text-[10px] text-violet-600">{isRu ? "Агенты" : "Agent"}</p><p className="mt-0.5 text-lg font-semibold text-[#0b1f3a] dark:text-slate-100">{stats.agents}</p></Link>
-            <Link href="/requests" className="rounded-xl bg-amber-50 p-2.5 dark:bg-amber-950/30"><p className="text-[10px] text-amber-600">{isRu ? "Предложения" : "Taklif"}</p><p className="mt-0.5 text-lg font-semibold text-[#0b1f3a] dark:text-slate-100">{stats.offers}</p></Link>
-          </div>
-        </section>
-        <section className="rounded-2xl border border-blue-100 bg-blue-50/80 p-3 dark:border-blue-900 dark:bg-blue-950/30">
-          <h2 className="text-[11px] font-semibold text-blue-900 dark:text-blue-100">{isRu ? "AI внутреннего туризма" : "Ichki turizm AI"}</h2>
-          <p className="mt-1.5 text-[10px] leading-4 text-blue-700 dark:text-blue-200">{isRu ? "Разделяет сложный маршрут на транспорт и отдельные запросы по услугам в каждом городе." : "Murakkab marshrutni transport va shaharma-shahar xizmat so‘rovlariga ajratadi."}</p>
-          <button type="button" onClick={() => setThreadsOpen(true)} className="mt-3 w-full rounded-xl border border-blue-200 bg-white px-3 py-2 text-[10px] font-semibold text-blue-700 transition hover:bg-blue-100 dark:border-blue-800 dark:bg-slate-900 dark:text-blue-200 dark:hover:bg-slate-800">{isRu ? "История AI-чатов" : "AI chatlar tarixi"}</button>
-        </section>
-      </aside>
     </section>
   );
 }
