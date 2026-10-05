@@ -137,9 +137,9 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
   }
 
   return (
-    <section className="grid h-full min-h-[620px] gap-4 xl:grid-cols-[minmax(0,1fr)_250px]">
-      <div className="flex min-h-[620px] flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.07)]">
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3.5 sm:px-6">
+    <section className="grid h-full min-h-[520px] gap-4 xl:min-h-[620px] xl:grid-cols-[minmax(0,1fr)_250px]">
+      <div className="flex min-h-[520px] flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.07)] xl:min-h-[620px]">
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-6">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0b1f3a] text-sm font-bold text-white">AI</div>
             <div>
@@ -150,7 +150,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
           <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700">Faol</span>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-3 py-5 sm:px-6 sm:py-7" aria-live="polite">
+        <div className="flex-1 overflow-y-auto px-3 py-4 sm:px-6 sm:py-5 xl:py-7" aria-live="polite">
           <div className="mx-auto flex min-h-full max-w-3xl flex-col">
             <div className="space-y-5">
               {entries.map((entry) => (
@@ -177,13 +177,13 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
             </div>
 
             {entries.length === 1 && (
-              <div className="mt-auto pt-8">
-                <p className="mb-3 text-center text-xs font-medium text-slate-400">Tez boshlash</p>
-                <div className="grid gap-2 sm:grid-cols-2">
+              <div className="mt-auto pt-4 xl:pt-8">
+                <p className="mb-2 text-center text-xs font-medium text-slate-400">Tez boshlash</p>
+                <div className="grid grid-cols-2 gap-2">
                   {quickPrompts.map((item) => (
-                    <button key={item.prompt} type="button" onClick={() => void send(item.prompt)} className="rounded-2xl border border-slate-200 bg-white p-3 text-left transition hover:border-blue-300 hover:bg-blue-50/50">
+                    <button key={item.prompt} type="button" onClick={() => void send(item.prompt)} className="rounded-2xl border border-slate-200 bg-white p-2.5 text-left transition hover:border-blue-300 hover:bg-blue-50/50 sm:p-3">
                       <p className="text-xs font-semibold text-[#0b1f3a]">{item.title}</p>
-                      <p className="mt-1 text-[11px] leading-4 text-slate-400">{item.detail}</p>
+                      <p className="mt-1 hidden text-[11px] leading-4 text-slate-400 sm:block">{item.detail}</p>
                     </button>
                   ))}
                 </div>
@@ -192,7 +192,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
           </div>
         </div>
 
-        <div className="border-t border-slate-100 bg-white/95 px-3 pb-3 pt-3 backdrop-blur sm:px-6 sm:pb-5">
+        <div className="border-t border-slate-100 bg-white/95 px-3 pb-3 pt-3 backdrop-blur sm:px-6 sm:pb-4">
           <form onSubmit={(event) => { event.preventDefault(); void send(); }} className="mx-auto max-w-3xl rounded-[26px] border border-slate-200 bg-slate-50 p-2 shadow-sm transition focus-within:border-blue-300 focus-within:bg-white focus-within:shadow-md">
             <textarea
               aria-label="AI yordamchiga yozing"
@@ -207,7 +207,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
               rows={2}
               maxLength={1500}
               placeholder="Nima qilmoqchisiz? Masalan: TAS–IST 10 oktabr, 2 kishi, 23 kg…"
-              className="w-full resize-none bg-transparent px-3 py-2.5 text-sm text-[#0b1f3a] outline-none placeholder:text-slate-400"
+              className="w-full resize-none bg-transparent px-3 py-2 text-sm text-[#0b1f3a] outline-none placeholder:text-slate-400"
             />
             <div className="flex items-center justify-between gap-3 px-2 pb-1">
               <p className="hidden text-[11px] text-slate-400 sm:block">Enter — yuborish · Shift+Enter — yangi qator</p>
@@ -217,7 +217,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
               </button>
             </div>
           </form>
-          <p className="mx-auto mt-2 max-w-3xl text-center text-[10px] text-slate-400">Muhim amallar bajarilishidan oldin tasdiq so‘raladi.</p>
+          <p className="mx-auto mt-1.5 max-w-3xl text-center text-[10px] text-slate-400">Muhim amallar bajarilishidan oldin tasdiq so‘raladi.</p>
         </div>
       </div>
 
