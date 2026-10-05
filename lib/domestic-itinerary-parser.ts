@@ -62,8 +62,8 @@ function hotelScore(segment: string) {
   return score;
 }
 
-function addDays(date: string | undefined, days: number) {
-  if (!date || !days) return date;
+function addDays(date: string | null | undefined, days: number) {
+  if (!date || !days) return date || undefined;
   const parsed = new Date(`${date}T00:00:00Z`);
   parsed.setUTCDate(parsed.getUTCDate() + days);
   return parsed.toISOString().slice(0, 10);
