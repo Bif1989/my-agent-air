@@ -73,7 +73,7 @@ export default function RequestForm({ initialValues, submitLabel, submittingLabe
     try {
       await onSubmit({ category, origin: origin.trim() || null, destination: destination.trim() || null, travel_date: travelDate || null, adults: adultsNumber, children: childrenNumber, infants: infantsNumber, baggage: isAirTravel ? baggage.trim() || null : null, budget: budgetNumber, currency, description: fullDescription || null });
     } catch (submitError) {
-      throw submitError instanceof Error ? submitError : new Error(isRu ? "Не удалось сохранить запрос." : "So‘rovni saqlashda xatolik yuz berdi.");
+      setError(submitError instanceof Error ? submitError.message : (isRu ? "Не удалось сохранить запрос." : "So‘rovni saqlashda xatolik yuz berdi."));
     } finally { setIsSubmitting(false); }
   }
 
