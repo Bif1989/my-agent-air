@@ -224,8 +224,6 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
         void renameAiConversation(session, conversationId, title).catch(() => undefined);
       }
 
-      // Fast local parsing is only used for the first turn. After that, every follow-up
-      // goes through the AI together with this thread's history so edits stay contextual.
       if (!hasPriorUserMessage && looksLikeTravelRequest(text)) {
         const itineraryDrafts = parseDomesticItineraryRequests(text);
         const parsedDrafts = (itineraryDrafts.length ? itineraryDrafts : parseRequestDrafts(text)).filter((item) => item.draft.category || item.draft.origin || item.draft.destination);
@@ -295,30 +293,41 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
   );
 
   return (
-    <section className="grid h-full min-h-0 gap-3 xl:min-h-[620px] xl:grid-cols-[220px_minmax(0,1fr)]">
-      <aside className="hidden min-h-[620px] flex-col rounded-2xl border border-slate-200 bg-white p-3 shadow-sm xl:flex">
-        <button type="button" onClick={() => void startNewConversation()} className="rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-semibold text-white hover:bg-blue-700">+ {isRu ? "Новый чат" : "Yangi chat"}</button>
-        <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
-          <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{isRu ? "ИСТОРИЯ" : "TARIX"}</p>
-          {historyList}
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 text-center">
-          <Link href="/requests" className="rounded-xl bg-blue-50 p-2"><p className="text-[9px] text-blue-500">{isRu ? "Запросы" : "So‘rov"}</p><p className="text-sm font-semibold text-[#0b1f3a]">{stats.openRequests}</p></Link>
-          <Link href="/deals" className="rounded-xl bg-emerald-50 p-2"><p className="text-[9px] text-emerald-600">{isRu ? "Сделки" : "Bitim"}</p><p className="text-sm font-semibold text-[#0b1f3a]">{stats.deals}</p></Link>
-        </div>
-      </aside>
-
-      <div className="relative flex h-[calc(100dvh-8.25rem)] min-h-[430px] max-h-[760px] flex-col overflow-hidden rounded-[22px] border-2 border-blue-200 bg-white shadow-[0_20px_70px_rgba(37,99,235,0.16)] xl:h-auto xl:min-h-[620px] xl:rounded-[28px]">
-        {threadsOpen && <div className="absolute inset-0 z-30 flex flex-col bg-white p-3 dark:bg-slate-950 xl:hidden"><div className="flex items-center justify-between border-b border-slate-200 pb-3"><div><p className="text-sm font-semibold text-[#0b1f3a]">{isRu ? "История AI" : "AI chatlar tarixi"}</p><p className="mt-0.5 text-[10px] text-slate-400">{isRu ? "Каждая задача хранится отдельно" : "Har bir masala alohida saqlanadi"}</p></div><button type="button" onClick={() => setThreadsOpen(false)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600">✕</button></div><button type="button" onClick={() => void startNewConversation()} className="mt-3 rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-semibold text-white">+ {isRu ? "Новый чат" : "Yangi chat"}</button><div className="mt-3 min-h-0 flex-1 overflow-y-auto">{historyList}</div></div>}
+    <section className="grid h-full min-h-0 gap-3 xl:min-h-[620px] xl:grid-cols-[minmax(0,1fr)_220px]">
+      <div className="relative flex h-[calc(100dvh-8.25rem)] min-h-[430px] max-h-[760px] flex-col overflow-hidden rounded-[22px] border-2 border-blue-200 bg-white shadow-[0_20px_70px_rgba(37,99,235,0.16)] dark:border-blue-900 dark:bg-slate-950 xl:h-auto xl:min-h-[620px] xl:rounded-[28px]">
+        {threadsOpen && (
+          <div className="absolute inset-0 z-30 flex bg-slate-950/35" onClick={() => setThreadsOpen(false)}>
+            <aside className="flex h-full w-[min(92%,320px)] flex-col bg-white p-3 shadow-2xl dark:bg-slate-950" onClick={(event) => event.stopPropagation()}>
+              <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
+                <div>
+                  <p className="text-sm font-semibold text-[#0b1f3a] dark:text-slate-100">{isRu ? "История AI" : "AI chatlar tarixi"}</p>
+                  <p className="mt-0.5 text-[10px] text-slate-400">{isRu ? "Каждая задача хранится отдельно" : "Har bir masala alohida saqlanadi"}</p>
+                </div>
+                <button type="button" onClick={() => setThreadsOpen(false)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300">✕</button>
+              </div>
+              <button type="button" onClick={() => void startNewConversation()} className="mt-3 rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-semibold text-white hover:bg-blue-700">+ {isRu ? "Новый чат" : "Yangi chat"}</button>
+              <div className="mt-3 min-h-0 flex-1 overflow-y-auto">{historyList}</div>
+            </aside>
+          </div>
+        )}
 
         <div className="flex shrink-0 items-center justify-between gap-2 bg-gradient-to-r from-blue-600 to-cyan-500 px-3 py-2.5 text-white sm:px-5 sm:py-3">
-          <div className="flex min-w-0 items-center gap-2.5"><div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/20 text-xs font-bold ring-1 ring-white/30 sm:h-9 sm:w-9 sm:text-sm">AI</div><div className="min-w-0"><p className="text-sm font-semibold">My Agent Air AI</p><p className="truncate text-[10px] text-blue-50 sm:text-[11px]">{activeConversation?.title || (isRu ? "Новый чат" : "Yangi chat")}</p></div></div>
-          <div className="flex shrink-0 items-center gap-1.5"><button type="button" onClick={() => setThreadsOpen(true)} className="rounded-lg bg-white/15 px-2.5 py-1.5 text-[10px] font-semibold ring-1 ring-white/20 xl:hidden">{isRu ? "История" : "Tarix"}</button><button type="button" onClick={() => void startNewConversation()} className="rounded-lg bg-white px-2.5 py-1.5 text-[10px] font-bold text-blue-700">+ {isRu ? "Новый" : "Yangi"}</button></div>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/20 text-xs font-bold ring-1 ring-white/30 sm:h-9 sm:w-9 sm:text-sm">AI</div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">My Agent Air AI</p>
+              <p className="truncate text-[10px] text-blue-50 sm:text-[11px]">{activeConversation?.title || (isRu ? "Новый чат" : "Yangi chat")}</p>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button type="button" onClick={() => setThreadsOpen(true)} className="rounded-lg bg-white/15 px-2.5 py-1.5 text-[10px] font-semibold ring-1 ring-white/20 hover:bg-white/25">{isRu ? "История" : "Tarix"}</button>
+            <button type="button" onClick={() => void startNewConversation()} className="rounded-lg bg-white px-2.5 py-1.5 text-[10px] font-bold text-blue-700">+ {isRu ? "Новый" : "Yangi"}</button>
+          </div>
         </div>
 
         {threadError && <div className="border-b border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{threadError}</div>}
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-blue-50/40 via-white to-white px-3 py-3 sm:px-5 sm:py-5" aria-live="polite">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-blue-50/40 via-white to-white px-3 py-3 dark:from-slate-900 dark:via-slate-950 dark:to-slate-950 sm:px-5 sm:py-5" aria-live="polite">
           <div className="mx-auto flex min-h-full max-w-3xl flex-col">
             {!historyReady && activeConversationId && <div className="flex min-h-32 items-center justify-center text-xs text-slate-400">{isRu ? "Загрузка истории чата..." : "Chat tarixi yuklanmoqda..."}</div>}
             {historyReady && <div className="space-y-3 sm:space-y-5">
@@ -326,26 +335,43 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
                 <div key={entry.id} className={`flex gap-3 ${entry.sender === "user" ? "justify-end" : "justify-start"}`}>
                   {entry.sender === "assistant" && <div className="mt-1 hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-[11px] font-bold text-white sm:flex">AI</div>}
                   <div className={entry.sender === "user" ? "max-w-[90%] sm:max-w-[78%]" : "max-w-[96%] sm:max-w-[84%]"}>
-                    <div className={`whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[13px] leading-5 sm:px-4 sm:py-3 sm:text-sm sm:leading-6 ${entry.sender === "user" ? "bg-[#0b1f3a] text-white shadow-sm" : "border border-blue-100 bg-blue-50 text-slate-700"}`}>{entry.text}</div>
+                    <div className={`whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[13px] leading-5 sm:px-4 sm:py-3 sm:text-sm sm:leading-6 ${entry.sender === "user" ? "bg-[#0b1f3a] text-white shadow-sm" : "border border-blue-100 bg-blue-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"}`}>{entry.text}</div>
                     {Boolean(entry.actions?.length) && <div className="mt-2 flex flex-wrap gap-2">{entry.actions?.map((entryAction) => <Link key={`${entry.id}-${entryAction.href}`} href={entryAction.href} className="inline-flex rounded-xl bg-blue-600 px-3 py-2 text-[11px] font-semibold text-white shadow-sm transition hover:bg-blue-700 sm:px-4 sm:text-xs">{entryAction.label} →</Link>)}</div>}
                   </div>
                 </div>
               ))}
-              {busy && <div className="flex items-center gap-3"><div className="hidden h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-[11px] font-bold text-white sm:flex">AI</div><div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">{isRu ? "AI продолжает текущую тему…" : "AI joriy mavzuni davom ettiryapti…"}</div></div>}
+              {busy && <div className="flex items-center gap-3"><div className="hidden h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-[11px] font-bold text-white sm:flex">AI</div><div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700 dark:border-slate-700 dark:bg-slate-800 dark:text-blue-200">{isRu ? "AI продолжает текущую тему…" : "AI joriy mavzuni davom ettiryapti…"}</div></div>}
               <div ref={bottomRef} />
             </div>}
 
-            {historyReady && entries.length === 1 && entries[0]?.id === "greeting" && <div className="mt-auto pt-3 sm:pt-5 xl:pt-8"><p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-400">{isRu ? "БЫСТРЫЙ СТАРТ" : "Tez boshlash"}</p><div className="grid grid-cols-2 gap-2">{quickPrompts.map((item, index) => <button key={item.prompt} type="button" onClick={() => void send(item.prompt)} className={`min-h-12 rounded-xl border p-2 text-left transition sm:min-h-0 sm:rounded-2xl sm:p-3 ${index === 0 ? "border-blue-200 bg-blue-50 hover:bg-blue-100" : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/50"}`}><p className="text-[11px] font-semibold text-[#0b1f3a] sm:text-xs">{item.title}</p><p className="mt-1 hidden text-[11px] leading-4 text-slate-400 sm:block">{item.detail}</p></button>)}</div></div>}
+            {historyReady && entries.length === 1 && entries[0]?.id === "greeting" && <div className="mt-auto pt-3 sm:pt-5 xl:pt-8"><p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-400">{isRu ? "БЫСТРЫЙ СТАРТ" : "Tez boshlash"}</p><div className="grid grid-cols-2 gap-2">{quickPrompts.map((item, index) => <button key={item.prompt} type="button" onClick={() => void send(item.prompt)} className={`min-h-12 rounded-xl border p-2 text-left transition sm:min-h-0 sm:rounded-2xl sm:p-3 ${index === 0 ? "border-blue-200 bg-blue-50 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950/40" : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"}`}><p className="text-[11px] font-semibold text-[#0b1f3a] dark:text-slate-100 sm:text-xs">{item.title}</p><p className="mt-1 hidden text-[11px] leading-4 text-slate-400 sm:block">{item.detail}</p></button>)}</div></div>}
           </div>
         </div>
 
-        <div className="shrink-0 border-t border-blue-100 bg-blue-50/80 px-2.5 pb-2.5 pt-2.5 backdrop-blur sm:px-5 sm:pb-4 sm:pt-3">
-          <form onSubmit={(event) => { event.preventDefault(); void send(); }} className="mx-auto max-w-3xl rounded-[22px] border-2 border-blue-300 bg-white p-1.5 shadow-[0_8px_30px_rgba(37,99,235,0.12)] transition focus-within:border-blue-500 focus-within:shadow-[0_10px_35px_rgba(37,99,235,0.2)] sm:rounded-[26px] sm:p-2">
-            <textarea aria-label={isRu ? "Напишите AI-помощнику" : "AI yordamchiga yozing"} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} rows={1} maxLength={1500} placeholder={entries.some((entry) => entry.sender === "user") ? (isRu ? "Продолжите текущую задачу: измените, уточните или дополните…" : "Joriy masalani davom ettiring: o‘zgartiring, aniqlik kiriting…") : (isRu ? "Опишите одну задачу или турпакет…" : "Bitta masala yoki tur paketini yozing…")} className="w-full resize-none bg-transparent px-3 py-2 text-sm text-[#0b1f3a] outline-none placeholder:text-blue-300 sm:py-2.5" />
+        <div className="shrink-0 border-t border-blue-100 bg-blue-50/80 px-2.5 pb-2.5 pt-2.5 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90 sm:px-5 sm:pb-4 sm:pt-3">
+          <form onSubmit={(event) => { event.preventDefault(); void send(); }} className="mx-auto max-w-3xl rounded-[22px] border-2 border-blue-300 bg-white p-1.5 shadow-[0_8px_30px_rgba(37,99,235,0.12)] transition focus-within:border-blue-500 focus-within:shadow-[0_10px_35px_rgba(37,99,235,0.2)] dark:border-slate-700 dark:bg-slate-950 sm:rounded-[26px] sm:p-2">
+            <textarea aria-label={isRu ? "Напишите AI-помощнику" : "AI yordamchiga yozing"} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} rows={1} maxLength={1500} placeholder={entries.some((entry) => entry.sender === "user") ? (isRu ? "Продолжите текущую задачу: измените, уточните или дополните…" : "Joriy masalani davom ettiring: o‘zgartiring, aniqlik kiriting…") : (isRu ? "Опишите одну задачу или турпакет…" : "Bitta masala yoki tur paketini yozing…")} className="w-full resize-none bg-transparent px-3 py-2 text-sm text-[#0b1f3a] outline-none placeholder:text-blue-300 dark:text-slate-100 sm:py-2.5" />
             <div className="flex items-center justify-end px-1.5 pb-1 sm:justify-between sm:px-2"><p className="hidden text-[11px] text-slate-400 sm:block">{isRu ? "Этот чат помнит текущую задачу · Новый чат — новая задача" : "Bu chat joriy masalani eslaydi · Yangi chat — yangi masala"}</p><button type="submit" disabled={busy || !input.trim() || !historyReady} className="flex h-8 min-w-8 items-center justify-center rounded-xl bg-blue-600 px-3 text-[11px] font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40 sm:h-9 sm:px-4 sm:text-xs">{isRu ? "Отправить" : "Yuborish"}</button></div>
           </form>
         </div>
       </div>
+
+      <aside className="hidden space-y-2.5 xl:block">
+        <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{isRu ? "ТЕКУЩЕЕ СОСТОЯНИЕ" : "Joriy holat"}</p>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <Link href="/requests" className="rounded-xl bg-blue-50 p-2.5 dark:bg-blue-950/40"><p className="text-[10px] text-blue-500">{isRu ? "Запросы" : "So‘rov"}</p><p className="mt-0.5 text-lg font-semibold text-[#0b1f3a] dark:text-slate-100">{stats.openRequests}</p></Link>
+            <Link href="/deals" className="rounded-xl bg-emerald-50 p-2.5 dark:bg-emerald-950/30"><p className="text-[10px] text-emerald-600">{isRu ? "Сделки" : "Bitim"}</p><p className="mt-0.5 text-lg font-semibold text-[#0b1f3a] dark:text-slate-100">{stats.deals}</p></Link>
+            <Link href="/agents" className="rounded-xl bg-violet-50 p-2.5 dark:bg-violet-950/30"><p className="text-[10px] text-violet-600">{isRu ? "Агенты" : "Agent"}</p><p className="mt-0.5 text-lg font-semibold text-[#0b1f3a] dark:text-slate-100">{stats.agents}</p></Link>
+            <Link href="/requests" className="rounded-xl bg-amber-50 p-2.5 dark:bg-amber-950/30"><p className="text-[10px] text-amber-600">{isRu ? "Предложения" : "Taklif"}</p><p className="mt-0.5 text-lg font-semibold text-[#0b1f3a] dark:text-slate-100">{stats.offers}</p></Link>
+          </div>
+        </section>
+        <section className="rounded-2xl border border-blue-100 bg-blue-50/80 p-3 dark:border-blue-900 dark:bg-blue-950/30">
+          <h2 className="text-[11px] font-semibold text-blue-900 dark:text-blue-100">{isRu ? "AI внутреннего туризма" : "Ichki turizm AI"}</h2>
+          <p className="mt-1.5 text-[10px] leading-4 text-blue-700 dark:text-blue-200">{isRu ? "Разделяет сложный маршрут на транспорт и отдельные запросы по услугам в каждом городе." : "Murakkab marshrutni transport va shaharma-shahar xizmat so‘rovlariga ajratadi."}</p>
+          <button type="button" onClick={() => setThreadsOpen(true)} className="mt-3 w-full rounded-xl border border-blue-200 bg-white px-3 py-2 text-[10px] font-semibold text-blue-700 transition hover:bg-blue-100 dark:border-blue-800 dark:bg-slate-900 dark:text-blue-200 dark:hover:bg-slate-800">{isRu ? "История AI-чатов" : "AI chatlar tarixi"}</button>
+        </section>
+      </aside>
     </section>
   );
 }
