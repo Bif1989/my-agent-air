@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { parseRequestDrafts, type AssistantDraft } from "@/lib/request-assistant";
 import { parseDomesticItineraryRequests } from "@/lib/domestic-itinerary-parser";
 import { joinServiceDetails } from "@/lib/request-details";
+import { AiResponseText } from "@/app/dashboard/components/ai-response-text";
 import { domesticTourAdvice, isUzbekistanDomesticTourism } from "@/lib/uzbekistan-tourism";
 import {
   createAiConversation,
@@ -439,7 +440,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
                 <div key={entry.id} className={`flex gap-3 ${entry.sender === "user" ? "justify-end" : "justify-start"}`}>
                   {entry.sender === "assistant" && <div className="mt-1 hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-[11px] font-bold text-white sm:flex">AI</div>}
                   <div className={entry.sender === "user" ? "max-w-[90%] sm:max-w-[78%]" : "max-w-[96%] sm:max-w-[84%]"}>
-                    <div className={`whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[13px] leading-5 sm:px-4 sm:py-3 sm:text-sm sm:leading-6 ${entry.sender === "user" ? "bg-[#0b1f3a] text-white shadow-sm" : "border border-blue-100 bg-blue-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"}`}>{entry.text}</div>
+                    <div className={`whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[13px] leading-5 sm:px-4 sm:py-3 sm:text-sm sm:leading-6 ${entry.sender === "user" ? "bg-[#0b1f3a] text-white shadow-sm" : "border border-blue-100 bg-blue-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"}`}>{entry.sender === "assistant" ? <AiResponseText text={entry.text} isRu={isRu} /> : entry.text}</div>
                     {Boolean(entry.actions?.length) && <div className="mt-2 flex flex-wrap gap-2">{entry.actions?.map((entryAction) => <Link key={`${entry.id}-${entryAction.href}`} href={entryAction.href} className="inline-flex rounded-xl bg-blue-600 px-3 py-2 text-[11px] font-semibold text-white shadow-sm transition hover:bg-blue-700 sm:px-4 sm:text-xs">{entryAction.label} →</Link>)}</div>}
                   </div>
                 </div>
