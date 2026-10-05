@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { parseRequestDrafts } from "@/lib/request-assistant";
+import { domesticTourAdvice, isUzbekistanDomesticTourism } from "@/lib/uzbekistan-tourism";
 import { listAiChatHistory, saveAiChatMessage, type AiHistoryAction } from "@/lib/ai-chat-history";
 import type { AuthSession } from "@/lib/supabase-auth";
 
@@ -22,7 +23,7 @@ const actionMap: Record<Exclude<AiActionKey, "none">, AiHistoryAction> = {
 };
 
 const quickPrompts = [
-  { title: "Yangi so‘rov", detail: "Bir yoki bir nechta so‘rov yozing", prompt: "TAS–IST 20 okt 2 kishi; TAS–DXB 25 okt 3 kishi" },
+  { title: "Ichki tur", detail: "Yo‘nalish + guruh + xizmatlar", prompt: "Chustdan Samarqandga 20 okt 20 kishi 2 kunlik sayohat" },
   { title: "Ochiq so‘rovlar", detail: "Hozirgi talablarni ko‘rish", prompt: "Ochiq so‘rovlarni ko‘rsat" },
   { title: "Agent topish", detail: "Mos hamkorni topishga yordam", prompt: "Agent topishga yordam ber" },
   { title: "Qanday ishlaydi?", detail: "So‘rovdan bitimgacha yo‘l", prompt: "So‘rovdan bitimgacha qanday ishlaydi?" },
@@ -46,13 +47,25 @@ function localAction(text: string): { text: string; action?: AiHistoryAction } |
 }
 
 function looksLikeTravelRequest(text: string) {
-  return /\b[A-Z]{3}\s*[-–—→]\s*[A-Z]{3}\b/i.test(text) || /(avia|chipta|bilet|mehmonxona|hotel|otel|transfer|gid|viza|visa|tur paket|turpaket|tour|авиа|чипта|билет|ме[ҳх]монхона|отель|трансфер|гид|виза|турпакет|тур пакет)/i.test(text);
+  const explicit = /\b[A-Z]{3}\s*[-–—→]\s*[A-Z]{3}\b/i.test(text) || /(avia|chipta|bilet|mehmonxona|hotel|otel|transfer|gid|viza|visa|tur paket|turpaket|tour|авиа|чипта|билет|ме[ҳх]монхона|отель|трансфер|гид|виза|турпакет|тур пакет)/i.test(text);
+  if (explicit) return true;
+  if (!isUzbekistanDomesticTourism(text)) return false;
+  return /(kerak|so['’`]?rov|tashkil|bormoqch|sayohat|tur\b|guruh|bron|buyurtma|olib bor|jo['’`]?nash|кетиш|саёхат|сафар|керак|гуру[ҳх]|\d+\s*(?:kishi|odam|kun|tun|киши|одам|кун|дн|ноч))/i.test(text);
 }
 
 function formatDraftLabel(draft: ReturnType<typeof parseRequestDrafts>[number]["draft"]) {
   const route = [draft.origin, draft.destination].filter(Boolean).join(" → ");
   const date = draft.travel_date ? draft.travel_date.split("-").reverse().join(".") : "";
   return [draft.category || "So‘rov", route, date].filter(Boolean).join(" · ");
+}
+
+function domesticAdviceSuffix(text: string) {
+  const advice = domesticTourAdvice(text);
+  if (!advice) return "";
+  const parts: string[] = [];
+  if (advice.attractions.length) parts.push(`Yo‘nalishda ko‘rib chiqish mumkin: ${advice.attractions.slice(0, 5).join(", ")}.`);
+  if (advice.reminders.length) parts.push(`Qo‘shimcha so‘rov yaratish mumkin: ${advice.reminders.join(", ")}.`);
+  return parts.length ? `\n\nIchki turizm tavsiyasi: ${parts.join(" ")}` : "";
 }
 
 function safeLocalEntries(value: string | null): ChatEntry[] {
@@ -72,7 +85,7 @@ function safeLocalEntries(value: string | null): ChatEntry[] {
 }
 
 export default function AiCommandCenter({ session, displayName, stats }: { session: AuthSession; displayName: string; stats: DashboardStats }) {
-  const greeting: ChatEntry = { id: "greeting", sender: "assistant", text: `${displayName || "Hamkor"}, salom. Men My Agent Air AI yordamchisiman. Nima kerakligini oddiy tilda yozing — bitta xabardan bir nechta alohida so‘rovni ham tayyorlay olaman.` };
+  const greeting: ChatEntry = { id: "greeting", sender: "assistant", text: `${displayName || "Hamkor"}, salom. Men My Agent Air AI yordamchisiman. O‘zbekiston bo‘ylab ichki turlarni ham tushunaman: yo‘nalish, gid, ovqatlanish, mehmonxona, transfer va diqqatga sazovor joylar bo‘yicha yordam beraman.` };
   const [entries, setEntries] = useState<ChatEntry[]>([greeting]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -126,9 +139,10 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
             href: `/requests/new?draft=${encodeURIComponent(JSON.stringify(draft))}`,
           }));
           const missing = Array.from(new Set(parsedDrafts.flatMap((item) => item.missing)));
+          const advice = domesticAdviceSuffix(text);
           const reply = parsedDrafts.length > 1
-            ? `${parsedDrafts.length} ta alohida so‘rov qoralamasi tayyorladim.${missing.length ? ` Yetishmayotgan ma’lumot: ${missing.join(", ")}.` : " Har birini alohida ochib tekshirib e’lon qilishingiz mumkin."}`
-            : `${parsedDrafts[0]?.draft.category || "So‘rov"} qoralamasi tayyor.${missing.length ? ` Aniqlashtirish kerak: ${missing.join(", ")}.` : " Formani ochib tekshiring va keyin e’lon qiling."}`;
+            ? `${parsedDrafts.length} ta alohida so‘rov qoralamasi tayyorladim.${missing.length ? ` Yetishmayotgan ma’lumot: ${missing.join(", ")}.` : " Har birini alohida ochib tekshirib e’lon qilishingiz mumkin."}${advice}`
+            : `${parsedDrafts[0]?.draft.category || "So‘rov"} qoralamasi tayyor.${missing.length ? ` Aniqlashtirish kerak: ${missing.join(", ")}.` : " Formani ochib tekshiring va keyin e’lon qiling."}${advice}`;
           appendEntry("assistant", reply, actions);
           return;
         }
@@ -217,7 +231,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
               onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }}
               rows={1}
               maxLength={1500}
-              placeholder="Masalan: TAS–IST 20 okt 2 kishi; TAS–DXB 25 okt 3 kishi"
+              placeholder="Masalan: Chustdan Samarqandga 20 okt 20 kishi 2 kun"
               className="w-full resize-none bg-transparent px-3 py-2 text-sm text-[#0b1f3a] outline-none placeholder:text-blue-300 sm:py-2.5"
             />
             <div className="flex items-center justify-end px-1.5 pb-1 sm:justify-between sm:px-2">
@@ -225,7 +239,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
               <button type="submit" disabled={busy || !input.trim()} className="flex h-8 min-w-8 items-center justify-center rounded-xl bg-blue-600 px-3 text-[11px] font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40 sm:h-9 sm:px-4 sm:text-xs">Yuborish</button>
             </div>
           </form>
-          <p className="mx-auto mt-1 max-w-3xl text-center text-[9px] text-blue-400 sm:text-[10px]">AI tarixi hisobingizda saqlanadi. Bir xabarda bir nechta so‘rov yozish mumkin.</p>
+          <p className="mx-auto mt-1 max-w-3xl text-center text-[9px] text-blue-400 sm:text-[10px]">Ichki turlarda AI gid, ovqatlanish, mehmonxona, transfer va kirish chiptalarini ham eslatadi.</p>
         </div>
       </div>
 
@@ -239,7 +253,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
             <Link href="/requests" className="rounded-xl bg-amber-50 p-2.5"><p className="text-[10px] text-amber-600">Taklif</p><p className="mt-0.5 text-lg font-semibold text-[#0b1f3a]">{stats.offers}</p></Link>
           </div>
         </section>
-        <section className="rounded-2xl border border-blue-100 bg-blue-50/80 p-3"><h2 className="text-[11px] font-semibold text-blue-900">AI markaz</h2><p className="mt-1.5 text-[10px] leading-4 text-blue-700">Bitta xabardan bir nechta alohida so‘rov tayyorlaydi, sanani kelajakdagi eng yaqin yilga qo‘yadi.</p></section>
+        <section className="rounded-2xl border border-blue-100 bg-blue-50/80 p-3"><h2 className="text-[11px] font-semibold text-blue-900">Ichki turizm AI</h2><p className="mt-1.5 text-[10px] leading-4 text-blue-700">O‘zbekiston bo‘ylab yo‘nalishlarni tushunadi va yetishmayotgan xizmatlarni o‘zi eslatadi.</p></section>
       </aside>
     </section>
   );
