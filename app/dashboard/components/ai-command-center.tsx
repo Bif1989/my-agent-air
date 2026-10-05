@@ -46,10 +46,10 @@ const actionMap: Record<Exclude<AiActionKey, "none">, { label: string; href: str
 };
 
 const quickPrompts = [
-  "Yangi aviachipta so‘rovi yaratmoqchiman",
-  "Ochiq so‘rovlarni ko‘rsat",
-  "Agent topishga yordam ber",
-  "So‘rovdan bitimgacha qanday ishlaydi?",
+  { title: "Yangi so‘rov", detail: "Aviachipta, tur, hotel yoki transfer", prompt: "Yangi aviachipta so‘rovi yaratmoqchiman" },
+  { title: "Ochiq so‘rovlar", detail: "Hozirgi talablarni ko‘rish", prompt: "Ochiq so‘rovlarni ko‘rsat" },
+  { title: "Agent topish", detail: "Mos hamkorni topishga yordam", prompt: "Agent topishga yordam ber" },
+  { title: "Qanday ishlaydi?", detail: "So‘rovdan bitimgacha yo‘l", prompt: "So‘rovdan bitimgacha qanday ishlaydi?" },
 ];
 
 function normalizeIntent(text: string) {
@@ -80,7 +80,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
     {
       id: 0,
       sender: "assistant",
-      text: `${displayName || "Hamkor"}, salom. Men My Agent Air AI yordamchisiman. So‘rov yaratish, agent topish, bitimlar, chat va platformadan foydalanishni bir joydan boshqarishga yordam beraman.`,
+      text: `${displayName || "Hamkor"}, salom. Men My Agent Air AI yordamchisiman. Nima qilmoqchi ekaningizni oddiy tilda yozing — kerakli bo‘limni topaman, so‘rov qoralamasini tayyorlayman va keyingi qadamni ko‘rsataman.`,
     },
   ]);
   const [input, setInput] = useState("");
@@ -137,87 +137,116 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
   }
 
   return (
-    <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
-      <div className="flex min-h-[calc(100dvh-190px)] flex-col overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-[0_22px_60px_rgba(15,23,42,0.08)] sm:min-h-[650px]">
-        <div className="border-b border-slate-100 px-4 py-4 sm:px-7">
-          <div className="flex items-center justify-between gap-4">
+    <section className="grid h-full min-h-[620px] gap-4 xl:grid-cols-[minmax(0,1fr)_250px]">
+      <div className="flex min-h-[620px] flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.07)]">
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3.5 sm:px-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0b1f3a] text-sm font-bold text-white">AI</div>
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">My Agent Air AI</p>
-              <p className="mt-1 text-sm text-slate-500">Platformani yozib boshqaring va kerakli ishni AI bilan boshlang.</p>
+              <p className="text-sm font-semibold text-[#0b1f3a]">My Agent Air AI</p>
+              <p className="text-[11px] text-slate-400">B2B travel boshqaruv yordamchisi</p>
             </div>
-            <span className="hidden rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 sm:inline-flex">AI markaz</span>
           </div>
+          <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700">Faol</span>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-3 py-5 sm:px-7" aria-live="polite">
-          <div className="mx-auto max-w-3xl space-y-5">
-            {entries.map((entry) => (
-              <div key={entry.id} className={entry.sender === "user" ? "ml-auto max-w-[88%] sm:max-w-[82%]" : "mr-auto max-w-[94%] sm:max-w-[88%]"}>
-                <div className={`whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-6 ${entry.sender === "user" ? "bg-[#0b1f3a] text-white" : "bg-slate-50 text-slate-700"}`}>
-                  {entry.text}
+        <div className="flex-1 overflow-y-auto px-3 py-5 sm:px-6 sm:py-7" aria-live="polite">
+          <div className="mx-auto flex min-h-full max-w-3xl flex-col">
+            <div className="space-y-5">
+              {entries.map((entry) => (
+                <div key={entry.id} className={`flex gap-3 ${entry.sender === "user" ? "justify-end" : "justify-start"}`}>
+                  {entry.sender === "assistant" && <div className="mt-1 hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-[11px] font-bold text-white sm:flex">AI</div>}
+                  <div className={entry.sender === "user" ? "max-w-[88%] sm:max-w-[78%]" : "max-w-[94%] sm:max-w-[84%]"}>
+                    <div className={`whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-6 ${entry.sender === "user" ? "bg-[#0b1f3a] text-white" : "bg-slate-50 text-slate-700"}`}>
+                      {entry.text}
+                    </div>
+                    {entry.action && (
+                      <Link href={entry.action.href} className="mt-2 inline-flex rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-700">
+                        {entry.action.label} →
+                      </Link>
+                    )}
+                  </div>
                 </div>
-                {entry.action && (
-                  <Link href={entry.action.href} className="mt-2 inline-flex rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-700">
-                    {entry.action.label} →
-                  </Link>
-                )}
+              ))}
+              {busy && (
+                <div className="flex items-center gap-3">
+                  <div className="hidden h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-[11px] font-bold text-white sm:flex">AI</div>
+                  <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-500">AI o‘ylayapti…</div>
+                </div>
+              )}
+            </div>
+
+            {entries.length === 1 && (
+              <div className="mt-auto pt-8">
+                <p className="mb-3 text-center text-xs font-medium text-slate-400">Tez boshlash</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {quickPrompts.map((item) => (
+                    <button key={item.prompt} type="button" onClick={() => void send(item.prompt)} className="rounded-2xl border border-slate-200 bg-white p-3 text-left transition hover:border-blue-300 hover:bg-blue-50/50">
+                      <p className="text-xs font-semibold text-[#0b1f3a]">{item.title}</p>
+                      <p className="mt-1 text-[11px] leading-4 text-slate-400">{item.detail}</p>
+                    </button>
+                  ))}
+                </div>
               </div>
-            ))}
-            {busy && <div className="mr-auto max-w-[88%] rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-500">AI o‘ylayapti…</div>}
+            )}
           </div>
         </div>
 
-        <div className="sticky bottom-0 border-t border-slate-100 bg-white/95 px-3 pb-4 pt-3 backdrop-blur sm:px-7 sm:pb-5">
-          <div className="mx-auto max-w-3xl">
-            <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
-              {quickPrompts.map((prompt) => (
-                <button key={prompt} type="button" onClick={() => void send(prompt)} className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition hover:border-blue-300 hover:text-blue-700">
-                  {prompt}
-                </button>
-              ))}
+        <div className="border-t border-slate-100 bg-white/95 px-3 pb-3 pt-3 backdrop-blur sm:px-6 sm:pb-5">
+          <form onSubmit={(event) => { event.preventDefault(); void send(); }} className="mx-auto max-w-3xl rounded-[26px] border border-slate-200 bg-slate-50 p-2 shadow-sm transition focus-within:border-blue-300 focus-within:bg-white focus-within:shadow-md">
+            <textarea
+              aria-label="AI yordamchiga yozing"
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  void send();
+                }
+              }}
+              rows={2}
+              maxLength={1500}
+              placeholder="Nima qilmoqchisiz? Masalan: TAS–IST 10 oktabr, 2 kishi, 23 kg…"
+              className="w-full resize-none bg-transparent px-3 py-2.5 text-sm text-[#0b1f3a] outline-none placeholder:text-slate-400"
+            />
+            <div className="flex items-center justify-between gap-3 px-2 pb-1">
+              <p className="hidden text-[11px] text-slate-400 sm:block">Enter — yuborish · Shift+Enter — yangi qator</p>
+              <span className="sm:hidden" />
+              <button type="submit" disabled={busy || !input.trim()} className="flex h-9 min-w-9 items-center justify-center rounded-xl bg-blue-600 px-4 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40">
+                Yuborish
+              </button>
             </div>
-            <form onSubmit={(event) => { event.preventDefault(); void send(); }} className="rounded-[22px] border border-slate-200 bg-slate-50 p-2 shadow-inner focus-within:border-blue-300 focus-within:bg-white">
-              <textarea
-                aria-label="AI yordamchiga yozing"
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    void send();
-                  }
-                }}
-                rows={2}
-                maxLength={1500}
-                placeholder="Masalan: TAS–IST 10 oktabr 2 kishi 23 kg, 500 USD yoki ‘bitimlarimni ko‘rsat’…"
-                className="w-full resize-none bg-transparent px-3 py-2 text-sm text-[#0b1f3a] outline-none placeholder:text-slate-400"
-              />
-              <div className="flex items-center justify-between gap-3 px-2 pb-1">
-                <p className="hidden text-[11px] text-slate-400 sm:block">Enter — yuborish · Shift+Enter — yangi qator</p>
-                <span className="sm:hidden" />
-                <button type="submit" disabled={busy || !input.trim()} className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
-                  Yuborish
-                </button>
-              </div>
-            </form>
-          </div>
+          </form>
+          <p className="mx-auto mt-2 max-w-3xl text-center text-[10px] text-slate-400">Muhim amallar bajarilishidan oldin tasdiq so‘raladi.</p>
         </div>
       </div>
 
-      <aside className="grid gap-4 sm:grid-cols-2 xl:block xl:space-y-4">
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Joriy holat</p>
-          <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-1">
-            <Link href="/requests" className="rounded-xl bg-slate-50 p-3 transition hover:bg-blue-50"><p className="text-xs text-slate-500">Ochiq so‘rovlar</p><p className="mt-1 text-2xl font-semibold text-[#0b1f3a]">{stats.openRequests}</p></Link>
-            <Link href="/deals" className="rounded-xl bg-slate-50 p-3 transition hover:bg-blue-50"><p className="text-xs text-slate-500">Faol bitimlar</p><p className="mt-1 text-2xl font-semibold text-[#0b1f3a]">{stats.deals}</p></Link>
-            <Link href="/agents" className="rounded-xl bg-slate-50 p-3 transition hover:bg-blue-50"><p className="text-xs text-slate-500">Agentlar</p><p className="mt-1 text-2xl font-semibold text-[#0b1f3a]">{stats.agents}</p></Link>
-            <Link href="/requests" className="rounded-xl bg-slate-50 p-3 transition hover:bg-blue-50"><p className="text-xs text-slate-500">Mening takliflarim</p><p className="mt-1 text-2xl font-semibold text-[#0b1f3a]">{stats.offers}</p></Link>
+      <aside className="grid gap-3 sm:grid-cols-2 xl:block xl:space-y-3">
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Joriy holat</p>
+            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 xl:grid-cols-1">
+            <Link href="/requests" className="rounded-xl bg-slate-50 p-3 transition hover:bg-blue-50"><p className="text-[11px] text-slate-500">Ochiq so‘rovlar</p><p className="mt-1 text-xl font-semibold text-[#0b1f3a]">{stats.openRequests}</p></Link>
+            <Link href="/deals" className="rounded-xl bg-slate-50 p-3 transition hover:bg-blue-50"><p className="text-[11px] text-slate-500">Faol bitimlar</p><p className="mt-1 text-xl font-semibold text-[#0b1f3a]">{stats.deals}</p></Link>
+            <Link href="/agents" className="rounded-xl bg-slate-50 p-3 transition hover:bg-blue-50"><p className="text-[11px] text-slate-500">Agentlar</p><p className="mt-1 text-xl font-semibold text-[#0b1f3a]">{stats.agents}</p></Link>
+            <Link href="/requests" className="rounded-xl bg-slate-50 p-3 transition hover:bg-blue-50"><p className="text-[11px] text-slate-500">Takliflarim</p><p className="mt-1 text-xl font-semibold text-[#0b1f3a]">{stats.offers}</p></Link>
           </div>
         </section>
 
-        <section className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
-          <h2 className="text-sm font-semibold text-blue-900">AI nimalarni qiladi?</h2>
-          <p className="mt-2 text-xs leading-5 text-blue-800">Yo‘nalishni tushuntiradi, so‘rov qoralamasini tayyorlaydi, kerakli bo‘limni ochadi va keyingi qadamni ko‘rsatadi. Ma’lumotni o‘zgartiradigan amallar foydalanuvchi tasdig‘idan keyin bajariladi.</p>
+        <section className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+          <h2 className="text-xs font-semibold text-blue-900">AI yordamchi nima qiladi?</h2>
+          <p className="mt-2 text-[11px] leading-5 text-blue-800">So‘rov tayyorlaydi, agent va bo‘limlarni topadi, bitim jarayonini tushuntiradi va keyingi qadamni ko‘rsatadi.</p>
+        </section>
+
+        <section className="hidden rounded-2xl border border-slate-200 bg-white p-4 xl:block">
+          <p className="text-[11px] font-semibold text-slate-500">Tez kirish</p>
+          <div className="mt-2 space-y-1">
+            <Link href="/requests" className="block rounded-lg px-2 py-2 text-xs text-slate-600 hover:bg-slate-50 hover:text-blue-700">So‘rovlar va takliflar →</Link>
+            <Link href="/messenger" className="block rounded-lg px-2 py-2 text-xs text-slate-600 hover:bg-slate-50 hover:text-blue-700">Chat →</Link>
+            <Link href="/feed" className="block rounded-lg px-2 py-2 text-xs text-slate-600 hover:bg-slate-50 hover:text-blue-700">Postlar →</Link>
+          </div>
         </section>
       </aside>
     </section>
