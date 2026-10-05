@@ -119,6 +119,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const activeConversation = conversations.find((item) => item.id === activeConversationId) || null;
+  const recentConversations = conversations.slice(0, 3);
 
   useEffect(() => {
     let active = true;
@@ -293,21 +294,15 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
   );
 
   return (
-    <section className="grid h-full min-h-0 gap-3 md:grid-cols-[170px_minmax(0,1fr)] md:min-h-[620px]">
-      <aside className="hidden min-h-[620px] flex-col rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:flex">
-        <button type="button" onClick={() => void startNewConversation()} className="rounded-xl bg-blue-600 px-2.5 py-2.5 text-[11px] font-semibold text-white hover:bg-blue-700">+ {isRu ? "Новый чат" : "Yangi chat"}</button>
-        <p className="mb-2 mt-3 px-1 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">{isRu ? "ИСТОРИЯ" : "TARIX"}</p>
-        <div className="min-h-0 flex-1 overflow-y-auto">{historyList}</div>
-      </aside>
-
+    <section className="h-full min-h-0 md:min-h-[620px]">
       <div className="relative flex h-[calc(100dvh-8.25rem)] min-h-[430px] max-h-[760px] flex-col overflow-hidden rounded-[22px] border-2 border-blue-200 bg-white shadow-[0_20px_70px_rgba(37,99,235,0.16)] dark:border-blue-900 dark:bg-slate-950 md:h-auto md:min-h-[620px] md:rounded-[28px]">
         {threadsOpen && (
-          <div className="absolute inset-0 z-30 flex bg-slate-950/35 md:hidden" onClick={() => setThreadsOpen(false)}>
-            <aside className="flex h-full w-[min(92%,320px)] flex-col bg-white p-3 shadow-2xl dark:bg-slate-950" onClick={(event) => event.stopPropagation()}>
+          <div className="absolute inset-0 z-30 flex bg-slate-950/35" onClick={() => setThreadsOpen(false)}>
+            <aside className="flex h-full w-[min(92%,340px)] flex-col bg-white p-3 shadow-2xl dark:bg-slate-950" onClick={(event) => event.stopPropagation()}>
               <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
                 <div>
                   <p className="text-sm font-semibold text-[#0b1f3a] dark:text-slate-100">{isRu ? "История AI" : "AI chatlar tarixi"}</p>
-                  <p className="mt-0.5 text-[10px] text-slate-400">{isRu ? "Каждая задача хранится отдельно" : "Har bir masala alohida saqlanadi"}</p>
+                  <p className="mt-0.5 text-[10px] text-slate-400">{isRu ? "Здесь сохранены все предыдущие задачи" : "Barcha oldingi masalalar shu yerda saqlanadi"}</p>
                 </div>
                 <button type="button" onClick={() => setThreadsOpen(false)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300">✕</button>
               </div>
@@ -326,10 +321,24 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <button type="button" onClick={() => setThreadsOpen(true)} className="rounded-lg bg-white/15 px-2.5 py-1.5 text-[10px] font-semibold ring-1 ring-white/20 hover:bg-white/25 md:hidden">{isRu ? "История" : "Tarix"}</button>
+            <button type="button" onClick={() => setThreadsOpen(true)} className="rounded-lg bg-white/15 px-2.5 py-1.5 text-[10px] font-semibold ring-1 ring-white/20 hover:bg-white/25">{isRu ? "История" : "Tarix"}{conversations.length > 3 ? ` +${conversations.length - 3}` : ""}</button>
             <button type="button" onClick={() => void startNewConversation()} className="rounded-lg bg-white px-2.5 py-1.5 text-[10px] font-bold text-blue-700">+ {isRu ? "Новый" : "Yangi"}</button>
           </div>
         </div>
+
+        {recentConversations.length > 0 && (
+          <div className="shrink-0 border-b border-slate-100 bg-white px-2.5 py-2 dark:border-slate-800 dark:bg-slate-900 sm:px-4">
+            <div className="flex items-center gap-1.5 overflow-x-auto">
+              <span className="shrink-0 px-1 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">{isRu ? "Недавние" : "Oxirgi"}</span>
+              {recentConversations.map((conversation) => (
+                <button key={conversation.id} type="button" onClick={() => openConversation(conversation.id)} title={conversation.title} className={`min-w-0 max-w-[190px] shrink rounded-lg border px-2.5 py-1.5 text-left transition sm:max-w-[240px] ${conversation.id === activeConversationId ? "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-200" : "border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-200 hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"}`}>
+                  <p className="truncate text-[10px] font-semibold">{conversation.title}</p>
+                </button>
+              ))}
+              {conversations.length > 3 && <button type="button" onClick={() => setThreadsOpen(true)} className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[10px] font-semibold text-slate-500 hover:border-blue-300 hover:text-blue-700 dark:border-slate-700 dark:text-slate-300">{isRu ? "Все" : "Barchasi"} →</button>}
+            </div>
+          </div>
+        )}
 
         <div className="hidden shrink-0 grid-cols-4 divide-x divide-slate-100 border-b border-slate-100 bg-white text-center dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900 sm:grid">
           <Link href="/requests" className="px-2 py-1.5 text-[9px] text-slate-500 hover:bg-blue-50 dark:text-slate-400 dark:hover:bg-slate-800"><span>{isRu ? "Запросы" : "So‘rov"}</span><strong className="ml-1 text-[11px] text-blue-600 dark:text-blue-300">{stats.openRequests}</strong></Link>
