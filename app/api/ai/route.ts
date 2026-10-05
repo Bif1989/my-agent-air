@@ -48,6 +48,16 @@ type OpenAiResponse = {
   output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
 };
 
+type ParsedAiReply = {
+  message?: string;
+  action?: AiAction;
+  requests?: Partial<AiRequestDraft>[];
+  clarifications?: string[];
+  notes?: string[];
+  suggestions?: string[];
+  warnings?: string[];
+};
+
 function extractOutputText(data: OpenAiResponse) {
   if (typeof data.output_text === "string" && data.output_text.trim()) return data.output_text.trim();
   for (const item of data.output || []) {
@@ -67,6 +77,31 @@ function sanitizeHistory(history: HistoryItem[] | undefined) {
       role: item.role as "user" | "assistant",
       content: String(item.content).trim().slice(0, 5000),
     }));
+}
+
+function sanitizeList(value: unknown, maxItems = 8) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, maxItems);
+}
+
+function composeStructuredMessage(base: string, parsed: ParsedAiReply, locale: "uz" | "ru") {
+  const sections: string[] = [];
+  const clarifications = sanitizeList(parsed.clarifications);
+  const notes = sanitizeList(parsed.notes);
+  const suggestions = sanitizeList(parsed.suggestions);
+  const warnings = sanitizeList(parsed.warnings);
+
+  if (clarifications.length) sections.push(`[[clarification]]${clarifications.map((item) => `• ${item}`).join("\n")}[[/clarification]]`);
+  if (notes.length) sections.push(`[[note]]${notes.map((item) => `• ${item}`).join("\n")}[[/note]]`);
+  if (suggestions.length) sections.push(`[[suggestion]]${suggestions.map((item) => `• ${item}`).join("\n")}[[/suggestion]]`);
+  if (warnings.length) sections.push(`[[warning]]${warnings.map((item) => `• ${item}`).join("\n")}[[/warning]]`);
+
+  const main = base.trim() || (locale === "ru" ? "Понял задачу." : "Vazifani tushundim.");
+  return sections.length ? `${main}\n\n${sections.join("\n\n")}` : main;
 }
 
 function sanitizeDraft(value: Partial<AiRequestDraft>): AiRequestDraft | null {
@@ -132,19 +167,26 @@ export async function POST(request: NextRequest) {
     "When the user changes one detail, preserve every other previously agreed detail unless it conflicts with the new instruction.",
     "Do not make the user repeat facts already present in the thread.",
     conversationTitle ? `Conversation title: ${conversationTitle}.` : "",
+    "Keep the main message concise and put auxiliary information into the dedicated arrays instead of mixing everything into one paragraph.",
+    "Use clarifications for facts the user must provide or confirm before a reliable supplier request can be finalized. Phrase each clarification as a concrete missing fact or short question, not as a vague warning.",
+    "Use notes for useful factual context, assumptions, calculations, or explanation of what the AI inferred. Notes are informative and do not necessarily require user action.",
+    "Use suggestions for optional add-ons or improvements such as guide, meals, restaurant, museum tickets, local transport, better route sequencing, or additional supplier requests. Suggestions must remain optional unless the user asked for them.",
+    "Use warnings only for actual risks, conflicts, invalid data, impossible dates, or situations where something should not be assumed. Do not overuse warnings.",
+    "Do not repeat the same point in message and in an auxiliary array. One point belongs in one place only.",
     "IMPORTANT REQUEST-DRAFT RULE: whenever the user asks to organize, find, request, quote, book, prepare or change concrete travel services, return structured request drafts in the requests array. Do not only explain in prose.",
     "Each independently quotable supplier need must be its own request draft. Multiple services in one message mean multiple drafts. The same service category in different cities also means separate drafts.",
     "Examples: transport + Samarkand hotel + Bukhara hotel = three drafts. Two hotels in two cities are two separate Mehmonxona drafts, not one. Air ticket + hotel + transfer = three drafts.",
     "Use category Transfer for minivan, minibus, bus, taxi, airport transfer and other ground transport requests.",
     "Use category Boshqa for restaurant/group meals, museum or attraction entrance tickets, and other supplier services that do not have a dedicated category.",
-    "Only create drafts for services the user actually requests or clearly asks you to add. You may recommend missing useful services such as guide, meals/restaurants, museum tickets and local transport in the message without silently adding them.",
+    "Only create drafts for services the user actually requests or clearly asks you to add. Put useful but unrequested services into suggestions instead of silently creating them.",
     "If the user explicitly says to prepare everything needed for a tour, you may also create sensible additional drafts, but clearly say which ones you added as recommendations.",
     "For each draft, fill every field you can infer. Unknown text fields must be an empty string, unknown budget must be 0, and unknown counts other than adults must be 0. Put genuinely missing required facts in the missing array instead of inventing them.",
+    "Every item in a request missing array that truly requires user confirmation should also appear once in clarifications, written in user-friendly language.",
     "For hotel drafts: destination is the hotel city; put breakfast/meal plan, star level, room preferences and per-person/per-room budget basis in description. Put nights in nights. Put room count in rooms only when stated or safely calculable; otherwise leave it empty and add it to missing.",
     "For ground transport drafts: put the full route in origin/destination and vehicle type in vehicle. A multi-stop itinerary may use a destination such as 'Samarqand → Buxoro' and describe the complete route in description.",
     "For guide drafts put the requested language in language when known.",
     "For budgets such as '250 ming so‘m' normalize the numeric budget to 250000 and currency to UZS. Preserve whether that budget is per person, per room, per night or total in description.",
-    "Use full city names in drafts even when the user types IATA codes or abbreviations. For example TAS= Toshkent, SKD=Samarqand, BHK=Buxoro, NMA=Namangan, IST=Istanbul, DXB=Dubai.",
+    "Use full city names in drafts even when the user types IATA codes or abbreviations. For example TAS=Toshkent, SKD=Samarqand, BHK=Buxoro, NMA=Namangan, IST=Istanbul, DXB=Dubai.",
     "Understand travel-agent shorthand, Uzbek Latin, Uzbek Cyrillic and Russian travel wording.",
     `Current Tashkent date is ${today}.`,
     "If the user gives a day and month without a year, never ask which year. Use the current year when that date is today or still ahead; if it already passed this year, use the next year.",
@@ -152,7 +194,7 @@ export async function POST(request: NextRequest) {
     "If the current thread already contains structured request drafts and the user changes something, return the COMPLETE updated set of drafts for the current package, not just the changed one.",
     "If the user is only asking for travel advice, sightseeing ideas or general information and is not asking for a supplier request, leave requests empty and answer normally.",
     UZBEKISTAN_TOURISM_AI_CONTEXT,
-    "For Uzbekistan domestic tours, proactively remind the user in the message about useful missing components: guide/ekskursovod, breakfast/lunch/dinner or group restaurant, museum/attraction tickets, local transfers, and hotel when overnight stays are implied.",
+    "For Uzbekistan domestic tours, proactively use suggestions to mention useful missing optional components: guide/ekskursovod, breakfast/lunch/dinner or group restaurant, museum/attraction tickets, local transfers, and hotel when overnight stays are implied.",
     "Never claim that a booking, fare, seat, hotel inventory, restaurant availability, attraction opening time, road condition or visa outcome is live-confirmed unless the platform supplied that data.",
     "For mutations such as publishing a request, accepting an offer, changing a deal, sending a message, editing profile data or deleting anything, only prepare or guide; do not claim the mutation happened.",
     "Choose at most one navigation action from the allowed action list. When request drafts are returned, action should normally be none because the UI will render a button for every draft.",
@@ -208,12 +250,16 @@ export async function POST(request: NextRequest) {
                   required: ["category", "origin", "destination", "travel_date", "adults", "children", "infants", "baggage", "budget", "currency", "description", "rooms", "nights", "vehicle", "language", "missing"],
                 },
               },
+              clarifications: { type: "array", maxItems: 8, items: { type: "string" } },
+              notes: { type: "array", maxItems: 8, items: { type: "string" } },
+              suggestions: { type: "array", maxItems: 8, items: { type: "string" } },
+              warnings: { type: "array", maxItems: 6, items: { type: "string" } },
             },
-            required: ["message", "action", "requests"],
+            required: ["message", "action", "requests", "clarifications", "notes", "suggestions", "warnings"],
           },
         },
       },
-      max_output_tokens: 2400,
+      max_output_tokens: 2800,
     }),
     cache: "no-store",
   });
@@ -226,14 +272,15 @@ export async function POST(request: NextRequest) {
 
   const data = (await response.json()) as OpenAiResponse;
   const outputText = extractOutputText(data);
-  let parsed: { message?: string; action?: AiAction; requests?: Partial<AiRequestDraft>[] } = {};
-  try { parsed = JSON.parse(outputText) as { message?: string; action?: AiAction; requests?: Partial<AiRequestDraft>[] }; }
-  catch { parsed = { message: outputText || (locale === "ru" ? "Понял вопрос." : "Savolni tushundim."), action: "none", requests: [] }; }
+  let parsed: ParsedAiReply = {};
+  try { parsed = JSON.parse(outputText) as ParsedAiReply; }
+  catch { parsed = { message: outputText || (locale === "ru" ? "Понял вопрос." : "Savolni tushundim."), action: "none", requests: [], clarifications: [], notes: [], suggestions: [], warnings: [] }; }
 
   const action: AiAction = ACTIONS.includes(parsed.action as AiAction) ? (parsed.action as AiAction) : "none";
   const requests = Array.isArray(parsed.requests) ? parsed.requests.map(sanitizeDraft).filter((item): item is AiRequestDraft => Boolean(item)).slice(0, 12) : [];
+  const baseMessage = parsed.message || (locale === "ru" ? "Понял вопрос." : "Savolni tushundim.");
   return NextResponse.json({
-    message: parsed.message || (locale === "ru" ? "Понял вопрос." : "Savolni tushundim."),
+    message: composeStructuredMessage(baseMessage, parsed, locale),
     action,
     requests,
   });
