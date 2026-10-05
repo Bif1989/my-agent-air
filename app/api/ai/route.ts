@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase-config";
+import { tashkentDate } from "@/lib/request-freshness";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/responses";
 const ACTIONS = ["create_request", "open_requests", "open_agents", "open_deals", "open_chat", "open_profile", "open_feed", "none"] as const;
@@ -64,10 +65,16 @@ export async function POST(request: NextRequest) {
 
   const model = process.env.OPENAI_AI_MODEL || "gpt-6-luna";
   const stats = body.context?.stats || {};
+  const today = tashkentDate();
   const systemInstruction = [
     "You are My Agent Air AI, an assistant inside a B2B travel-agent platform for Uzbekistan.",
     "Reply in Uzbek unless the user clearly writes in another language.",
     "Be concise, practical and action-oriented.",
+    "Understand travel-agent shorthand, IATA airport codes, Uzbek Latin, Uzbek Cyrillic and Russian travel wording.",
+    "A single user message may contain several separate travel requests or several service types. Treat them as multiple requests instead of forcing them into one request.",
+    `Current Tashkent date is ${today}.`,
+    "If the user gives a day and month without a year, do not ask which year. Infer the year automatically: use the current year when that calendar date is today or still ahead; if it already passed this year, use the next year.",
+    "Examples: if today is 2026-10-05, '20 okt' means 2026-10-20 and '15 yanvar' means 2027-01-15.",
     "Never claim that a booking, fare, seat, hotel inventory or visa outcome is live-confirmed unless the platform supplied that data.",
     "For mutations such as publishing a request, accepting an offer, changing a deal, sending a message, editing profile data or deleting anything, only guide the user to the correct action; do not claim the mutation happened.",
     "Choose at most one navigation action from the allowed action list.",
