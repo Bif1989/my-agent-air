@@ -3,19 +3,13 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import AppShell from "@/app/dashboard/components/app-shell";
-import { loadDashboardData, type Profile, type RequestItem } from "@/app/dashboard/components/dashboard-data";
+import AiCommandCenter from "@/app/dashboard/components/ai-command-center";
+import { loadDashboardData, type RequestItem } from "@/app/dashboard/components/dashboard-data";
 import { getStoredSession, type AuthSession } from "@/lib/supabase-auth";
 import { POST_CATEGORY_LABELS, type FeedPost } from "@/app/feed/feed-api";
 import { formatPrice } from "@/app/feed/post-card";
 
 type DashboardData = Awaited<ReturnType<typeof loadDashboardData>>;
-
-const statLabels = [
-  ["openRequests", "Ochiq so‘rovlar", "Yangi imkoniyatlar"],
-  ["offers", "Mening takliflarim", "Yuborilgan takliflar"],
-  ["deals", "Faol bitimlar", "Joriy kelishuvlar"],
-  ["agents", "Agentlar soni", "Tarmoqdagi profillar"],
-] as const;
 
 function formatDate(value: string | null) {
   if (!value) return "Sana ko‘rsatilmagan";
@@ -25,20 +19,6 @@ function formatDate(value: string | null) {
 function formatStatus(status: string | null) {
   const labels: Record<string, string> = { open: "Ochiq", pending: "Kutilmoqda", closed: "Yopilgan", active: "Faol" };
   return status ? labels[status.toLowerCase()] || status : "Noma’lum";
-}
-
-function ProfileSummary({ profile, email }: { profile: Profile | null; email?: string }) {
-  if (!profile) {
-    return <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">Profil ma’lumotlari topilmadi. Profilingizni to‘ldirish uchun Profil bo‘limiga o‘ting.</div>;
-  }
-  return (
-    <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-slate-500">
-      <span className="font-semibold text-[#0b1f3a]">{profile.company_name || "Kompaniya ko‘rsatilmagan"}</span>
-      <span>{profile.agent_type || "Agent turi ko‘rsatilmagan"}</span>
-      <span>{profile.city || "Shahar ko‘rsatilmagan"}</span>
-      {!profile.full_name && <span>{email}</span>}
-    </div>
-  );
 }
 
 function RequestRow({ request }: { request: RequestItem }) {
@@ -91,22 +71,45 @@ export default function DashboardPage() {
   }, []);
 
   const isLoading = Boolean(session) && !data && !error;
+  const displayName = data?.profile?.full_name || session?.user.email?.split("@")[0] || "hamkor";
+
   return (
     <AppShell session={session} activePath="/dashboard">
-      {isLoading && <div className="flex min-h-[60vh] items-center justify-center text-sm text-slate-500">Dashboard yuklanmoqda...</div>}
+      {isLoading && <div className="flex min-h-[60vh] items-center justify-center text-sm text-slate-500">AI ish paneli yuklanmoqda...</div>}
       {error && <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">{error}</div>}
       {data && session && (
         <>
-          <header className="flex flex-col justify-between gap-5 xl:flex-row xl:items-end">
-            <div><p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-600">Ish paneli</p><h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#0b1f3a] sm:text-4xl">Xush kelibsiz, {data.profile?.full_name || session.user.email?.split("@")[0] || "hamkor"}</h1><ProfileSummary profile={data.profile} email={session.user.email} /></div>
-            <div className="flex flex-wrap gap-3"><Link href="/requests/new" className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100">Yangi so‘rov yaratish</Link><Link href="/feed" className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-[#0b1f3a] transition hover:border-blue-300 hover:text-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100">Postlarni ko‘rish</Link><Link href="/profile" className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-[#0b1f3a] hover:border-blue-300">Profilim</Link><Link href="/assistant" className="rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-100">Aqlli yordamchi</Link><Link href="/agents" className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-[#0b1f3a] transition hover:border-blue-300 hover:text-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100">Agentlarni ko‘rish</Link></div>
+          <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">AI boshqaruv markazi</p>
+              <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#0b1f3a] sm:text-3xl">Xush kelibsiz, {displayName}</h1>
+            </div>
+            <div className="flex gap-2">
+              <Link href="/requests/new" className="rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 sm:text-sm">+ So‘rov</Link>
+              <Link href="/profile" className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-[#0b1f3a] transition hover:border-blue-300 sm:text-sm">Profil</Link>
+            </div>
           </header>
-          <section aria-label="Asosiy ko‘rsatkichlar" className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {statLabels.map(([key, label, detail]) => key === "deals" || key === "agents" ? <Link href={key === "deals" ? "/deals" : "/agents"} key={key} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-300 focus:outline-none focus:ring-4 focus:ring-blue-100"><p className="text-sm font-medium text-slate-500">{label}</p><p className="mt-4 text-3xl font-semibold tracking-tight text-[#0b1f3a]">{data.stats[key]}</p><p className="mt-2 text-xs text-slate-400">{detail}</p></Link> : <div key={key} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-sm font-medium text-slate-500">{label}</p><p className="mt-4 text-3xl font-semibold tracking-tight text-[#0b1f3a]">{data.stats[key]}</p><p className="mt-2 text-xs text-slate-400">{detail}</p></div>)}
+
+          <AiCommandCenter session={session} displayName={displayName} stats={data.stats} />
+
+          <section className="mt-8 grid gap-6 xl:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div><h2 className="text-lg font-semibold text-[#0b1f3a]">So‘nggi so‘rovlar</h2><p className="mt-1 text-xs text-slate-500">AI bilan ishlashdan tashqari tezkor ko‘rinish</p></div>
+                <Link href="/requests" className="text-xs font-semibold text-blue-600 hover:text-blue-700">Barchasi →</Link>
+              </div>
+              {data.requests.length ? <div className="mt-4">{data.requests.slice(0, 3).map((request) => <RequestRow key={request.id} request={request} />)}</div> : <div className="mt-5 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center"><p className="text-sm font-semibold text-[#0b1f3a]">Hozircha so‘rovlar yo‘q</p><p className="mt-1 text-xs text-slate-500">AI’ga yo‘nalish va sanani yozib birinchi so‘rovni boshlang.</p></div>}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div><h2 className="text-lg font-semibold text-[#0b1f3a]">So‘nggi e’lonlar</h2><p className="mt-1 text-xs text-slate-500">Agentlar tarmog‘idagi yangi postlar</p></div>
+                <Link href="/feed" className="text-xs font-semibold text-blue-600 hover:text-blue-700">Postlar →</Link>
+              </div>
+              {data.announcements.length ? <div className="mt-4">{data.announcements.slice(0, 3).map((announcement) => <AnnouncementRow key={announcement.id} announcement={announcement} />)}</div> : <div className="mt-5 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center"><p className="text-sm font-semibold text-[#0b1f3a]">Hozircha e’lonlar yo‘q</p><p className="mt-1 text-xs text-slate-500">Postlar paydo bo‘lganda shu yerda ko‘rinadi.</p></div>}
+            </div>
           </section>
-          <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-semibold text-[#0b1f3a]">So‘nggi so‘rovlar</h2><p className="mt-1 text-sm text-slate-500">Platformadagi eng yangi so‘rovlar</p></div><Link href="/requests" className="text-sm font-semibold text-blue-600 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">Barchasini ko‘rish</Link></div>{data.requests.length ? <div className="mt-5">{data.requests.map((request) => <RequestRow key={request.id} request={request} />)}</div> : <div className="mt-6 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center"><p className="font-semibold text-[#0b1f3a]">Hozircha so‘rovlar yo‘q</p><p className="mt-2 text-sm text-slate-500">Yangi so‘rov yaratib, hamkorlar tarmog‘ini ishga tushiring.</p></div>}</section>
-          <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-semibold text-[#0b1f3a]">So‘nggi e’lonlar</h2><p className="mt-1 text-sm text-slate-500">Postlar bo‘limidagi eng yangi e’lonlar</p></div><Link href="/feed" className="text-sm font-semibold text-blue-600 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">Postlarni ko‘rish</Link></div>{data.announcements.length ? <div className="mt-5">{data.announcements.map((announcement) => <AnnouncementRow key={announcement.id} announcement={announcement} />)}</div> : <div className="mt-6 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center"><p className="font-semibold text-[#0b1f3a]">Hozircha e’lonlar yo‘q</p><p className="mt-2 text-sm text-slate-500">Postlar bo‘limida birinchi e’lonni joylashtiring.</p></div>}</section>
-  </>
+        </>
       )}
     </AppShell>
   );
