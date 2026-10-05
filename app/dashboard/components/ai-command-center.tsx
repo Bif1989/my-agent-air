@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { parseRequestDrafts } from "@/lib/request-assistant";
+import { parseRequestDrafts, type AssistantDraft } from "@/lib/request-assistant";
 import { parseDomesticItineraryRequests } from "@/lib/domestic-itinerary-parser";
+import { joinServiceDetails } from "@/lib/request-details";
 import { domesticTourAdvice, isUzbekistanDomesticTourism } from "@/lib/uzbekistan-tourism";
 import {
   createAiConversation,
@@ -20,9 +21,29 @@ import type { AuthSession } from "@/lib/supabase-auth";
 type DashboardStats = { openRequests: number; offers: number; deals: number; agents: number };
 type AiActionKey = "create_request" | "open_requests" | "open_agents" | "open_deals" | "open_chat" | "open_profile" | "open_feed" | "none";
 type ChatEntry = { id: string; sender: "user" | "assistant"; text: string; actions?: AiHistoryAction[] };
-type AiResponse = { message?: string; action?: AiActionKey; code?: string };
+type AiStructuredRequest = {
+  category: string;
+  origin: string;
+  destination: string;
+  travel_date: string;
+  adults: number;
+  children: number;
+  infants: number;
+  baggage: string;
+  budget: number;
+  currency: string;
+  description: string;
+  rooms: string;
+  nights: string;
+  vehicle: string;
+  language: string;
+  missing: string[];
+};
+type AiResponse = { message?: string; action?: AiActionKey; code?: string; requests?: AiStructuredRequest[] };
 
 const categoryRu: Record<string, string> = { Aviachipta: "Авиабилет", "Tur paket": "Турпакет", Mehmonxona: "Отель", Transfer: "Трансфер", Gid: "Гид", Viza: "Виза", Boshqa: "Другое" };
+const validCategories = new Set(["Aviachipta", "Tur paket", "Mehmonxona", "Transfer", "Gid", "Viza", "Boshqa"]);
+const validCurrencies = new Set(["USD", "UZS", "EUR", "RUB"]);
 
 function actionMap(isRu: boolean): Record<Exclude<AiActionKey, "none">, AiHistoryAction> {
   return {
@@ -60,11 +81,58 @@ function looksLikeTravelRequest(text: string) {
   return /(kerak|so['’`]?rov|tashkil|bormoqch|sayohat|tur\b|guruh|bron|buyurtma|olib bor|jo['’`]?nash|кетиш|саёхат|сафар|керак|гуру[ҳх]|нуж|организ|поездк|тур\b|брон|\d+\s*(?:kishi|odam|kun|tun|kecha|киши|одам|кун|дн|ноч|человек))/i.test(text);
 }
 
-function formatDraftLabel(draft: ReturnType<typeof parseRequestDrafts>[number]["draft"], isRu: boolean) {
+function formatDraftLabel(draft: AssistantDraft, isRu: boolean) {
   const route = [draft.origin, draft.destination].filter(Boolean).join(" → ");
   const date = draft.travel_date ? draft.travel_date.split("-").reverse().join(".") : "";
   const category = draft.category ? (isRu ? categoryRu[draft.category] || draft.category : draft.category) : (isRu ? "Запрос" : "So‘rov");
   return [category, route, date].filter(Boolean).join(" · ");
+}
+
+function aiRequestToDraft(item: AiStructuredRequest): AssistantDraft | null {
+  if (!item || !validCategories.has(item.category)) return null;
+  const adults = Number.isFinite(item.adults) ? Math.min(500, Math.max(1, Math.round(item.adults))) : 1;
+  const children = Number.isFinite(item.children) ? Math.min(500, Math.max(0, Math.round(item.children))) : 0;
+  const infants = Number.isFinite(item.infants) ? Math.min(500, Math.max(0, Math.round(item.infants))) : 0;
+  const budget = Number.isFinite(item.budget) && item.budget > 0 ? item.budget : null;
+  const currency = validCurrencies.has(item.currency) ? item.currency : "USD";
+  const description = joinServiceDetails(item.description || "", item.category, {
+    rooms: item.rooms || "",
+    nights: item.nights || "",
+    vehicle: item.vehicle || "",
+    language: item.language || "",
+  });
+  return {
+    category: item.category,
+    origin: item.origin?.trim() || null,
+    destination: item.destination?.trim() || null,
+    travel_date: /^20\d{2}-\d{2}-\d{2}$/.test(item.travel_date || "") ? item.travel_date : null,
+    adults,
+    children,
+    infants,
+    baggage: item.baggage?.trim() || null,
+    budget,
+    currency,
+    description: description.trim() || null,
+  };
+}
+
+function draftFromActionHref(href: string) {
+  if (!href.startsWith("/requests/new?")) return null;
+  try {
+    const query = href.slice(href.indexOf("?") + 1);
+    const raw = new URLSearchParams(query).get("draft");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as AssistantDraft;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function historyContent(entry: ChatEntry) {
+  const drafts = (entry.actions || []).map((item) => draftFromActionHref(item.href)).filter((item): item is AssistantDraft => Boolean(item));
+  if (!drafts.length) return entry.text;
+  return `${entry.text}\n\n[Prepared request drafts JSON: ${JSON.stringify(drafts)}]`;
 }
 
 function domesticAdviceSuffix(text: string, isRu: boolean) {
@@ -216,6 +284,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
       const previousEntries = entries.filter((entry) => entry.id !== "greeting");
       const hasPriorUserMessage = previousEntries.some((entry) => entry.sender === "user");
       const currentConversation = conversations.find((item) => item.id === conversationId);
+      const travelTurn = looksLikeTravelRequest(text);
 
       appendEntry(conversationId, "user", text);
 
@@ -225,24 +294,23 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
         void renameAiConversation(session, conversationId, title).catch(() => undefined);
       }
 
-      if (!hasPriorUserMessage && looksLikeTravelRequest(text)) {
+      const appendLocalTravelFallback = () => {
         const itineraryDrafts = parseDomesticItineraryRequests(text);
         const parsedDrafts = (itineraryDrafts.length ? itineraryDrafts : parseRequestDrafts(text)).filter((item) => item.draft.category || item.draft.origin || item.draft.destination);
-        if (parsedDrafts.length) {
-          const draftActions = parsedDrafts.map(({ draft }) => ({ label: formatDraftLabel(draft, isRu), href: `/requests/new?draft=${encodeURIComponent(JSON.stringify(draft))}` }));
-          const missing = Array.from(new Set(parsedDrafts.flatMap((item) => item.missing)));
-          const advice = itineraryDrafts.length
-            ? (isRu ? "\n\nСовет: можно также создать отдельные запросы на гида/экскурсовода, ресторан для обеда или ужина, а также входные билеты в музеи и объекты." : "\n\nIchki turizm tavsiyasi: gid/ekskursovod, tushlik yoki kechki ovqat uchun guruh restorani hamda muzey va obyektlarga kirish chiptalari uchun ham alohida so‘rov yaratish mumkin.")
-            : domesticAdviceSuffix(text, isRu);
-          const reply = isRu
-            ? (parsedDrafts.length > 1 ? `Подготовил ${parsedDrafts.length} отдельных черновика запроса.${missing.length ? ` Нужно уточнить: ${missing.join(", ")}. Напишите уточнение прямо сюда — я продолжу этот же пакет.` : " Каждый можно открыть, проверить и опубликовать отдельно."}${advice}` : `Черновик запроса готов.${missing.length ? ` Нужно уточнить: ${missing.join(", ")}. Напишите уточнение прямо сюда — я сохраню контекст.` : " Откройте форму, проверьте и опубликуйте."}${advice}`)
-            : (parsedDrafts.length > 1 ? `${parsedDrafts.length} ta alohida so‘rov qoralamasi tayyorladim.${missing.length ? ` Yetishmayotgan ma’lumot: ${missing.join(", ")}. Shu chatga aniqlikni yozing — shu paketni davom ettiraman.` : " Har birini alohida ochib tekshirib e’lon qilishingiz mumkin."}${advice}` : `${parsedDrafts[0]?.draft.category || "So‘rov"} qoralamasi tayyor.${missing.length ? ` Aniqlashtirish kerak: ${missing.join(", ")}. Shu chatga yozing — oldingi ma’lumotlarni saqlab davom ettiraman.` : " Formani ochib tekshiring va keyin e’lon qiling."}${advice}`);
-          appendEntry(conversationId, "assistant", reply, draftActions);
-          return;
-        }
-      }
+        if (!parsedDrafts.length) return false;
+        const draftActions = parsedDrafts.map(({ draft }) => ({ label: formatDraftLabel(draft, isRu), href: `/requests/new?draft=${encodeURIComponent(JSON.stringify(draft))}` }));
+        const missing = Array.from(new Set(parsedDrafts.flatMap((item) => item.missing)));
+        const advice = itineraryDrafts.length
+          ? (isRu ? "\n\nСовет: можно также создать отдельные запросы на гида/экскурсовода, ресторан для обеда или ужина, а также входные билеты в музеи и объекты." : "\n\nIchki turizm tavsiyasi: gid/ekskursovod, tushlik yoki kechki ovqat uchun guruh restorani hamda muzey va obyektlarga kirish chiptalari uchun ham alohida so‘rov yaratish mumkin.")
+          : domesticAdviceSuffix(text, isRu);
+        const reply = isRu
+          ? (parsedDrafts.length > 1 ? `Подготовил ${parsedDrafts.length} отдельных черновика запроса.${missing.length ? ` Нужно уточнить: ${missing.join(", ")}.` : " Каждый можно открыть и проверить."}${advice}` : `Черновик запроса готов.${missing.length ? ` Нужно уточнить: ${missing.join(", ")}.` : " Откройте форму и проверьте."}${advice}`)
+          : (parsedDrafts.length > 1 ? `${parsedDrafts.length} ta alohida so‘rov qoralamasi tayyorladim.${missing.length ? ` Yetishmayotgan ma’lumot: ${missing.join(", ")}.` : " Har birini alohida ochib tekshirishingiz mumkin."}${advice}` : `${parsedDrafts[0]?.draft.category || "So‘rov"} qoralamasi tayyor.${missing.length ? ` Aniqlashtirish kerak: ${missing.join(", ")}.` : " Formani ochib tekshiring."}${advice}`);
+        appendEntry(conversationId, "assistant", reply, draftActions);
+        return true;
+      };
 
-      if (!hasPriorUserMessage) {
+      if (!hasPriorUserMessage && !travelTurn) {
         const local = localAction(text, isRu, actions);
         if (local) {
           appendEntry(conversationId, "assistant", local.text, local.action ? [local.action] : []);
@@ -255,7 +323,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({
           message: text,
-          history: previousEntries.slice(-18).map((entry) => ({ role: entry.sender, content: entry.text })),
+          history: previousEntries.slice(-18).map((entry) => ({ role: entry.sender, content: historyContent(entry) })),
           context: {
             path: "/dashboard",
             stats,
@@ -266,12 +334,26 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
       });
       const data = (await response.json().catch(() => ({}))) as AiResponse;
       if (!response.ok) {
+        if (!hasPriorUserMessage && travelTurn && appendLocalTravelFallback()) return;
         const fallback = data.code === "AI_NOT_CONFIGURED"
           ? (isRu ? "AI-модель ещё не подключена на сервере. История этого чата сохранена и продолжит работать после подключения модели." : "AI modeli hali serverga ulanmagan. Bu chat tarixi saqlandi va model ulangach shu yerdan davom etadi.")
           : (isRu ? "Временная ошибка подключения к AI. История чата сохранена — повторите сообщение позже." : "AI xizmatiga ulanishda vaqtinchalik xatolik. Chat tarixi saqlandi — keyinroq qayta yuboring.");
         appendEntry(conversationId, "assistant", fallback);
         return;
       }
+
+      const aiDrafts = (data.requests || []).map((item) => ({ draft: aiRequestToDraft(item), missing: Array.isArray(item.missing) ? item.missing : [] })).filter((item): item is { draft: AssistantDraft; missing: string[] } => Boolean(item.draft));
+      if (aiDrafts.length) {
+        const draftActions = aiDrafts.map(({ draft }) => ({ label: formatDraftLabel(draft, isRu), href: `/requests/new?draft=${encodeURIComponent(JSON.stringify(draft))}` }));
+        const missing = Array.from(new Set(aiDrafts.flatMap((item) => item.missing).filter(Boolean)));
+        const defaultMessage = isRu ? `AI подготовил ${aiDrafts.length} отдельных черновика запроса.` : `AI ${aiDrafts.length} ta alohida so‘rov qoralamasini tayyorladi.`;
+        const reply = `${data.message || defaultMessage}${missing.length ? (isRu ? `\n\nНужно уточнить: ${missing.join(", ")}.` : `\n\nAniqlashtirish kerak: ${missing.join(", ")}.`) : ""}`;
+        appendEntry(conversationId, "assistant", reply, draftActions);
+        return;
+      }
+
+      if (!hasPriorUserMessage && travelTurn && appendLocalTravelFallback()) return;
+
       const action = data.action && data.action !== "none" ? actions[data.action] : undefined;
       appendEntry(conversationId, "assistant", data.message || (isRu ? "Продолжаю по текущему чату." : "Shu chat bo‘yicha davom etaman."), action ? [action] : []);
     } catch {
