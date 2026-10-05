@@ -133,13 +133,19 @@ test('request filters combine expiry/search safely and include pagination', asyn
 
 test('assistant builds a reviewed draft from Uzbek text without publishing', () => {
   const parsed = parseRequestDraft('TAS–IST 10 oktabr 2 kishi 1 bola 23 kg 500 USD', {}, new Date('2026-10-04T10:00:00Z'));
-  assert.equal(parsed.draft.origin, 'TAS');
-  assert.equal(parsed.draft.destination, 'IST');
+  assert.equal(parsed.draft.origin, 'Toshkent');
+  assert.equal(parsed.draft.destination, 'Istanbul');
   assert.equal(parsed.draft.travel_date, '2026-10-10');
   assert.equal(parsed.draft.adults, 2);
   assert.equal(parsed.draft.children, 1);
   assert.equal(parsed.draft.budget, 500);
   assert.equal(parsed.missing.length, 0);
+});
+
+test('assistant expands airport abbreviations to canonical city names', () => {
+  const parsed = parseRequestDraft('SKD-DXB aviachipta 15 oktabr 2 kishi', {}, new Date('2026-10-04T10:00:00Z'));
+  assert.equal(parsed.draft.origin, 'Samarqand');
+  assert.equal(parsed.draft.destination, 'Dubai');
 });
 
 test('assistant does not invent missing fields or accept invalid dates', () => {
