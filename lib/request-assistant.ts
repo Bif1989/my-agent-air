@@ -44,7 +44,9 @@ export function parseRequestDraft(text: string, previous: AssistantDraft = {}, n
       const value = normalizeAirportSearch(alias);
       if (!value) continue;
       const match = new RegExp(`(?:^|[\\s-])(${escapeRegex(value)})(?:dan|ga|gacha)?(?=$|[\\s-])`).exec(normalized);
-      if (match) locations.push({ index: match.index, city: airport.city, value: value === airport.code.toLowerCase() ? airport.code : airport.city });
+      // AI draftlari har doim to‘liq shahar nomini saqlaydi. Foydalanuvchi TAS, IST, DXB kabi
+      // IATA qisqartmalarini yozishi mumkin, lekin so‘rov qoralamasida Toshkent, Istanbul, Dubai ko‘rinadi.
+      if (match) locations.push({ index: match.index, city: airport.city, value: airport.city });
     }
   }
   const unique = locations.sort((a, b) => a.index - b.index).filter((item, index, items) => items.findIndex((other) => other.city === item.city) === index);
