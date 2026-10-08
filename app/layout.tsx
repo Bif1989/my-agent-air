@@ -5,7 +5,6 @@ import AiVoiceInput from "@/app/components/ai-voice-input";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
-import VkMiniAppBridge from "@/app/components/vk-mini-app-bridge";
 import { UiSettingsProvider } from "@/lib/ui-settings";
 import "./globals.css";
 
@@ -61,7 +60,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         <UiSettingsProvider>
           <PwaSplash />
-          <VkMiniAppBridge />
           <RecoveryRedirect />{children}
           <AiVoiceInput />
           <PwaInstall />
