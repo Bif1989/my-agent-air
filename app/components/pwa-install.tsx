@@ -8,7 +8,8 @@ type InstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
 
-const DISMISS_KEY = "my-agent-air:pwa-install-dismissed";
+const DISMISS_KEY = "my-agent-air:pwa-install-dismissed-until";
+const DISMISS_FOR_MS = 7 * 24 * 60 * 60 * 1000;
 
 function isStandalone() {
   if (typeof window === "undefined") return false;
@@ -24,6 +25,19 @@ function isIosSafari() {
   return ios && webkit && !excluded;
 }
 
+function isDismissed() {
+  try {
+    const value = Number(localStorage.getItem(DISMISS_KEY) || "0");
+    return Number.isFinite(value) && value > Date.now();
+  } catch {
+    return false;
+  }
+}
+
+function rememberDismissal() {
+  try { localStorage.setItem(DISMISS_KEY, String(Date.now() + DISMISS_FOR_MS)); } catch { /* no-op */ }
+}
+
 export default function PwaInstall() {
   const { isRu } = useUiSettings();
   const [promptEvent, setPromptEvent] = useState<InstallPromptEvent | null>(null);
@@ -35,13 +49,11 @@ export default function PwaInstall() {
       void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     }
 
-    if (isStandalone()) return;
-    let dismissed = false;
-    try { dismissed = sessionStorage.getItem(DISMISS_KEY) === "1"; } catch { /* no-op */ }
-    if (dismissed) return;
+    if (isStandalone() || isDismissed()) return;
 
     const onBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
+      if (isDismissed()) return;
       setPromptEvent(event as InstallPromptEvent);
       setVisible(true);
     };
@@ -49,6 +61,7 @@ export default function PwaInstall() {
       setPromptEvent(null);
       setShowIosHelp(false);
       setVisible(false);
+      try { localStorage.removeItem(DISMISS_KEY); } catch { /* no-op */ }
     };
 
     window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
@@ -56,6 +69,7 @@ export default function PwaInstall() {
 
     if (isIosSafari()) {
       const timer = window.setTimeout(() => {
+        if (isDismissed()) return;
         setShowIosHelp(true);
         setVisible(true);
       }, 1400);
@@ -73,15 +87,23 @@ export default function PwaInstall() {
   }, []);
 
   function dismiss() {
-    try { sessionStorage.setItem(DISMISS_KEY, "1"); } catch { /* no-op */ }
+    rememberDismissal();
     setVisible(false);
+    setShowIosHelp(false);
+    setPromptEvent(null);
   }
 
   async function install() {
     if (!promptEvent) return;
     await promptEvent.prompt();
     const choice = await promptEvent.userChoice.catch(() => null);
-    if (choice?.outcome === "accepted") setVisible(false);
+    if (choice?.outcome === "accepted") {
+      setVisible(false);
+      try { localStorage.removeItem(DISMISS_KEY); } catch { /* no-op */ }
+    } else {
+      rememberDismissal();
+      setVisible(false);
+    }
     setPromptEvent(null);
   }
 
