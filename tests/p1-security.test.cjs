@@ -49,6 +49,27 @@ test('legacy VK auto-login surface is removed', () => {
   assert.equal(exists('app/api/auth/vk/route.ts'), false);
 });
 
+test('password login is routed through a persistent server-side brute-force limiter', () => {
+  const login = read('app/login/page.tsx');
+  const client = read('lib/password-auth.ts');
+  const route = read('app/api/auth/password/route.ts');
+  const migration = read('supabase/migrations/20261008140500_p1_auth_login_rate_limit.sql');
+
+  assert.match(login, /signInProtected/);
+  assert.doesNotMatch(login, /\bsignIn\(/);
+  assert.match(client, /\/api\/auth\/password/);
+  assert.match(route, /createHmac\("sha256"/);
+  assert.match(route, /auth_login_limit_status/);
+  assert.match(route, /record_auth_login_result/);
+  assert.match(route, /sec-fetch-site/);
+  assert.match(route, /TOO_MANY_ATTEMPTS/);
+  assert.match(route, /Retry-After/);
+  assert.match(migration, /\(p_pair_hash, 5, 900\)/);
+  assert.match(migration, /\(p_ip_hash, 30, 1800\)/);
+  assert.match(migration, /grant execute on function public\.auth_login_limit_status\(text, text\) to service_role/);
+  assert.match(migration, /revoke all on function public\.auth_login_limit_status\(text, text\) from public, anon, authenticated/);
+});
+
 test('production smoke waits for real app content instead of only an old reachable alias', () => {
   const source = read('.github/workflows/production-smoke.yml');
   assert.match(source, /Wait for production app/);
