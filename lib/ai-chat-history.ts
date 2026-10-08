@@ -16,9 +16,18 @@ export type AiHistoryMessage = {
   created_at: string;
 };
 
+type PendingAiMessage = {
+  id: string;
+  conversationId: string;
+  role: "user" | "assistant";
+  content: string;
+  actions: AiHistoryAction[];
+};
+
 const CONVERSATION_PAGE_SIZE = 100;
 const MESSAGE_PAGE_SIZE = 200;
-const SAVE_ATTEMPTS = 3;
+const REQUEST_ATTEMPTS = 3;
+const OUTBOX_LIMIT = 100;
 
 function headers(session: AuthSession) {
   return {
@@ -37,7 +46,114 @@ function messageId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`;
 }
 
+function outboxKey(userId: string) {
+  return `my-agent-air:ai-history-outbox:${userId}`;
+}
+
+function browserStorage() {
+  try {
+    return typeof window !== "undefined" ? window.localStorage : null;
+  } catch {
+    return null;
+  }
+}
+
+function readOutbox(userId: string): PendingAiMessage[] {
+  const storage = browserStorage();
+  if (!storage) return [];
+  try {
+    const parsed = JSON.parse(storage.getItem(outboxKey(userId)) || "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is PendingAiMessage => Boolean(
+      item && typeof item === "object" && typeof item.id === "string" && typeof item.conversationId === "string" &&
+      (item.role === "user" || item.role === "assistant") && typeof item.content === "string" && Array.isArray(item.actions),
+    )).slice(-OUTBOX_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
+function writeOutbox(userId: string, rows: PendingAiMessage[]) {
+  const storage = browserStorage();
+  if (!storage) return false;
+  try {
+    const key = outboxKey(userId);
+    const bounded = rows.slice(-OUTBOX_LIMIT);
+    if (bounded.length) storage.setItem(key, JSON.stringify(bounded));
+    else storage.removeItem(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function queueOutbox(userId: string, row: PendingAiMessage) {
+  const current = readOutbox(userId).filter((item) => item.id !== row.id);
+  return writeOutbox(userId, [...current, row]);
+}
+
+function removeFromOutbox(userId: string, id: string) {
+  return writeOutbox(userId, readOutbox(userId).filter((item) => item.id !== id));
+}
+
+async function fetchWithRetry(input: RequestInfo | URL, init: RequestInit, attempts = REQUEST_ATTEMPTS) {
+  let lastResponse: Response | null = null;
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const response = await fetch(input, init);
+      lastResponse = response;
+      if (response.ok || (response.status < 500 && response.status !== 429)) return response;
+    } catch (error) {
+      lastError = error;
+    }
+    if (attempt < attempts - 1) await wait(250 * (attempt + 1));
+  }
+  if (lastResponse) return lastResponse;
+  throw lastError instanceof Error ? lastError : new Error("Tarmoq xatosi.");
+}
+
+async function persistMessage(session: AuthSession, row: PendingAiMessage) {
+  const body = JSON.stringify({
+    id: row.id,
+    user_id: session.user.id,
+    conversation_id: row.conversationId,
+    role: row.role,
+    content: row.content.slice(0, 8000),
+    actions: row.actions,
+  });
+  return fetchWithRetry(`${SUPABASE_URL}/rest/v1/ai_chat_messages?on_conflict=id`, {
+    method: "POST",
+    headers: { ...headers(session), Prefer: "resolution=ignore-duplicates,return=minimal" },
+    body,
+    keepalive: body.length < 60_000,
+  });
+}
+
+/** Flushes only messages that previously failed to reach Supabase. */
+export async function flushAiChatOutbox(session: AuthSession) {
+  const pending = readOutbox(session.user.id);
+  for (const row of pending) {
+    try {
+      const response = await persistMessage(session, row);
+      if (response.ok) {
+        removeFromOutbox(session.user.id, row.id);
+        continue;
+      }
+      // Invalid/deleted conversations should not poison the outbox forever.
+      if (response.status >= 400 && response.status < 500 && ![401, 403, 429].includes(response.status)) {
+        removeFromOutbox(session.user.id, row.id);
+        continue;
+      }
+      break;
+    } catch {
+      break;
+    }
+  }
+}
+
 export async function listAiConversations(session: AuthSession): Promise<AiConversation[]> {
+  await flushAiChatOutbox(session).catch(() => undefined);
   const all: AiConversation[] = [];
   for (let offset = 0; ; offset += CONVERSATION_PAGE_SIZE) {
     const params = new URLSearchParams({
@@ -47,7 +163,7 @@ export async function listAiConversations(session: AuthSession): Promise<AiConve
       limit: String(CONVERSATION_PAGE_SIZE),
       offset: String(offset),
     });
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/ai_chat_conversations?${params.toString()}`, {
+    const response = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/ai_chat_conversations?${params.toString()}`, {
       headers: headers(session),
       cache: "no-store",
     });
@@ -59,7 +175,7 @@ export async function listAiConversations(session: AuthSession): Promise<AiConve
 }
 
 export async function createAiConversation(session: AuthSession, title = "Yangi chat"): Promise<AiConversation> {
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/ai_chat_conversations`, {
+  const response = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/ai_chat_conversations`, {
     method: "POST",
     headers: { ...headers(session), Prefer: "return=representation" },
     body: JSON.stringify({ user_id: session.user.id, title: title.slice(0, 120) || "Yangi chat" }),
@@ -72,7 +188,7 @@ export async function createAiConversation(session: AuthSession, title = "Yangi 
 
 export async function renameAiConversation(session: AuthSession, conversationId: string, title: string) {
   const params = new URLSearchParams({ id: `eq.${conversationId}`, user_id: `eq.${session.user.id}` });
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/ai_chat_conversations?${params.toString()}`, {
+  const response = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/ai_chat_conversations?${params.toString()}`, {
     method: "PATCH",
     headers: { ...headers(session), Prefer: "return=minimal" },
     body: JSON.stringify({ title: title.slice(0, 120), updated_at: new Date().toISOString() }),
@@ -85,16 +201,23 @@ export async function deleteAiConversations(session: AuthSession, conversationId
   if (conversationId !== undefined && !conversationId.trim()) throw new Error("Chat tanlanmagan.");
   const params = new URLSearchParams({ user_id: `eq.${session.user.id}`, select: "id" });
   if (conversationId !== undefined) params.set("id", `eq.${conversationId}`);
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/ai_chat_conversations?${params.toString()}`, {
+  const response = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/ai_chat_conversations?${params.toString()}`, {
     method: "DELETE",
     headers: { ...headers(session), Prefer: "return=representation" },
   });
   if (!response.ok) throw new Error("AI chatni o‘chirib bo‘lmadi.");
   const rows = await response.json() as { id: string }[];
   if (conversationId && !rows.some((row) => row.id === conversationId)) throw new Error("Chat topilmadi yoki o‘chirishga ruxsat yo‘q.");
+
+  if (conversationId) {
+    writeOutbox(session.user.id, readOutbox(session.user.id).filter((item) => item.conversationId !== conversationId));
+  } else {
+    writeOutbox(session.user.id, []);
+  }
 }
 
 export async function listAiChatHistory(session: AuthSession, conversationId: string): Promise<AiHistoryMessage[]> {
+  await flushAiChatOutbox(session).catch(() => undefined);
   const all: AiHistoryMessage[] = [];
   for (let offset = 0; ; offset += MESSAGE_PAGE_SIZE) {
     const params = new URLSearchParams({
@@ -105,7 +228,7 @@ export async function listAiChatHistory(session: AuthSession, conversationId: st
       limit: String(MESSAGE_PAGE_SIZE),
       offset: String(offset),
     });
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/ai_chat_messages?${params.toString()}`, {
+    const response = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/ai_chat_messages?${params.toString()}`, {
       headers: headers(session),
       cache: "no-store",
     });
@@ -124,30 +247,25 @@ export async function saveAiChatMessage(
   actions: AiHistoryAction[] = [],
   id = messageId(),
 ) {
-  const body = JSON.stringify({
+  const row: PendingAiMessage = {
     id,
-    user_id: session.user.id,
-    conversation_id: conversationId,
+    conversationId,
     role,
     content: content.slice(0, 8000),
     actions,
-  });
-  const url = `${SUPABASE_URL}/rest/v1/ai_chat_messages?on_conflict=id`;
+  };
 
-  for (let attempt = 0; attempt < SAVE_ATTEMPTS; attempt += 1) {
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { ...headers(session), Prefer: "resolution=ignore-duplicates,return=minimal" },
-        body,
-        keepalive: body.length < 60_000,
-      });
-      if (response.ok) return id;
-      if (response.status < 500 && response.status !== 429) throw new Error("AI tarixi saqlanmadi.");
-    } catch (error) {
-      if (attempt === SAVE_ATTEMPTS - 1) throw error;
+  try {
+    const response = await persistMessage(session, row);
+    if (response.ok) {
+      removeFromOutbox(session.user.id, id);
+      return id;
     }
-    await wait(250 * (attempt + 1));
+    if (response.status < 500 && response.status !== 429) throw new Error("AI tarixi saqlanmadi.");
+  } catch {
+    // Queue below. The same stable message ID makes later replay idempotent.
   }
-  throw new Error("AI tarixi saqlanmadi.");
+
+  if (queueOutbox(session.user.id, row)) return id;
+  throw new Error("AI tarixi saqlanmadi va lokal navbatga ham yozilmadi.");
 }
