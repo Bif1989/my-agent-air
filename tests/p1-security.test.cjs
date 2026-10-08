@@ -33,3 +33,13 @@ test('session storage does not keep a second duplicate access-token key', () => 
   assert.doesNotMatch(source, /localStorage\.setItem\(ACCESS_TOKEN_STORAGE_KEY/);
   assert.match(source, /localStorage\.removeItem\(ACCESS_TOKEN_STORAGE_KEY\)/);
 });
+
+test('VK auto-login limits payloads, uses constant-time signatures and rejects stale launch params', () => {
+  const source = read('app/api/auth/vk/route.ts');
+  assert.match(source, /timingSafeEqual/);
+  assert.match(source, /MAX_BODY_BYTES = 32 \* 1024/);
+  assert.match(source, /MAX_LAUNCH_AGE_SECONDS = 10 \* 60/);
+  assert.match(source, /STALE_LAUNCH_PARAMS/);
+  assert.match(source, /Cache-Control.*no-store/);
+  assert.match(source, /\^\\d\{1,20\}\$/);
+});
