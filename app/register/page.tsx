@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { track } from "@vercel/analytics";
 import BrandMark from "@/app/components/brand-mark";
+import TurnstileChallenge, { TURNSTILE_SITE_KEY } from "@/app/components/turnstile-challenge";
 import { UiControls, useUiSettings } from "@/lib/ui-settings";
 import { AGENT_TYPES } from "@/lib/profile-completion";
 import { FormEvent, useEffect, useState } from "react";
@@ -27,8 +28,11 @@ export default function RegisterPage() {
   const [pendingEmail, setPendingEmail] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaReset, setCaptchaReset] = useState(0);
   const router = useRouter();
   const { isRu } = useUiSettings();
+  const captchaRequired = Boolean(TURNSTILE_SITE_KEY);
 
   useEffect(() => { track("signup_started"); }, []);
   useEffect(() => {
@@ -51,6 +55,10 @@ export default function RegisterPage() {
       setError(isRu ? "Пароли должны совпадать." : "Parollar bir xil bo‘lishi kerak.");
       return;
     }
+    if (captchaRequired && !captchaToken) {
+      setError(isRu ? "Завершите проверку безопасности." : "Xavfsizlik tekshiruvini yakunlang.");
+      return;
+    }
     setIsLoading(true);
     try {
       const response = await signUpProtected({
@@ -61,6 +69,7 @@ export default function RegisterPage() {
         phone: String(formData.get("phone") || "").trim(),
         city: String(formData.get("city") || "").trim(),
         agent_type: String(formData.get("agentType") || "").trim(),
+        captcha_token: captchaToken,
       });
       if (response.access_token && response.refresh_token && response.user?.id) {
         track("signup_completed");
@@ -73,6 +82,7 @@ export default function RegisterPage() {
       setResendCooldown(60);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : (isRu ? "Ошибка при регистрации." : "Ro‘yxatdan o‘tishda xatolik yuz berdi."));
+      if (captchaRequired) setCaptchaReset((value) => value + 1);
     } finally {
       setIsLoading(false);
     }
@@ -159,8 +169,9 @@ export default function RegisterPage() {
               <label className="block text-sm font-medium text-slate-700">{isRu ? "Повторите пароль" : "Parolni tasdiqlash"}<input required name="passwordConfirmation" type="password" minLength={MIN_PASSWORD_LENGTH} autoComplete="new-password" className={inputClass} /></label>
 
               <label className="flex items-start gap-3 text-sm text-slate-500 sm:col-span-2"><input required name="terms" type="checkbox" className="mt-1 h-4 w-4 accent-blue-600" /><span>{isRu ? "Я ознакомился и согласен с " : ""}<Link href="/terms" target="_blank" className="text-blue-600 underline">{isRu ? "условиями использования" : "Foydalanish shartlari"}</Link>{isRu ? " и " : " va "}<Link href="/privacy" target="_blank" className="text-blue-600 underline">{isRu ? "политикой конфиденциальности" : "maxfiylik qoidalari"}</Link>{isRu ? "." : " bilan tanishdim va roziman."}</span></label>
+              <div className="sm:col-span-2"><TurnstileChallenge action="signup" onToken={setCaptchaToken} resetNonce={captchaReset} /></div>
               {error && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700 sm:col-span-2">{error}</p>}
-              <button type="submit" disabled={isLoading} className="rounded-xl bg-blue-600 py-3.5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-4 focus:ring-blue-100 sm:col-span-2">{isLoading ? (isRu ? "Регистрация..." : "Ro‘yxatdan o‘tilmoqda...") : (isRu ? "Зарегистрироваться" : "Ro‘yxatdan o‘tish")}</button>
+              <button type="submit" disabled={isLoading || (captchaRequired && !captchaToken)} className="rounded-xl bg-blue-600 py-3.5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-4 focus:ring-blue-100 sm:col-span-2">{isLoading ? (isRu ? "Регистрация..." : "Ro‘yxatdan o‘tilmoqda...") : (isRu ? "Зарегистрироваться" : "Ro‘yxatdan o‘tish")}</button>
             </form>
           )}
 
