@@ -64,6 +64,17 @@ export function signUpProtected(input: SignupInput) {
   });
 }
 
+export function verifySignupOtpProtected(email: string, token: string) {
+  return post("/api/auth/verify-signup", {
+    email: email.trim().toLowerCase(),
+    token: token.trim(),
+  });
+}
+
+export function resendSignupOtpProtected(email: string) {
+  return post("/api/auth/resend-signup", { email: email.trim().toLowerCase() });
+}
+
 export function requestPasswordResetProtected(email: string) {
   return post("/api/auth/recover", { email: email.trim().toLowerCase() });
 }
