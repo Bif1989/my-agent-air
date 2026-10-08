@@ -11,6 +11,8 @@ const TRANSCRIPTION_KEYWORDS = [
   "aviabilet", "mehmonxona", "turagent", "turoperator", "transfer", "gid",
   "Uzbekistan Airways", "Centrum Air", "Qanot Sharq", "Air Arabia",
 ];
+const TRANSCRIPTION_PROMPT = "Turizm agentining ovozli so‘rovi. Nutq o‘zbekcha, ruscha yoki ikkala til aralash bo‘lishi mumkin. Shaharlar, mehmonxonalar, aviakompaniyalar, sanalar, narxlar va yo‘lovchilar sonini aynan aytilganidek yozing.";
+
 class VoiceRouteError extends Error {
   constructor(public code: string, public status: number, message: string) { super(message); }
 }
@@ -82,6 +84,32 @@ async function readAudio(request: NextRequest, signal: AbortSignal) {
   return { audio, extension };
 }
 
+function transcriptionForm(audio: File, extension: string, model: string) {
+  const upstream = new FormData();
+  upstream.append("file", audio, `voice.${extension}`);
+  upstream.append("model", model);
+  upstream.append("response_format", "json");
+  upstream.append("temperature", "0");
+  upstream.append("prompt", TRANSCRIPTION_PROMPT);
+  if (model === "gpt-transcribe") {
+    // Do not force language codes here: auto-detection is more robust for Uzbek/Russian
+    // code-switching, while keywords still improve domain-name recognition.
+    TRANSCRIPTION_KEYWORDS.forEach(keyword => upstream.append("keywords[]", keyword));
+  }
+  return upstream;
+}
+
+async function callTranscription(apiKey: string, audio: File, extension: string, model: string, signal: AbortSignal) {
+  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: transcriptionForm(audio, extension, model),
+    signal,
+  });
+  const data = await response.json().catch(() => ({})) as { text?: string; error?: { code?: string; message?: string } };
+  return { response, data };
+}
+
 async function handlePost(request: NextRequest, signal: AbortSignal) {
   if (!await verifyUser(request, signal)) return reply("UNAUTHORIZED", "Kirish sessiyasi yaroqsiz.", 401);
   const apiKey = process.env.OPENAI_API_KEY;
@@ -102,34 +130,29 @@ async function handlePost(request: NextRequest, signal: AbortSignal) {
     if (code === "TOO_FAST") response.headers.set("Retry-After", "30");
     return response;
   }
+
   signal.throwIfAborted();
-  const upstream = new FormData();
-  upstream.append("file", audio, `voice.${extension}`);
-
-  // gpt-transcribe handles Uzbek/Russian mixed speech better when expected languages
-  // and a small domain vocabulary are supplied. Keep an explicit env override for
-  // future model changes, but transparently upgrade the old mini default.
   const configuredModel = process.env.OPENAI_TRANSCRIBE_MODEL?.trim();
-  const model = !configuredModel || configuredModel === "gpt-4o-mini-transcribe" ? "gpt-transcribe" : configuredModel;
-  upstream.append("model", model);
-  upstream.append("response_format", "json");
-  upstream.append("temperature", "0");
+  const preferredModel = configuredModel || "gpt-transcribe";
+  let usedModel = preferredModel;
+  let { response, data } = await callTranscription(apiKey, audio, extension, preferredModel, signal);
 
-  if (model === "gpt-transcribe") {
-    upstream.append("languages[]", "uz");
-    upstream.append("languages[]", "ru");
-    upstream.append("chunking_strategy", "auto");
-    TRANSCRIPTION_KEYWORDS.forEach(keyword => upstream.append("keywords[]", keyword));
+  // Some API projects or recordings can reject a newer model/hint combination.
+  // Fall back once to the proven high-accuracy transcription model instead of
+  // failing the user's voice input outright.
+  if (!response.ok && preferredModel === "gpt-transcribe" && [400, 403, 404, 422].includes(response.status)) {
+    signal.throwIfAborted();
+    usedModel = "gpt-4o-transcribe";
+    ({ response, data } = await callTranscription(apiKey, audio, extension, usedModel, signal));
   }
 
-  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-    method: "POST", headers: { Authorization: `Bearer ${apiKey}` }, body: upstream, signal,
-  });
-  // Do not swallow an abort while reading the upstream response body.
-  const data = await response.json() as { text?: string };
   signal.throwIfAborted();
   if (!response.ok) {
-    console.error("AI transcription failed", response.status);
+    console.error("AI transcription failed", {
+      status: response.status,
+      model: usedModel,
+      code: data.error?.code || "unknown",
+    });
     if ([401, 403].includes(response.status)) return reply("AI_NOT_CONFIGURED", "Ovozli AI sozlamalarini tekshirish kerak.", 503);
     return reply("TRANSCRIPTION_FAILED", "Ovozni matnga aylantirib bo‘lmadi. Qayta urinib ko‘ring.", 502);
   }
