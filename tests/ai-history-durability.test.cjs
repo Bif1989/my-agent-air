@@ -43,11 +43,16 @@ test('AI history queues a message locally after transient network failure and fl
     const queued = Array.from(localStorage.snapshot().values()).join('');
     assert.match(queued, /offline message/);
     assert.match(queued, /33333333-3333-4333-8333-333333333333/);
+    assert.match(queued, /clientCreatedAt/);
 
     global.fetch = async (url, init) => {
       assert.match(String(url), /ai_chat_messages\?on_conflict=id/);
       assert.equal(init.method, 'POST');
       assert.match(init.headers.Prefer, /ignore-duplicates/);
+      const replay = JSON.parse(init.body);
+      assert.equal(replay.id, '33333333-3333-4333-8333-333333333333');
+      assert.equal(replay.content, 'offline message');
+      assert.ok(replay.client_created_at, 'replayed message must preserve its original client timestamp');
       return new Response(null, { status: 201 });
     };
     await history.flushAiChatOutbox(session());
@@ -59,7 +64,7 @@ test('AI history queues a message locally after transient network failure and fl
   }
 });
 
-test('AI history source paginates conversations and messages and retries reads', () => {
+test('AI history source paginates conversations, messages and orders by original client time', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const source = fs.readFileSync(path.join(process.cwd(), 'lib/ai-chat-history.ts'), 'utf8');
@@ -69,4 +74,6 @@ test('AI history source paginates conversations and messages and retries reads',
   assert.match(source, /fetchWithRetry/);
   assert.match(source, /flushAiChatOutbox/);
   assert.match(source, /OUTBOX_LIMIT = 100/);
+  assert.match(source, /client_created_at: row\.clientCreatedAt/);
+  assert.match(source, /order: "client_created_at\.asc,id\.asc"/);
 });
