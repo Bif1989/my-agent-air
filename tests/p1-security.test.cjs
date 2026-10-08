@@ -11,12 +11,12 @@ test('production responses use baseline browser security headers', () => {
   const source = read('next.config.ts');
   assert.match(source, /X-Content-Type-Options/);
   assert.match(source, /nosniff/);
-  assert.match(source, /X-Frame-Options/);
-  assert.match(source, /DENY/);
   assert.match(source, /Referrer-Policy/);
   assert.match(source, /Permissions-Policy/);
   assert.match(source, /microphone=\(self\)/);
   assert.match(source, /Strict-Transport-Security/);
+  assert.doesNotMatch(source, /X-Frame-Options/);
+  assert.doesNotMatch(source, /Cross-Origin-Resource-Policy/);
 });
 
 test('auth requests are normalized, uncached and time bounded', () => {
