@@ -22,6 +22,7 @@ type PendingAiMessage = {
   role: "user" | "assistant";
   content: string;
   actions: AiHistoryAction[];
+  clientCreatedAt: string;
 };
 
 const CONVERSATION_PAGE_SIZE = 100;
@@ -67,7 +68,10 @@ function readOutbox(userId: string): PendingAiMessage[] {
     return parsed.filter((item): item is PendingAiMessage => Boolean(
       item && typeof item === "object" && typeof item.id === "string" && typeof item.conversationId === "string" &&
       (item.role === "user" || item.role === "assistant") && typeof item.content === "string" && Array.isArray(item.actions),
-    )).slice(-OUTBOX_LIMIT);
+    )).map((item) => ({
+      ...item,
+      clientCreatedAt: typeof item.clientCreatedAt === "string" && item.clientCreatedAt ? item.clientCreatedAt : new Date().toISOString(),
+    })).slice(-OUTBOX_LIMIT);
   } catch {
     return [];
   }
@@ -121,6 +125,7 @@ async function persistMessage(session: AuthSession, row: PendingAiMessage) {
     role: row.role,
     content: row.content.slice(0, 8000),
     actions: row.actions,
+    client_created_at: row.clientCreatedAt,
   });
   return fetchWithRetry(`${SUPABASE_URL}/rest/v1/ai_chat_messages?on_conflict=id`, {
     method: "POST",
@@ -221,10 +226,10 @@ export async function listAiChatHistory(session: AuthSession, conversationId: st
   const all: AiHistoryMessage[] = [];
   for (let offset = 0; ; offset += MESSAGE_PAGE_SIZE) {
     const params = new URLSearchParams({
-      select: "id,role,content,actions,created_at",
+      select: "id,role,content,actions,created_at,client_created_at",
       user_id: `eq.${session.user.id}`,
       conversation_id: `eq.${conversationId}`,
-      order: "created_at.asc,id.asc",
+      order: "client_created_at.asc,id.asc",
       limit: String(MESSAGE_PAGE_SIZE),
       offset: String(offset),
     });
@@ -233,7 +238,7 @@ export async function listAiChatHistory(session: AuthSession, conversationId: st
       cache: "no-store",
     });
     if (!response.ok) throw new Error("AI tarixi yuklanmadi.");
-    const rows = (await response.json()) as AiHistoryMessage[];
+    const rows = (await response.json()) as (AiHistoryMessage & { client_created_at?: string })[];
     all.push(...rows.map((row) => ({ ...row, actions: Array.isArray(row.actions) ? row.actions : [] })));
     if (rows.length < MESSAGE_PAGE_SIZE) return all;
   }
@@ -253,6 +258,7 @@ export async function saveAiChatMessage(
     role,
     content: content.slice(0, 8000),
     actions,
+    clientCreatedAt: new Date().toISOString(),
   };
 
   try {
