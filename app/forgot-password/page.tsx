@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import AuthCard, { authButtonClass, authInputClass } from "@/app/components/auth-card";
-import { requestPasswordReset } from "@/lib/supabase-auth";
+import { requestPasswordResetProtected } from "@/lib/public-auth";
 
 export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
@@ -14,7 +14,7 @@ export default function ForgotPasswordPage() {
     const email = String(new FormData(event.currentTarget).get("email") || "").trim();
     setLoading(true); setError("");
     try {
-      await requestPasswordReset(email, `${window.location.origin}/reset-password`);
+      await requestPasswordResetProtected(email);
       setSent(true);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Havolani yuborib bo‘lmadi. Qayta urinib ko‘ring.");
