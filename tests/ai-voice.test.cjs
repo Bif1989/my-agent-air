@@ -61,7 +61,7 @@ test('normal stop creates one complete blob, including final chunk', async () =>
 });
 test('401 refresh retries same audio once with updated bearer token', async () => {
   const requests = [];
-  const freshToken = jwt('actor');
+  const freshToken = jwt('actor', Math.floor(Date.now() / 1000) + 7200);
   global.fetch = async (url, options) => {
     requests.push({url, options});
     if (url.includes('grant_type=refresh_token')) return Response.json({ ...session, access_token: freshToken, refresh_token: 'new-refresh' });
@@ -135,7 +135,7 @@ test('upstream response-body timeout retains timeout code', async () => {
 test('expired JWT refreshes before first transcription upload', async () => {
   auth.saveSession({...session, access_token: jwt('actor', 1)});
   const calls = [];
-  const freshToken = jwt('actor');
+  const freshToken = jwt('actor', Math.floor(Date.now() / 1000) + 7200);
   global.fetch = async (url, options) => {
     calls.push(url);
     if (url.includes('grant_type=refresh_token')) return Response.json({...session, access_token:freshToken, refresh_token:'new'});
