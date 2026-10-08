@@ -75,11 +75,12 @@ export default function AdminSuppliersPage() {
   useEffect(() => {
     const stored = getStoredSession();
     if (!stored) { window.location.replace("/login"); return; }
-    setSession(stored);
+    const sessionTimer = window.setTimeout(() => setSession(stored), 0);
     getCurrentProfile().then((profile) => {
-      if (profile?.role !== "admin") { window.location.replace("/dashboard"); return null; }
+      if (profile?.role !== "admin" || profile.registration_status !== "active") { window.location.replace("/dashboard"); return null; }
       return loadSupplierStats();
     }).then((data) => { if (data) setStats(data); }).catch(() => setError("Supplier statistikasi yuklanmadi.")).finally(() => setLoading(false));
+    return () => window.clearTimeout(sessionTimer);
   }, []);
 
   const previewCount = useMemo(() => {
