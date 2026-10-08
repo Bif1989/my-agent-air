@@ -90,7 +90,7 @@ test('signup and password recovery are routed through persistent send quotas', (
   assert.match(recover, /recover-pair/);
   assert.match(recover, /limit: 3, window: 1800/);
   assert.match(recover, /limit: 20, window: 3600/);
-  assert.match(recover, /account mavjud bo‘lsa/);
+  assert.match(recover, /hisob mavjud bo‘lsa/);
   assert.match(migration, /grant execute on function public\.consume_auth_action_quota\(text, integer, integer\) to service_role/);
   assert.match(migration, /revoke all on function public\.consume_auth_action_quota\(text, integer, integer\) from public, anon, authenticated/);
 });
