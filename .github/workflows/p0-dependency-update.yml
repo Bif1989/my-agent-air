@@ -1,0 +1,43 @@
+name: P0 Dependency Security Update
+
+on:
+  push:
+    paths:
+      - .github/workflows/p0-dependency-update.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update-secure-dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Upgrade patched Next.js and production transitive dependencies
+        run: |
+          npm install --save-exact next@16.4.0
+          npm audit fix --omit=dev
+      - name: Verify production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
+      - name: Commit verified dependency lockfile update
+        run: |
+          if git diff --quiet -- package.json package-lock.json; then
+            echo "No dependency changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "Upgrade dependencies for P0 security"
+          git push origin HEAD:main
