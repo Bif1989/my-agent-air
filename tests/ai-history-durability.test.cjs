@@ -64,16 +64,18 @@ test('AI history queues a message locally after transient network failure and fl
   }
 });
 
-test('AI history source paginates conversations, messages and orders by original client time', () => {
+test('AI history keeps all conversations pageable but only loads the newest 80 messages for a fast chat window', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const source = fs.readFileSync(path.join(process.cwd(), 'lib/ai-chat-history.ts'), 'utf8');
   assert.match(source, /CONVERSATION_PAGE_SIZE = 100/);
-  assert.match(source, /MESSAGE_PAGE_SIZE = 200/);
+  assert.match(source, /VISIBLE_HISTORY_LIMIT = 80/);
   assert.match(source, /offset: String\(offset\)/);
+  assert.match(source, /limit: String\(VISIBLE_HISTORY_LIMIT\)/);
+  assert.match(source, /order: "client_created_at\.desc,id\.desc"/);
+  assert.match(source, /return rows\.reverse\(\)/);
+  assert.match(source, /void flushAiChatOutbox\(session\)/);
   assert.match(source, /fetchWithRetry/);
-  assert.match(source, /flushAiChatOutbox/);
   assert.match(source, /OUTBOX_LIMIT = 100/);
   assert.match(source, /client_created_at: row\.clientCreatedAt/);
-  assert.match(source, /order: "client_created_at\.asc,id\.asc"/);
 });
