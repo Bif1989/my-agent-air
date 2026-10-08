@@ -42,9 +42,13 @@ function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function messageId() {
+function stableId() {
   if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`;
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
+    const value = Math.floor(Math.random() * 16);
+    const nibble = char === "x" ? value : ((value & 0x3) | 0x8);
+    return nibble.toString(16);
+  });
 }
 
 function outboxKey(userId: string) {
@@ -135,7 +139,6 @@ async function persistMessage(session: AuthSession, row: PendingAiMessage) {
   });
 }
 
-/** Flushes only messages that previously failed to reach Supabase. */
 export async function flushAiChatOutbox(session: AuthSession) {
   const pending = readOutbox(session.user.id);
   for (const row of pending) {
@@ -145,7 +148,6 @@ export async function flushAiChatOutbox(session: AuthSession) {
         removeFromOutbox(session.user.id, row.id);
         continue;
       }
-      // Invalid/deleted conversations should not poison the outbox forever.
       if (response.status >= 400 && response.status < 500 && ![401, 403, 429].includes(response.status)) {
         removeFromOutbox(session.user.id, row.id);
         continue;
@@ -180,15 +182,26 @@ export async function listAiConversations(session: AuthSession): Promise<AiConve
 }
 
 export async function createAiConversation(session: AuthSession, title = "Yangi chat"): Promise<AiConversation> {
-  const response = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/ai_chat_conversations`, {
+  const id = stableId();
+  const safeTitle = title.slice(0, 120) || "Yangi chat";
+  const response = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/ai_chat_conversations?on_conflict=id`, {
     method: "POST",
-    headers: { ...headers(session), Prefer: "return=representation" },
-    body: JSON.stringify({ user_id: session.user.id, title: title.slice(0, 120) || "Yangi chat" }),
+    headers: { ...headers(session), Prefer: "resolution=merge-duplicates,return=representation" },
+    body: JSON.stringify({ id, user_id: session.user.id, title: safeTitle }),
   });
   if (!response.ok) throw new Error("Yangi AI chat yaratilmadi.");
   const rows = (await response.json()) as AiConversation[];
-  if (!rows[0]) throw new Error("Yangi AI chat yaratilmadi.");
-  return rows[0];
+  if (rows[0]) return rows[0];
+
+  const params = new URLSearchParams({ id: `eq.${id}`, user_id: `eq.${session.user.id}`, select: "id,title,created_at,updated_at", limit: "1" });
+  const lookup = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/ai_chat_conversations?${params.toString()}`, {
+    headers: headers(session),
+    cache: "no-store",
+  });
+  if (!lookup.ok) throw new Error("Yangi AI chat yaratilmadi.");
+  const existing = (await lookup.json()) as AiConversation[];
+  if (!existing[0]) throw new Error("Yangi AI chat yaratilmadi.");
+  return existing[0];
 }
 
 export async function renameAiConversation(session: AuthSession, conversationId: string, title: string) {
@@ -201,7 +214,6 @@ export async function renameAiConversation(session: AuthSession, conversationId:
   if (!response.ok) throw new Error("AI chat nomi saqlanmadi.");
 }
 
-/** Database ownership policies apply; messages cascade with their conversation. */
 export async function deleteAiConversations(session: AuthSession, conversationId?: string) {
   if (conversationId !== undefined && !conversationId.trim()) throw new Error("Chat tanlanmagan.");
   const params = new URLSearchParams({ user_id: `eq.${session.user.id}`, select: "id" });
@@ -211,8 +223,6 @@ export async function deleteAiConversations(session: AuthSession, conversationId
     headers: { ...headers(session), Prefer: "return=representation" },
   });
   if (!response.ok) throw new Error("AI chatni o‘chirib bo‘lmadi.");
-  const rows = await response.json() as { id: string }[];
-  if (conversationId && !rows.some((row) => row.id === conversationId)) throw new Error("Chat topilmadi yoki o‘chirishga ruxsat yo‘q.");
 
   if (conversationId) {
     writeOutbox(session.user.id, readOutbox(session.user.id).filter((item) => item.conversationId !== conversationId));
@@ -250,7 +260,7 @@ export async function saveAiChatMessage(
   role: "user" | "assistant",
   content: string,
   actions: AiHistoryAction[] = [],
-  id = messageId(),
+  id = stableId(),
 ) {
   const row: PendingAiMessage = {
     id,
