@@ -13,6 +13,7 @@ import { domesticTourAdvice, isUzbekistanDomesticTourism } from "@/lib/uzbekista
 import {
   createAiConversation,
   deleteAiConversations,
+  flushAiChatOutbox,
   listAiChatHistory,
   listAiConversations,
   renameAiConversation,
@@ -92,7 +93,6 @@ function formatDraftLabel(draft: AssistantDraft, isRu: boolean) {
   return [category, route, date].filter(Boolean).join(" · ");
 }
 
-
 function draftFromActionHref(href: string) {
   if (!href.startsWith("/requests/new?")) return null;
   try {
@@ -159,6 +159,8 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [historyReady, setHistoryReady] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [historyReloadKey, setHistoryReloadKey] = useState(0);
   const [threadsOpen, setThreadsOpen] = useState(false);
   const [threadError, setThreadError] = useState("");
   const [deletingHistory, setDeletingHistory] = useState(false);
@@ -194,16 +196,27 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
   useEffect(() => {
     if (!activeConversationId) return;
     let active = true;
+    setHistoryReady(false);
+    setHistoryError("");
+    setEntries([]);
     listAiChatHistory(session, activeConversationId).then((rows) => {
       if (!active) return;
       setEntries(rows.length ? rows.map((row) => ({ id: row.id, sender: row.role, text: row.content, actions: row.actions })) : [greeting]);
+      setHistoryReady(true);
     }).catch(() => {
-      if (active) setEntries([greeting]);
-    }).finally(() => { if (active) setHistoryReady(true); });
+      if (!active) return;
+      setHistoryError(isRu ? "Не удалось загрузить этот чат. История не удалена." : "Bu chat tarixini yuklab bo‘lmadi. Tarix o‘chirilmagan.");
+      setHistoryReady(false);
+    });
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeConversationId]);
+  }, [activeConversationId, historyReloadKey]);
 
+  useEffect(() => {
+    const flush = () => { void flushAiChatOutbox(session).catch(() => undefined); };
+    window.addEventListener("online", flush);
+    return () => window.removeEventListener("online", flush);
+  }, [session]);
 
   useEffect(() => {
     if (!historyReady) return;
@@ -213,12 +226,13 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
   async function startNewConversation() {
     if (busy || deletingHistory) return;
     setThreadError("");
+    setHistoryError("");
     try {
       const created = await createAiConversation(session, isRu ? "Новый чат" : "Yangi chat");
       setConversations((current) => [created, ...current]);
       setHistoryReady(false);
       setActiveConversationId(created.id);
-      setEntries([greeting]);
+      setEntries([]);
       setInput("");
       setThreadsOpen(false);
     } catch {
@@ -230,7 +244,9 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
     if (busy || deletingHistory) return;
     if (id === activeConversationId) { setThreadsOpen(false); return; }
     setInput("");
+    setHistoryError("");
     setHistoryReady(false);
+    setEntries([]);
     setActiveConversationId(id);
     setThreadsOpen(false);
   }
@@ -250,6 +266,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
         setActiveConversationId(null);
         setEntries([greeting]);
         setInput("");
+        setHistoryError("");
         setHistoryReady(true);
       }
     } catch {
@@ -268,8 +285,10 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
 
   function appendEntry(conversationId: string, sender: "user" | "assistant", text: string, entryActions: AiHistoryAction[] = []) {
     const entry: ChatEntry = { id: `local-${++sequence.current}`, sender, text, actions: entryActions };
-    setEntries((current) => [...current.filter((item) => item.id !== "greeting"), entry].slice(-80));
-    void saveAiChatMessage(session, conversationId, sender, text, entryActions).catch(() => undefined);
+    setEntries((current) => [...current.filter((item) => item.id !== "greeting"), entry]);
+    void saveAiChatMessage(session, conversationId, sender, text, entryActions).catch(() => {
+      setThreadError(isRu ? "Не удалось сохранить сообщение ни на сервере, ни локально." : "Xabarni serverga ham, lokal navbatga ham saqlab bo‘lmadi.");
+    });
     return entry;
   }
 
@@ -447,7 +466,8 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
 
         <div className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-blue-50/40 via-white to-white px-3 py-3 dark:from-slate-900 dark:via-slate-950 dark:to-slate-950 sm:px-5 sm:py-5" aria-live="polite">
           <div className="mx-auto flex min-h-full max-w-3xl flex-col">
-            {!historyReady && activeConversationId && <div className="flex min-h-32 items-center justify-center text-xs text-slate-400">{isRu ? "Загрузка истории чата..." : "Chat tarixi yuklanmoqda..."}</div>}
+            {!historyReady && !historyError && activeConversationId && <div className="flex min-h-32 items-center justify-center text-xs text-slate-400">{isRu ? "Загрузка истории чата..." : "Chat tarixi yuklanmoqda..."}</div>}
+            {historyError && <div role="alert" className="my-auto rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"><p>{historyError}</p><button type="button" onClick={() => setHistoryReloadKey((value) => value + 1)} className="mt-3 rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-700">{isRu ? "Загрузить снова" : "Qayta yuklash"}</button></div>}
             {historyReady && <div className="space-y-3 sm:space-y-5">
               {entries.map((entry) => (
                 <div key={entry.id} className={`flex gap-3 ${entry.sender === "user" ? "justify-end" : "justify-start"}`}>
