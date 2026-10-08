@@ -26,10 +26,10 @@ jobs:
       - run: npm test
       - run: npm run lint
       - run: npm run build
-      - name: Install browser smoke dependency
+      - name: Install browser smoke dependencies
         run: |
           npm install --no-save playwright@1.56.1
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium webkit
       - name: Start production build
         run: |
           npm run start > /tmp/my-agent-air.log 2>&1 &
@@ -40,7 +40,7 @@ jobs:
           done
           cat /tmp/my-agent-air.log
           exit 1
-      - name: Desktop and mobile browser smoke
+      - name: Desktop, Android and iOS browser smoke
         env:
           BASE_URL: http://127.0.0.1:3000
         run: node .github/scripts/browser-smoke.cjs
