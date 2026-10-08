@@ -223,11 +223,16 @@ export default function AppShell({ children, session, activePath = "" }: { child
         <div className="mt-auto border-t border-white/10 pt-4">
           <p className="truncate px-2 text-sm font-semibold">{profileName || currentSession.user.email || (isRu ? "Пользователь" : "Foydalanuvchi")}</p>
           <p className="truncate px-2 text-[11px] text-blue-200">{companyName || (isRu ? "Компания" : "Kompaniya")} · {role === "admin" ? "Admin" : "Agent"}</p>
-          <button type="button" onClick={handleLogout} disabled={isSigningOut} className="mt-3 w-full rounded-xl border border-white/15 px-3 py-2.5 text-left text-xs font-medium text-blue-100 hover:bg-white/10 disabled:opacity-60">{isSigningOut ? (isRu ? "Выход..." : "Chiqilmoqda...") : (isRu ? "Выйти" : "Chiqish")}</button>
         </div>
       </aside>
 
       <div className="min-w-0 flex-1 pb-16 lg:pb-0">
+        <header className="hidden h-14 items-center justify-end border-b border-slate-200 bg-white px-6 lg:flex dark:border-slate-800 dark:bg-slate-950">
+          <button type="button" onClick={handleLogout} disabled={isSigningOut} aria-label={isRu ? "Выйти из аккаунта" : "Hisobdan chiqish"} className="flex items-center gap-2 rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900">
+            <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 5H5v14h4M13 8l4 4-4 4M9 12h11" /></svg>
+            {isSigningOut ? (isRu ? "Выход..." : "Chiqilmoqda...") : (isRu ? "Выйти" : "Chiqish")}
+          </button>
+        </header>
         <header className="flex h-14 items-center justify-between border-b border-slate-200 bg-white px-3 sm:px-5 lg:hidden">
           <Link href="/dashboard" className="flex items-center gap-2 text-sm font-bold tracking-wide"><BrandMark /> MY AGENT AIR</Link>
           <div className="flex items-center gap-1.5">
