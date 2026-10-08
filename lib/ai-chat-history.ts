@@ -223,6 +223,8 @@ export async function deleteAiConversations(session: AuthSession, conversationId
     headers: { ...headers(session), Prefer: "return=representation" },
   });
   if (!response.ok) throw new Error("AI chatni o‘chirib bo‘lmadi.");
+  const rows = await response.json() as { id: string }[];
+  if (conversationId && !rows.some((row) => row.id === conversationId)) throw new Error("Chat topilmadi yoki o‘chirishga ruxsat yo‘q.");
 
   if (conversationId) {
     writeOutbox(session.user.id, readOutbox(session.user.id).filter((item) => item.conversationId !== conversationId));
