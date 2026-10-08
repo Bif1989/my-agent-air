@@ -2,6 +2,7 @@ import { searchFilterText } from "@/lib/request-freshness";
 import { authenticatedSupabaseFetch } from "@/lib/supabase-auth";
 
 const AGENT_FIELDS = "id,full_name,avatar_url,company_name,city,phone,agent_type,services,is_verified,is_active,created_at";
+const COMPLETE_AGENT_FILTER = "(company_name.not.is.null,city.not.is.null,phone.not.is.null,agent_type.not.is.null,agent_type.neq.agent)";
 
 export type AgentRecord = {
   id: string;
@@ -40,7 +41,14 @@ function agentOrder(sort: AgentSort | undefined) {
 }
 
 export async function listAgents(options: { search?: string; city?: string; agentType?: string; service?: string; verifiedOnly?: boolean; sort?: AgentSort; limit?: number; offset?: number } = {}) {
-  const params = new URLSearchParams({ select: AGENT_FIELDS, is_active: "eq.true", order: agentOrder(options.sort), limit: String(options.limit || 100), offset: String(options.offset || 0) });
+  const params = new URLSearchParams({
+    select: AGENT_FIELDS,
+    is_active: "eq.true",
+    and: COMPLETE_AGENT_FILTER,
+    order: agentOrder(options.sort),
+    limit: String(options.limit || 100),
+    offset: String(options.offset || 0),
+  });
   const search = searchFilterText(options.search || "");
   if (search) params.set("or", `(full_name.ilike.*${search}*,company_name.ilike.*${search}*,city.ilike.*${search}*)`);
   if (options.city) params.set("city", `eq.${options.city}`);
@@ -57,7 +65,14 @@ export async function getAgentFilterOptions() {
 }
 
 export async function getAgent(id: string) {
-  const response = await authenticatedSupabaseFetch(`profiles?select=${encodeURIComponent(AGENT_FIELDS)}&id=eq.${encodeURIComponent(id)}&is_active=eq.true&limit=1`);
+  const params = new URLSearchParams({
+    select: AGENT_FIELDS,
+    id: `eq.${id}`,
+    is_active: "eq.true",
+    and: COMPLETE_AGENT_FILTER,
+    limit: "1",
+  });
+  const response = await authenticatedSupabaseFetch(`profiles?${params}`);
   const rows = await readJson<AgentRecord[]>(response);
   return rows[0] || null;
 }
