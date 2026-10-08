@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase-config";
 import { checkPasswordExposure, newPasswordValidationMessage } from "@/lib/server/password-security";
+import { verifyTurnstile } from "@/lib/server/turnstile";
 
 export const runtime = "nodejs";
 export const maxDuration = 20;
@@ -19,6 +20,7 @@ type SignupBody = {
   phone?: unknown;
   city?: unknown;
   agent_type?: unknown;
+  captcha_token?: unknown;
 };
 type Quota = { allowed?: boolean; retry_after?: number };
 
@@ -87,6 +89,7 @@ export async function POST(request: NextRequest) {
   const phone = clean(input?.phone, 64);
   const city = clean(input?.city, 120);
   const agentType = clean(input?.agent_type, 60);
+  const captchaToken = clean(input?.captcha_token, 4096);
   const passwordMessage = newPasswordValidationMessage(password);
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || passwordMessage || !fullName || !company || !phone || !city || !AGENT_TYPES.has(agentType)) {
@@ -111,6 +114,9 @@ export async function POST(request: NextRequest) {
       return json({ code: "TOO_MANY_ATTEMPTS", message: "Juda ko‘p urinish. Birozdan keyin qayta urinib ko‘ring." }, 429, retryAfter);
     }
   }
+
+  const captcha = await verifyTurnstile({ token: captchaToken, action: "signup", remoteIp: ip, hostname: request.nextUrl.hostname });
+  if (!captcha.ok) return json({ code: captcha.code, message: captcha.message }, captcha.status);
 
   const exposure = await checkPasswordExposure(password);
   if (exposure.status === "leaked") {
