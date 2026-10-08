@@ -79,3 +79,14 @@ test('AI history keeps all conversations pageable but only loads the newest 80 m
   assert.match(source, /OUTBOX_LIMIT = 100/);
   assert.match(source, /client_created_at: row\.clientCreatedAt/);
 });
+
+test('AI history reads cannot hang forever on a stalled network', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(process.cwd(), 'lib/ai-chat-history.ts'), 'utf8');
+  assert.match(source, /READ_ATTEMPTS = 2/);
+  assert.match(source, /REQUEST_TIMEOUT_MS = 8_000/);
+  assert.match(source, /new AbortController\(\)/);
+  assert.match(source, /setTimeout\(\(\) => controller\.abort\(\), REQUEST_TIMEOUT_MS\)/);
+  assert.match(source, /}, READ_ATTEMPTS\)/);
+});
