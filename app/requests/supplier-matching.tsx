@@ -74,13 +74,9 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
     if (request.category === "Transfer") return ["transport"];
     return ["hotel", "transport", "guide", "restaurant"];
   }, [request.category]);
+  const effectiveSupplierType = allowedTypes.includes(supplierType) ? supplierType : allowedTypes[0];
 
-  useEffect(() => {
-    if (!enabled) return;
-    if (!allowedTypes.includes(supplierType)) setSupplierType(allowedTypes[0]);
-  }, [allowedTypes, enabled, supplierType]);
-
-  async function refresh(type = supplierType) {
+  async function refresh(type = effectiveSupplierType) {
     setLoading(true);
     setError("");
     try {
@@ -99,10 +95,10 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
 
   useEffect(() => {
     if (!enabled) return;
-    const timeout = window.setTimeout(() => { void refresh(supplierType); }, 0);
+    const timeout = window.setTimeout(() => { void refresh(effectiveSupplierType); }, 0);
     return () => window.clearTimeout(timeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, request.id, supplierType]);
+  }, [enabled, effectiveSupplierType, request.id]);
 
   async function makeInvite(supplier: SupplierMatch) {
     setWorkingId(supplier.id);
@@ -139,7 +135,7 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
       <button type="button" onClick={() => void refresh()} disabled={loading} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:border-blue-300 disabled:opacity-50">{loading ? "Qidirilmoqda..." : "Qayta qidirish"}</button>
     </div>
 
-    {allowedTypes.length > 1 && <div className="mt-5 flex flex-wrap gap-2">{allowedTypes.map((type) => <button key={type} type="button" onClick={() => setSupplierType(type)} className={`rounded-full px-4 py-2 text-sm font-semibold ${supplierType === type ? "bg-[#0b1f3a] text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{TYPE_LABELS[type]}</button>)}</div>}
+    {allowedTypes.length > 1 && <div className="mt-5 flex flex-wrap gap-2">{allowedTypes.map((type) => <button key={type} type="button" onClick={() => setSupplierType(type)} className={`rounded-full px-4 py-2 text-sm font-semibold ${effectiveSupplierType === type ? "bg-[#0b1f3a] text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{TYPE_LABELS[type]}</button>)}</div>}
 
     {error && <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
