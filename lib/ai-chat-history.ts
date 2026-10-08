@@ -28,6 +28,8 @@ type PendingAiMessage = {
 const CONVERSATION_PAGE_SIZE = 100;
 const VISIBLE_HISTORY_LIMIT = 80;
 const REQUEST_ATTEMPTS = 3;
+const READ_ATTEMPTS = 2;
+const REQUEST_TIMEOUT_MS = 8_000;
 const OUTBOX_LIMIT = 100;
 
 function headers(session: AuthSession) {
@@ -108,16 +110,21 @@ async function fetchWithRetry(input: RequestInfo | URL, init: RequestInit, attem
   let lastResponse: Response | null = null;
   let lastError: unknown = null;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
-      const response = await fetch(input, init);
+      const response = await fetch(input, { ...init, signal: controller.signal });
       lastResponse = response;
       if (response.ok || (response.status < 500 && response.status !== 429)) return response;
     } catch (error) {
       lastError = error;
+    } finally {
+      clearTimeout(timeout);
     }
     if (attempt < attempts - 1) await wait(250 * (attempt + 1));
   }
   if (lastResponse) return lastResponse;
+  if (lastError instanceof Error && lastError.name === "AbortError") throw new Error("So‘rov vaqti tugadi. Qayta urinib ko‘ring.");
   throw lastError instanceof Error ? lastError : new Error("Tarmoq xatosi.");
 }
 
@@ -173,7 +180,7 @@ export async function listAiConversations(session: AuthSession): Promise<AiConve
     const response = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/ai_chat_conversations?${params.toString()}`, {
       headers: headers(session),
       cache: "no-store",
-    });
+    }, READ_ATTEMPTS);
     if (!response.ok) throw new Error("AI chatlar ro‘yxati yuklanmadi.");
     const rows = (await response.json()) as AiConversation[];
     all.push(...rows);
@@ -197,7 +204,7 @@ export async function createAiConversation(session: AuthSession, title = "Yangi 
   const lookup = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/ai_chat_conversations?${params.toString()}`, {
     headers: headers(session),
     cache: "no-store",
-  });
+  }, READ_ATTEMPTS);
   if (!lookup.ok) throw new Error("Yangi AI chat yaratilmadi.");
   const existing = (await lookup.json()) as AiConversation[];
   if (!existing[0]) throw new Error("Yangi AI chat yaratilmadi.");
@@ -245,7 +252,7 @@ export async function listAiChatHistory(session: AuthSession, conversationId: st
   const response = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/ai_chat_messages?${params.toString()}`, {
     headers: headers(session),
     cache: "no-store",
-  });
+  }, READ_ATTEMPTS);
   if (!response.ok) throw new Error("AI tarixi yuklanmadi.");
   const rows = (await response.json()) as (AiHistoryMessage & { client_created_at?: string })[];
   return rows.reverse().map((row) => ({ ...row, actions: Array.isArray(row.actions) ? row.actions : [] }));
