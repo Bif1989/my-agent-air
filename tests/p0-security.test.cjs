@@ -62,6 +62,13 @@ test('external supplier admin import matches table constraints and bounds each b
   assert.match(source, /\^\[1-5\]\$/);
 });
 
+test('trigger-only helper functions are not directly executable by client roles', () => {
+  const source = read('supabase/migrations/20261008125500_p0_trigger_function_execute_hardening.sql');
+  assert.match(source, /touch_comment_edited_at\(\).*public, anon, authenticated/);
+  assert.match(source, /touch_post_updated_at\(\).*public, anon, authenticated/);
+  assert.match(source, /touch_updated_at\(\).*public, anon, authenticated/);
+});
+
 test('CI blocks high production dependency vulnerabilities and runs Chromium plus WebKit smoke', () => {
   const source = read('.github/workflows/quality.yml');
   assert.match(source, /npm audit --omit=dev --audit-level=high/);
