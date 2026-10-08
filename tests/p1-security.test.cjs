@@ -18,3 +18,18 @@ test('production responses use baseline browser security headers', () => {
   assert.match(source, /microphone=\(self\)/);
   assert.match(source, /Strict-Transport-Security/);
 });
+
+test('auth requests are normalized, uncached and time bounded', () => {
+  const source = read('lib/supabase-auth.ts');
+  assert.match(source, /AUTH_REQUEST_TIMEOUT_MS = 15_000/);
+  assert.match(source, /controller\.abort\(\)/);
+  assert.match(source, /cache: "no-store"/);
+  assert.match(source, /referrerPolicy: "no-referrer"/);
+  assert.match(source, /email\.trim\(\)\.toLowerCase\(\)/);
+});
+
+test('session storage does not keep a second duplicate access-token key', () => {
+  const source = read('lib/supabase-auth.ts');
+  assert.doesNotMatch(source, /localStorage\.setItem\(ACCESS_TOKEN_STORAGE_KEY/);
+  assert.match(source, /localStorage\.removeItem\(ACCESS_TOKEN_STORAGE_KEY\)/);
+});
