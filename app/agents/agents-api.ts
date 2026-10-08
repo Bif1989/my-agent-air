@@ -1,7 +1,7 @@
 import { searchFilterText } from "@/lib/request-freshness";
 import { authenticatedSupabaseFetch } from "@/lib/supabase-auth";
 
-const AGENT_FIELDS = "id,full_name,avatar_url,company_name,city,phone,agent_type,services,is_verified,is_active,created_at";
+const AGENT_FIELDS = "id,full_name,avatar_url,company_name,city,phone,agent_type,services,is_verified,is_active,registration_status,created_at";
 const COMPLETE_AGENT_FILTER = "(company_name.not.is.null,city.not.is.null,phone.not.is.null,agent_type.not.is.null,agent_type.neq.agent)";
 
 export type AgentRecord = {
@@ -15,6 +15,7 @@ export type AgentRecord = {
   services: string[] | null;
   is_verified: boolean | null;
   is_active: boolean | null;
+  registration_status: "pending_email" | "incomplete" | "active" | "suspended";
   created_at: string;
 };
 
@@ -44,6 +45,7 @@ export async function listAgents(options: { search?: string; city?: string; agen
   const params = new URLSearchParams({
     select: AGENT_FIELDS,
     is_active: "eq.true",
+    registration_status: "eq.active",
     and: COMPLETE_AGENT_FILTER,
     order: agentOrder(options.sort),
     limit: String(options.limit || 100),
@@ -69,6 +71,7 @@ export async function getAgent(id: string) {
     select: AGENT_FIELDS,
     id: `eq.${id}`,
     is_active: "eq.true",
+    registration_status: "eq.active",
     and: COMPLETE_AGENT_FILTER,
     limit: "1",
   });
