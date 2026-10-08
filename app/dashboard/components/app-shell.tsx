@@ -219,14 +219,16 @@ export default function AppShell({ children, session, activePath = "" }: { child
             </Link>
           ))}
         </nav>
-        <div className="mt-5 px-1"><UiControls inverse /></div>
-        <div className="mt-auto border-t border-white/10 pt-4">
-          <p className="truncate px-2 text-sm font-semibold">{profileName || currentSession.user.email || (isRu ? "Пользователь" : "Foydalanuvchi")}</p>
-          <p className="truncate px-2 text-[11px] text-blue-200">{companyName || (isRu ? "Компания" : "Kompaniya")} · {role === "admin" ? "Admin" : "Agent"}</p>
+        <div className="mt-5 px-1">
+          <UiControls inverse />
           <div className="mt-3 grid grid-cols-2 gap-2">
             <Link href="/profile" className="rounded-xl border border-white/15 px-3 py-2.5 text-center text-xs font-medium text-blue-100 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-300">{isRu ? "Профиль" : "Profil"}</Link>
             <button type="button" onClick={handleLogout} disabled={isSigningOut} aria-label={isRu ? "Выйти" : "Chiqish"} className="rounded-xl border border-white/15 px-3 py-2.5 text-center text-xs font-medium text-blue-100 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-300 disabled:opacity-60">{isSigningOut ? (isRu ? "Выход..." : "Chiqilmoqda...") : (isRu ? "Выйти" : "Chiqish")}</button>
           </div>
+        </div>
+        <div className="mt-auto border-t border-white/10 pt-4">
+          <p className="truncate px-2 text-sm font-semibold">{profileName || currentSession.user.email || (isRu ? "Пользователь" : "Foydalanuvchi")}</p>
+          <p className="truncate px-2 text-[11px] text-blue-200">{companyName || (isRu ? "Компания" : "Kompaniya")} · {role === "admin" ? "Admin" : "Agent"}</p>
         </div>
       </aside>
 
