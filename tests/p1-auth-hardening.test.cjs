@@ -30,6 +30,10 @@ test('new passwords use a ten-character floor and HIBP k-anonymity screening', a
     assert.ok(requested.endsWith(`/range/${prefix}`));
     assert.equal(requested.includes(suffix), false);
     assert.equal(requested.includes(password), false);
+    global.fetch = async () => new Response(`${suffix}:0\r\n`);
+    assert.deepEqual(await security.checkPasswordExposure(password), { status: 'safe' });
+    global.fetch = async () => new Response(`${suffix}:invalid\r\n`);
+    assert.deepEqual(await security.checkPasswordExposure(password), { status: 'safe' });
   } finally {
     global.fetch = originalFetch;
   }
@@ -89,9 +93,41 @@ test('Turnstile is dormant without keys, fails closed on partial config, and val
     const wrongAction = await helper.verifyTurnstile({ token: 'token', action: 'signup', hostname: 'agent.bifavia.uz' });
     assert.equal(wrongAction.ok, false);
     assert.equal(wrongAction.status, 403);
+    for (const hostname of ['other.example', undefined, 123]) {
+      global.fetch = async () => Response.json({ success: true, action: 'login', hostname });
+      const result = await helper.verifyTurnstile({ token: 'token', action: 'login', hostname: 'agent.bifavia.uz' });
+      assert.equal(result.ok, false);
+      assert.equal(result.status, 403);
+    }
   } finally {
     if (oldSite === undefined) delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY; else process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = oldSite;
     if (oldSecret === undefined) delete process.env.TURNSTILE_SECRET_KEY; else process.env.TURNSTILE_SECRET_KEY = oldSecret;
     global.fetch = originalFetch;
   }
+});
+
+test('recovery rejects oversized chunked bodies before any upstream request', async () => {
+  const { NextRequest } = require('next/server');
+  const { POST } = require('../app/api/auth/update-password/route.ts');
+  const originalFetch = global.fetch;
+  let calls = 0;
+  global.fetch = async () => { calls++; throw new Error('Must not contact upstream'); };
+  try {
+    for (const declaredLength of [undefined, '2']) {
+      let cancelled = false;
+      const payload = new TextEncoder().encode(JSON.stringify({ password: 'x'.repeat(5000) }));
+      const stream = new ReadableStream({
+        start(controller) { controller.enqueue(payload); },
+        cancel() { cancelled = true; },
+      });
+      const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer invalid-test-token' };
+      if (declaredLength) headers['Content-Length'] = declaredLength;
+      const response = await POST(new NextRequest('https://agent.bifavia.uz/api/auth/update-password', {
+        method: 'POST', headers, body: stream, duplex: 'half',
+      }));
+      assert.equal(response.status, 422);
+      assert.equal(cancelled, true);
+      assert.equal(calls, 0);
+    }
+  } finally { global.fetch = originalFetch; }
 });

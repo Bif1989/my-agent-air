@@ -1,3 +1,4 @@
+import { readBoundedJson } from "@/lib/server/bounded-json";
 import { createHmac } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -44,13 +45,7 @@ function hash(secret: string, value: string) {
 }
 
 async function readBody(request: NextRequest): Promise<VerifyBody | null> {
-  if (!(request.headers.get("content-type") || "").toLowerCase().startsWith("application/json")) return null;
-  const declared = Number(request.headers.get("content-length") || 0);
-  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return null;
-  try {
-    const value = await request.json();
-    return value && typeof value === "object" && !Array.isArray(value) ? value as VerifyBody : null;
-  } catch { return null; }
+  return readBoundedJson<VerifyBody>(request, MAX_BODY_BYTES);
 }
 
 export async function POST(request: NextRequest) {

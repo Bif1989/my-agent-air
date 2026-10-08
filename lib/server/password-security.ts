@@ -42,7 +42,11 @@ export async function checkPasswordExposure(password: string): Promise<PasswordE
     });
     if (!response.ok) return { status: "unavailable", reason: "upstream" };
     const body = await response.text();
-    const leaked = body.split(/\r?\n/).some((line) => line.slice(0, 35).toUpperCase() === suffix);
+    const leaked = body.split(/\r?\n/).some((line) => {
+      const match = /^([A-F0-9]{35}):(\d+)$/i.exec(line);
+      // HIBP padding entries have zero occurrences and are not compromised passwords.
+      return match !== null && match[1].toUpperCase() === suffix && Number(match[2]) > 0;
+    });
     return leaked ? { status: "leaked" } : { status: "safe" };
   } catch {
     return { status: "unavailable", reason: controller.signal.aborted ? "timeout" : "network" };

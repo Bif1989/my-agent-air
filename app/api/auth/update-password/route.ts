@@ -1,3 +1,4 @@
+import { readBoundedJson } from "@/lib/server/bounded-json";
 import { NextRequest, NextResponse } from "next/server";
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase-config";
 import { checkPasswordExposure, newPasswordValidationMessage } from "@/lib/server/password-security";
@@ -32,13 +33,7 @@ function bearer(request: NextRequest) {
 }
 
 async function readBody(request: NextRequest): Promise<Body | null> {
-  if (!(request.headers.get("content-type") || "").toLowerCase().startsWith("application/json")) return null;
-  const declared = Number(request.headers.get("content-length") || 0);
-  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return null;
-  try {
-    const value = await request.json();
-    return value && typeof value === "object" && !Array.isArray(value) ? value as Body : null;
-  } catch { return null; }
+  return readBoundedJson<Body>(request, MAX_BODY_BYTES);
 }
 
 function decodeClaims(token: string): JwtClaims | null {

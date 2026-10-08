@@ -64,7 +64,7 @@ export async function verifyTurnstile(input: {
       console.warn("Turnstile action mismatch");
       return { ok: false, status: 403, code: "CAPTCHA_FAILED", message: "Xavfsizlik tekshiruvi muvaffaqiyatsiz. Qayta urinib ko‘ring." };
     }
-    if (input.hostname && data.hostname && data.hostname.toLowerCase() !== input.hostname.toLowerCase()) {
+    if (input.hostname && (typeof data.hostname !== "string" || data.hostname.toLowerCase() !== input.hostname.toLowerCase())) {
       console.warn("Turnstile hostname mismatch");
       return { ok: false, status: 403, code: "CAPTCHA_FAILED", message: "Xavfsizlik tekshiruvi muvaffaqiyatsiz. Qayta urinib ko‘ring." };
     }

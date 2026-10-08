@@ -1,3 +1,4 @@
+import { readBoundedJson } from "@/lib/server/bounded-json";
 import { createHmac } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -60,37 +61,7 @@ function scopeHash(secret: string, scope: string) {
 }
 
 async function readBody(request: NextRequest): Promise<LoginBody | null> {
-  const contentType = request.headers.get("content-type") || "";
-  if (!contentType.toLowerCase().startsWith("application/json")) return null;
-
-  const declared = Number(request.headers.get("content-length") || "0");
-  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return null;
-  if (!request.body) return null;
-
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > MAX_BODY_BYTES) {
-        await reader.cancel();
-        return null;
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  try {
-    const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as LoginBody : null;
-  } catch {
-    return null;
-  }
+  return readBoundedJson<LoginBody>(request, MAX_BODY_BYTES);
 }
 
 export async function POST(request: NextRequest) {

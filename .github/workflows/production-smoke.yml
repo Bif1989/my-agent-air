@@ -19,6 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       - name: Wait for production app
         shell: bash
         run: |
@@ -44,3 +48,5 @@ jobs:
             curl --fail --silent --show-error --location --max-time 20 --retry 2 --retry-delay 2 "https://agent.bifavia.uz${path}" --output /tmp/response
             test -s /tmp/response
           done
+      - name: Check authentication guards without sending emails
+        run: node .github/scripts/auth-production-smoke.cjs
