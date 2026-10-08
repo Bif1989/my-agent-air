@@ -1,8 +1,11 @@
 import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase-config";
 
 export const SESSION_STORAGE_KEY = "my_agent_air_session";
+// Kept only so older installations can clean up the legacy duplicate token key.
 export const ACCESS_TOKEN_STORAGE_KEY = "my_agent_air_access_token";
 export const AUTH_SESSION_CHANGED_EVENT = "my-agent-air:session-changed";
+
+const AUTH_REQUEST_TIMEOUT_MS = 15_000;
 
 export type AuthSession = {
   access_token: string;
@@ -36,21 +39,41 @@ function isBrowser() {
   return typeof window !== "undefined";
 }
 
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
 async function authRequest(path: string, body: Record<string, unknown>) {
-  const response = await fetch(`${SUPABASE_URL}/auth/v1/${path}`, {
-    method: "POST",
-    headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), AUTH_REQUEST_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(`${SUPABASE_URL}/auth/v1/${path}`, {
+      method: "POST",
+      headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      referrerPolicy: "no-referrer",
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new SupabaseRequestError("Kirish xizmatidan javob kelmadi. Qayta urinib ko‘ring.", 408, "AUTH_TIMEOUT");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+
   const data = (await response.json().catch(() => ({}))) as AuthResponse;
   if (!response.ok) {
-    if (response.status === 429) throw new SupabaseRequestError("Qayta urinish uchun biroz kuting.", response.status);
+    if (response.status === 429) throw new SupabaseRequestError("Qayta urinish uchun biroz kuting.", response.status, data.error_code);
     if (path === "verify" && (response.status === 400 || response.status === 401)) {
-      throw new SupabaseRequestError("Kiritilgan kod noto‘g‘ri yoki eskirgan.", response.status);
+      throw new SupabaseRequestError("Kiritilgan kod noto‘g‘ri yoki eskirgan.", response.status, data.error_code);
     }
     if ([400, 401, 403].includes(response.status)) throw new SupabaseRequestError("Email yoki parol noto‘g‘ri.", response.status, data.error_code);
     if (response.status === 422) throw new SupabaseRequestError("Ma’lumotlar talabga mos kelmadi. Tekshirib qayta kiriting.", response.status, data.error_code);
-    throw new SupabaseRequestError("Kirish xizmatida vaqtinchalik xatolik. Qayta urinib ko‘ring.", response.status);
+    throw new SupabaseRequestError("Kirish xizmatida vaqtinchalik xatolik. Qayta urinib ko‘ring.", response.status, data.error_code);
   }
   return data;
 }
@@ -65,35 +88,35 @@ export function signUp(body: {
   agent_type: string;
 }) {
   return authRequest("signup", {
-    email: body.email,
+    email: normalizeEmail(body.email),
     password: body.password,
     data: {
-      full_name: body.full_name,
-      company_name: body.company_name,
-      phone: body.phone,
-      city: body.city,
-      agent_type: body.agent_type,
+      full_name: body.full_name.trim(),
+      company_name: body.company_name.trim(),
+      phone: body.phone.trim(),
+      city: body.city.trim(),
+      agent_type: body.agent_type.trim(),
     },
   });
 }
 
 export function verifySignupOtp(email: string, token: string) {
   return authRequest("verify", {
-    email,
-    token,
+    email: normalizeEmail(email),
+    token: token.trim(),
     type: "email",
   });
 }
 
 export function resendSignupOtp(email: string) {
   return authRequest("resend", {
-    email,
+    email: normalizeEmail(email),
     type: "signup",
   });
 }
 
 export function signIn(email: string, password: string) {
-  return authRequest("token?grant_type=password", { email, password });
+  return authRequest("token?grant_type=password", { email: normalizeEmail(email), password });
 }
 
 export function saveSession(data: AuthResponse) {
@@ -107,7 +130,8 @@ export function saveSession(data: AuthResponse) {
   };
   if (!isBrowser()) return;
   localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
-  localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, data.access_token);
+  // Older builds duplicated the access token under a second localStorage key.
+  localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
   window.dispatchEvent(new Event(AUTH_SESSION_CHANGED_EVENT));
 }
 
@@ -120,6 +144,8 @@ export function clearSession() {
 
 export function getStoredSession(): AuthSession | null {
   if (!isBrowser()) return null;
+  // Always remove the legacy duplicate token if a user upgrades from an older build.
+  localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
   const storedSession = localStorage.getItem(SESSION_STORAGE_KEY);
   if (!storedSession) return null;
   try {
@@ -188,6 +214,8 @@ export async function authenticatedSupabaseFetch(path: string, init: RequestInit
 
   const request = (accessToken: string) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...init,
+    cache: "no-store",
+    referrerPolicy: "no-referrer",
     headers: {
       apikey: SUPABASE_KEY,
       Authorization: `Bearer ${accessToken}`,
@@ -226,7 +254,7 @@ export async function authenticatedSupabaseFetch(path: string, init: RequestInit
 }
 
 export function requestPasswordReset(email: string, redirectTo: string) {
-  return authRequest(`recover?redirect_to=${encodeURIComponent(redirectTo)}`, { email: email.trim() });
+  return authRequest(`recover?redirect_to=${encodeURIComponent(redirectTo)}`, { email: normalizeEmail(email) });
 }
 
 export async function consumeRecoveryLink(href: string) {
@@ -238,7 +266,11 @@ export async function consumeRecoveryLink(href: string) {
     data = await authRequest("verify", { type: "recovery", token_hash: url.searchParams.get("token_hash") });
   } else if (hash.get("type") === "recovery" && hash.get("access_token") && hash.get("refresh_token")) {
     const accessToken = hash.get("access_token")!;
-    const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` } });
+    const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+      referrerPolicy: "no-referrer",
+    });
     if (!response.ok) throw new Error("Tiklash havolasi eskirgan. Yangi havola so‘rang.");
     data = { access_token: accessToken, refresh_token: hash.get("refresh_token")!, user: await response.json() as SupabaseUser };
   } else {
@@ -256,6 +288,8 @@ export async function updatePassword(password: string) {
     method: "PUT",
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ password }),
+    cache: "no-store",
+    referrerPolicy: "no-referrer",
   });
   if (!response.ok) throw new Error(response.status === 401 ? "Tiklash havolasi eskirgan. Yangi havola so‘rang." : "Parolni yangilab bo‘lmadi. Boshqa parol bilan qayta urinib ko‘ring.");
 }
@@ -267,6 +301,8 @@ export async function signOut() {
       await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
         method: "POST",
         headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${session.access_token}` },
+        cache: "no-store",
+        referrerPolicy: "no-referrer",
       });
     }
   } finally {
