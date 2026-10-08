@@ -1,0 +1,45 @@
+name: Quality Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test-build-browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
+      - name: Install browser smoke dependency
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Start production build
+        run: |
+          npm run start > /tmp/my-agent-air.log 2>&1 &
+          echo $! > /tmp/my-agent-air.pid
+          for i in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:3000/ > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/my-agent-air.log
+          exit 1
+      - name: Desktop and mobile browser smoke
+        env:
+          BASE_URL: http://127.0.0.1:3000
+        run: node .github/scripts/browser-smoke.cjs
+      - name: Print app log on failure
+        if: failure()
+        run: cat /tmp/my-agent-air.log || true
