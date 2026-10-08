@@ -6,6 +6,10 @@ const { POST } = require('../app/api/ai/transcribe/route.ts');
 const { NextRequest } = require('next/server');
 let states, errors, audios, stopped, recorders;
 let session;
+function jwt(sub, exp = Math.floor(Date.now() / 1000) + 3600) {
+  const encode = value => Buffer.from(JSON.stringify(value)).toString('base64url');
+  return `${encode({ alg: 'none', typ: 'JWT' })}.${encode({ sub, exp })}.test`;
+}
 class Recorder extends EventTarget {
   static isTypeSupported(type) { return type.startsWith('audio/webm'); }
   constructor(stream, options) { super(); this.state = 'inactive'; this.mimeType = options?.mimeType || 'audio/webm'; recorders.push(this); }
@@ -23,7 +27,7 @@ beforeEach(() => {
   const storage = new Map();
   global.localStorage = { getItem: k => storage.get(k) || null, setItem: (k,v) => storage.set(k,v), removeItem: k => storage.delete(k) };
   Object.defineProperty(global, 'navigator', { configurable: true, value: { mediaDevices: { getUserMedia: async () => stream() } } });
-  session = { access_token: 'old-token', refresh_token: 'refresh', user: { id: 'actor' } };
+  session = { access_token: jwt('actor'), refresh_token: 'refresh', user: { id: 'actor' } };
   auth.saveSession(session);
   process.env.OPENAI_API_KEY = 'test-only-key';
 });
@@ -57,14 +61,15 @@ test('normal stop creates one complete blob, including final chunk', async () =>
 });
 test('401 refresh retries same audio once with updated bearer token', async () => {
   const requests = [];
+  const freshToken = jwt('actor');
   global.fetch = async (url, options) => {
     requests.push({url, options});
-    if (url.includes('grant_type=refresh_token')) return Response.json({ ...session, access_token: 'fresh-token', refresh_token: 'new-refresh' });
-    return options.headers.Authorization === 'Bearer old-token' ? Response.json({}, {status:401}) : Response.json({text:'Samarqand'});
+    if (url.includes('grant_type=refresh_token')) return Response.json({ ...session, access_token: freshToken, refresh_token: 'new-refresh' });
+    return options.headers.Authorization === `Bearer ${session.access_token}` ? Response.json({}, {status:401}) : Response.json({text:'Samarqand'});
   };
   assert.equal(await transcribeVoice(new Blob([new Uint8Array(500)], {type:'audio/mp4'}), new AbortController().signal), 'Samarqand');
   assert.equal(requests.length, 3);
-  assert.equal(requests[2].options.headers.Authorization, 'Bearer fresh-token');
+  assert.equal(requests[2].options.headers.Authorization, `Bearer ${freshToken}`);
   assert.equal(requests[0].options.body, requests[2].options.body);
   assert.match(requests[0].options.body.get('audio').name, /\.m4a$/);
 });
@@ -128,12 +133,13 @@ test('upstream response-body timeout retains timeout code', async () => {
   } finally { global.setTimeout = original; }
 });
 test('expired JWT refreshes before first transcription upload', async () => {
-  auth.saveSession({...session, access_token: `x.${Buffer.from(JSON.stringify({exp:1})).toString('base64url')}.x`});
+  auth.saveSession({...session, access_token: jwt('actor', 1)});
   const calls = [];
+  const freshToken = jwt('actor');
   global.fetch = async (url, options) => {
     calls.push(url);
-    if (url.includes('grant_type=refresh_token')) return Response.json({...session, access_token:'fresh', refresh_token:'new'});
-    assert.equal(options.headers.Authorization,'Bearer fresh'); return Response.json({text:'Salom'});
+    if (url.includes('grant_type=refresh_token')) return Response.json({...session, access_token:freshToken, refresh_token:'new'});
+    assert.equal(options.headers.Authorization,`Bearer ${freshToken}`); return Response.json({text:'Salom'});
   };
   assert.equal(await transcribeVoice(new Blob([new Uint8Array(500)], {type:'audio/webm'}), new AbortController().signal),'Salom');
   assert.match(calls[0], /grant_type=refresh_token/); assert.equal(calls.length,2);
