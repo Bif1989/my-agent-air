@@ -1,6 +1,7 @@
 import RecoveryRedirect from "@/app/components/recovery-redirect";
 import PwaInstall from "@/app/components/pwa-install";
-import type { Metadata } from "next";
+import PwaSplash from "@/app/components/pwa-splash";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import VkMiniAppBridge from "@/app/components/vk-mini-app-bridge";
@@ -30,7 +31,10 @@ export const metadata: Metadata = {
   formatDetection: { telephone: false },
 };
 
-export const viewport = { themeColor: "#0b1f3a" };
+export const viewport: Viewport = {
+  themeColor: "#0b1f3a",
+  viewportFit: "cover",
+};
 
 const preferenceScript = `
 try {
@@ -40,6 +44,8 @@ try {
   const resolvedTheme = theme === 'dark' || theme === 'light' ? theme : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   document.documentElement.classList.toggle('dark', resolvedTheme === 'dark');
   document.documentElement.dataset.theme = resolvedTheme;
+  const standalone = matchMedia('(display-mode: standalone)').matches || Boolean(navigator.standalone);
+  document.documentElement.dataset.pwaStandalone = standalone ? 'true' : 'false';
 } catch {}
 `;
 
@@ -53,6 +59,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <head><script dangerouslySetInnerHTML={{ __html: preferenceScript }} /></head>
       <body className="min-h-full flex flex-col">
         <UiSettingsProvider>
+          <PwaSplash />
           <VkMiniAppBridge />
           <RecoveryRedirect />{children}
           <PwaInstall />
