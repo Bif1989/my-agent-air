@@ -42,6 +42,17 @@ test('session storage does not keep a second duplicate access-token key', () => 
   assert.match(source, /localStorage\.removeItem\(ACCESS_TOKEN_STORAGE_KEY\)/);
 });
 
+test('stored sessions are bound to the JWT subject and refreshed before expiry', () => {
+  const source = read('lib/supabase-auth.ts');
+  assert.match(source, /function decodeJwtClaims/);
+  assert.match(source, /TextDecoder/);
+  assert.match(source, /function accessTokenSubject/);
+  assert.match(source, /subject !== data\.user\.id/);
+  assert.match(source, /subject !== session\.user\.id/);
+  assert.match(source, /if \(!claims \|\| typeof claims\.exp !== "number"\) return true/);
+  assert.match(source, /if \(sessionNeedsRefresh\(session\)\)/);
+});
+
 test('legacy VK auto-login surface is removed', () => {
   const layout = read('app/layout.tsx');
   assert.doesNotMatch(layout, /VkMiniAppBridge|vk-mini-app-bridge/);
