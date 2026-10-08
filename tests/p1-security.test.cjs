@@ -7,6 +7,10 @@ function read(relativePath) {
   return fs.readFileSync(path.join(process.cwd(), relativePath), 'utf8');
 }
 
+function exists(relativePath) {
+  return fs.existsSync(path.join(process.cwd(), relativePath));
+}
+
 test('production responses use baseline browser security headers', () => {
   const source = read('next.config.ts');
   assert.match(source, /X-Content-Type-Options/);
@@ -15,8 +19,12 @@ test('production responses use baseline browser security headers', () => {
   assert.match(source, /Permissions-Policy/);
   assert.match(source, /microphone=\(self\)/);
   assert.match(source, /Strict-Transport-Security/);
-  assert.doesNotMatch(source, /X-Frame-Options/);
-  assert.doesNotMatch(source, /Cross-Origin-Resource-Policy/);
+  assert.match(source, /X-Frame-Options/);
+  assert.match(source, /DENY/);
+  assert.match(source, /Content-Security-Policy/);
+  assert.match(source, /frame-ancestors 'none'/);
+  assert.match(source, /base-uri 'self'/);
+  assert.match(source, /form-action 'self'/);
 });
 
 test('auth requests are normalized, uncached and time bounded', () => {
@@ -34,14 +42,11 @@ test('session storage does not keep a second duplicate access-token key', () => 
   assert.match(source, /localStorage\.removeItem\(ACCESS_TOKEN_STORAGE_KEY\)/);
 });
 
-test('VK auto-login limits payloads, uses constant-time signatures and rejects stale launch params', () => {
-  const source = read('app/api/auth/vk/route.ts');
-  assert.match(source, /timingSafeEqual/);
-  assert.match(source, /MAX_BODY_BYTES = 32 \* 1024/);
-  assert.match(source, /MAX_LAUNCH_AGE_SECONDS = 10 \* 60/);
-  assert.match(source, /STALE_LAUNCH_PARAMS/);
-  assert.match(source, /Cache-Control.*no-store/);
-  assert.match(source, /\^\\d\{1,20\}\$/);
+test('legacy VK auto-login surface is removed', () => {
+  const layout = read('app/layout.tsx');
+  assert.doesNotMatch(layout, /VkMiniAppBridge|vk-mini-app-bridge/);
+  assert.equal(exists('app/components/vk-mini-app-bridge.tsx'), false);
+  assert.equal(exists('app/api/auth/vk/route.ts'), false);
 });
 
 test('production smoke waits for real app content instead of only an old reachable alias', () => {
