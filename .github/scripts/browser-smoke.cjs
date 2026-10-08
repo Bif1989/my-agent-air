@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const assert = require('node:assert/strict');
-const { chromium, devices } = require('playwright');
+const { chromium, webkit, devices } = require('playwright');
 
 const baseURL = process.env.BASE_URL || 'http://127.0.0.1:3000';
 
@@ -34,14 +34,22 @@ async function checkProfile(browser, label, contextOptions) {
 }
 
 (async () => {
-  const browser = await chromium.launch({ headless: true });
+  const chromiumBrowser = await chromium.launch({ headless: true });
   try {
-    await checkProfile(browser, 'desktop', { viewport: { width: 1440, height: 900 } });
-    await checkProfile(browser, 'mobile', { ...devices['Pixel 7'] });
-    console.log('Browser smoke passed: desktop + mobile');
+    await checkProfile(chromiumBrowser, 'desktop-chromium', { viewport: { width: 1440, height: 900 } });
+    await checkProfile(chromiumBrowser, 'android-chromium', { ...devices['Pixel 7'] });
   } finally {
-    await browser.close();
+    await chromiumBrowser.close();
   }
+
+  const webkitBrowser = await webkit.launch({ headless: true });
+  try {
+    await checkProfile(webkitBrowser, 'ios-webkit', { ...devices['iPhone 15'] });
+  } finally {
+    await webkitBrowser.close();
+  }
+
+  console.log('Browser smoke passed: desktop Chromium + Android Chromium + iOS WebKit');
 })().catch((error) => {
   console.error(error);
   process.exit(1);
