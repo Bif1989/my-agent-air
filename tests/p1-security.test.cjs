@@ -43,3 +43,10 @@ test('VK auto-login limits payloads, uses constant-time signatures and rejects s
   assert.match(source, /Cache-Control.*no-store/);
   assert.match(source, /\^\\d\{1,20\}\$/);
 });
+
+test('production smoke waits for real app content instead of only an old reachable alias', () => {
+  const source = read('.github/workflows/production-smoke.yml');
+  assert.match(source, /Wait for production app/);
+  assert.match(source, /grep -Eqi "MY AGENT AIR\|My Agent Air"/);
+  assert.match(source, /for attempt in \{1\.\.20\}/);
+});
