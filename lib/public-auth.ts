@@ -19,6 +19,7 @@ type SignupInput = {
   phone: string;
   city: string;
   agent_type: string;
+  captcha_token?: string;
 };
 
 async function post(path: string, body: Record<string, unknown>) {
@@ -61,6 +62,7 @@ export function signUpProtected(input: SignupInput) {
     phone: input.phone.trim(),
     city: input.city.trim(),
     agent_type: input.agent_type.trim(),
+    captcha_token: input.captcha_token || "",
   });
 }
 
@@ -75,6 +77,6 @@ export function resendSignupOtpProtected(email: string) {
   return post("/api/auth/resend-signup", { email: email.trim().toLowerCase() });
 }
 
-export function requestPasswordResetProtected(email: string) {
-  return post("/api/auth/recover", { email: email.trim().toLowerCase() });
+export function requestPasswordResetProtected(email: string, captchaToken = "") {
+  return post("/api/auth/recover", { email: email.trim().toLowerCase(), captcha_token: captchaToken });
 }
