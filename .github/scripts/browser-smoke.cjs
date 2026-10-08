@@ -22,7 +22,7 @@ async function checkProfile(browser, label, contextOptions) {
   for (const name of ['fullName', 'email', 'company', 'phone', 'city', 'agentType', 'password', 'passwordConfirmation']) {
     assert.equal(await page.locator(`[name="${name}"]`).count(), 1, `${label}: missing register field ${name}`);
   }
-  assert((await page.locator('[name="password"]').getAttribute('minlength')) === '8', `${label}: password minlength must be 8`);
+  assert((await page.locator('[name="password"]').getAttribute('minlength')) === '10', `${label}: password minlength must be 10`);
 
   const manifest = await context.request.get(`${baseURL}/manifest.webmanifest`);
   assert(manifest.ok(), `${label}: manifest unavailable`);
