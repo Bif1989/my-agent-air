@@ -9,7 +9,11 @@ const { splitServiceDetails, joinServiceDetails } = require('../lib/request-deta
 const { listMessengerMessages, sendMessengerMessage } = require('../app/messenger/messenger-api.ts');
 const { listRequests } = require('../app/requests/requests-api.ts');
 
-const session = { access_token: 'old-access', refresh_token: 'old-refresh', user: { id: 'test-user', email: 'test@example.invalid' } };
+function jwt(sub, exp = Math.floor(Date.now() / 1000) + 3600) {
+  const encode = value => Buffer.from(JSON.stringify(value)).toString('base64url');
+  return `${encode({ alg: 'none', typ: 'JWT' })}.${encode({ sub, exp })}.test`;
+}
+const session = { access_token: jwt('test-user'), refresh_token: 'old-refresh', user: { id: 'test-user', email: 'test@example.invalid' } };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
 
 beforeEach(() => {
@@ -22,10 +26,11 @@ beforeEach(() => {
 
 test('parallel refreshes make one auth request and share the new session', async () => {
   let calls = 0;
-  global.fetch = async () => { calls++; await new Promise((resolve) => setImmediate(resolve)); return json({ ...session, access_token: 'new-access', refresh_token: 'new-refresh' }); };
+  const newAccess = jwt('test-user');
+  global.fetch = async () => { calls++; await new Promise((resolve) => setImmediate(resolve)); return json({ ...session, access_token: newAccess, refresh_token: 'new-refresh' }); };
   const sessions = await Promise.all(Array.from({ length: 12 }, () => auth.refreshSession()));
   assert.equal(calls, 1);
-  assert.ok(sessions.every((value) => value.access_token === 'new-access'));
+  assert.ok(sessions.every((value) => value.access_token === newAccess));
 });
 
 test('network outages and 500 responses preserve the session for retry', async () => {
@@ -48,7 +53,7 @@ test('logout while refreshing cannot restore an old session', async () => {
   global.fetch = () => new Promise((resolve) => { finish = resolve; });
   const refresh = auth.refreshSession();
   auth.clearSession();
-  finish(json({ ...session, access_token: 'new-access' }));
+  finish(json({ ...session, access_token: jwt('test-user') }));
   assert.equal(await refresh, null);
   assert.equal(auth.getStoredSession(), null);
 });
@@ -63,14 +68,15 @@ test('refresh from another tab wins after the Web Lock is acquired', async () =>
 
 test('authenticated retry preserves the body and custom Headers', async () => {
   const seen = [];
+  const freshToken = jwt('test-user');
   global.fetch = async (url, init) => {
-    if (url.includes('/auth/')) return json({ ...session, access_token: 'fresh-token' });
+    if (url.includes('/auth/')) return json({ ...session, access_token: freshToken });
     seen.push(init);
     return seen.length === 1 ? json({}, 401) : json({ saved: true });
   };
   await auth.authenticatedSupabaseFetch('requests', { method: 'POST', body: '{"a":1}', headers: new Headers({ Prefer: 'return=representation' }) });
   assert.equal(seen.length, 2);
-  assert.equal(seen[1].headers.Authorization, 'Bearer fresh-token');
+  assert.equal(seen[1].headers.Authorization, `Bearer ${freshToken}`);
   assert.equal(seen[1].headers.prefer, 'return=representation');
   assert.equal(seen[1].body, '{"a":1}');
 });
@@ -170,11 +176,12 @@ test('service details survive editing without duplicate descriptions', () => {
 });
 
 test('recovery hash validates the token before storing a recovery session', async () => {
+  const recoveryToken = jwt('recovery-user');
   global.fetch = async (_url, init) => {
-    assert.equal(init.headers.Authorization, 'Bearer recovery-token');
+    assert.equal(init.headers.Authorization, `Bearer ${recoveryToken}`);
     return json({ id: 'recovery-user', email: 'recovery@example.invalid' });
   };
-  const recovered = await auth.consumeRecoveryLink('https://agent.bifavia.uz/reset-password#type=recovery&access_token=recovery-token&refresh_token=recovery-refresh');
+  const recovered = await auth.consumeRecoveryLink(`https://agent.bifavia.uz/reset-password#type=recovery&access_token=${recoveryToken}&refresh_token=recovery-refresh`);
   assert.equal(recovered.user.id, 'recovery-user');
   assert.equal(recovered.refresh_token, 'recovery-refresh');
 });
