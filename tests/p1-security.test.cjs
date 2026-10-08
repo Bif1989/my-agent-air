@@ -70,6 +70,31 @@ test('password login is routed through a persistent server-side brute-force limi
   assert.match(migration, /revoke all on function public\.auth_login_limit_status\(text, text\) from public, anon, authenticated/);
 });
 
+test('signup and password recovery are routed through persistent send quotas', () => {
+  const register = read('app/register/page.tsx');
+  const forgot = read('app/forgot-password/page.tsx');
+  const client = read('lib/public-auth.ts');
+  const signup = read('app/api/auth/signup/route.ts');
+  const recover = read('app/api/auth/recover/route.ts');
+  const migration = read('supabase/migrations/20261008152500_p1_auth_action_rate_limit.sql');
+
+  assert.match(register, /signUpProtected/);
+  assert.match(forgot, /requestPasswordResetProtected/);
+  assert.match(client, /\/api\/auth\/signup/);
+  assert.match(client, /\/api\/auth\/recover/);
+  assert.match(signup, /consume_auth_action_quota/);
+  assert.match(signup, /signup-pair/);
+  assert.match(signup, /limit: 3, window: 1800/);
+  assert.match(signup, /limit: 20, window: 3600/);
+  assert.match(recover, /consume_auth_action_quota/);
+  assert.match(recover, /recover-pair/);
+  assert.match(recover, /limit: 3, window: 1800/);
+  assert.match(recover, /limit: 20, window: 3600/);
+  assert.match(recover, /account mavjud bo‘lsa/);
+  assert.match(migration, /grant execute on function public\.consume_auth_action_quota\(text, integer, integer\) to service_role/);
+  assert.match(migration, /revoke all on function public\.consume_auth_action_quota\(text, integer, integer\) from public, anon, authenticated/);
+});
+
 test('production smoke waits for real app content instead of only an old reachable alias', () => {
   const source = read('.github/workflows/production-smoke.yml');
   assert.match(source, /Wait for production app/);
