@@ -7,8 +7,8 @@ import BrandMark from "@/app/components/brand-mark";
 import { UiControls, useUiSettings } from "@/lib/ui-settings";
 import { AGENT_TYPES } from "@/lib/profile-completion";
 import { FormEvent, useEffect, useState } from "react";
-import { resendSignupOtp, saveSession, verifySignupOtp } from "@/lib/supabase-auth";
-import { signUpProtected } from "@/lib/public-auth";
+import { saveSession } from "@/lib/supabase-auth";
+import { resendSignupOtpProtected, signUpProtected, verifySignupOtpProtected } from "@/lib/public-auth";
 
 function maskEmail(email: string) {
   const [localPart, domainPart] = email.split("@");
@@ -81,7 +81,7 @@ export default function RegisterPage() {
     }
     setIsVerifying(true);
     try {
-      const response = await verifySignupOtp(pendingEmail, otpCode);
+      const response = await verifySignupOtpProtected(pendingEmail, otpCode);
       track("signup_completed");
       saveSession(response);
       router.push("/profile?complete=1");
@@ -97,7 +97,7 @@ export default function RegisterPage() {
     setError("");
     setIsResending(true);
     try {
-      await resendSignupOtp(pendingEmail);
+      await resendSignupOtpProtected(pendingEmail);
       setResendCooldown(60);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : (isRu ? "Ошибка отправки кода." : "Kod yuborishda xatolik yuz berdi."));
