@@ -7,7 +7,8 @@ import BrandMark from "@/app/components/brand-mark";
 import { UiControls, useUiSettings } from "@/lib/ui-settings";
 import { AGENT_TYPES } from "@/lib/profile-completion";
 import { FormEvent, useEffect, useState } from "react";
-import { resendSignupOtp, saveSession, signUp, verifySignupOtp } from "@/lib/supabase-auth";
+import { resendSignupOtp, saveSession, verifySignupOtp } from "@/lib/supabase-auth";
+import { signUpProtected } from "@/lib/public-auth";
 
 function maskEmail(email: string) {
   const [localPart, domainPart] = email.split("@");
@@ -46,7 +47,7 @@ export default function RegisterPage() {
     }
     setIsLoading(true);
     try {
-      const response = await signUp({
+      const response = await signUpProtected({
         email,
         password,
         full_name: String(formData.get("fullName") || "").trim(),
