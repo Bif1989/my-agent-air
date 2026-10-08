@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import BrandMark from "@/app/components/brand-mark";
 import { UiControls, useUiSettings } from "@/lib/ui-settings";
 import { FormEvent, useState } from "react";
-import { saveSession, signIn } from "@/lib/supabase-auth";
+import { saveSession } from "@/lib/supabase-auth";
+import { signInProtected } from "@/lib/password-auth";
 import { safeNextPath } from "@/lib/navigation";
 
 export default function LoginPage() {
@@ -20,7 +21,7 @@ export default function LoginPage() {
     const formData = new FormData(event.currentTarget);
     setIsLoading(true);
     try {
-      const response = await signIn(String(formData.get("email") || ""), String(formData.get("password") || ""));
+      const response = await signInProtected(String(formData.get("email") || ""), String(formData.get("password") || ""));
       saveSession(response);
       router.push(safeNextPath(new URLSearchParams(window.location.search).get("next")));
     } catch (requestError) {
