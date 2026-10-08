@@ -1,6 +1,6 @@
 import { authenticatedSupabaseFetch, getStoredSession } from "@/lib/supabase-auth";
 
-export const PROFILE_FIELDS = "id,full_name,avatar_url,company_name,city,phone,agent_type,services,is_verified,is_active,role,created_at,updated_at";
+export const PROFILE_FIELDS = "id,full_name,avatar_url,company_name,city,phone,agent_type,services,is_verified,is_active,registration_status,role,created_at,updated_at";
 
 export type ProfileRecord = {
   id: string;
@@ -13,6 +13,7 @@ export type ProfileRecord = {
   services: string[] | null;
   is_verified: boolean | null;
   is_active: boolean | null;
+  registration_status: "pending_email" | "incomplete" | "active" | "suspended";
   role: "agent" | "admin" | string | null;
   created_at: string;
   updated_at: string | null;
