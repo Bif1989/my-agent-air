@@ -26,6 +26,7 @@ type AuthResponse = {
 };
 
 type SupabaseUser = { id: string; email?: string };
+type JwtClaims = { sub?: unknown; exp?: unknown };
 let refreshInFlight: Promise<AuthSession | null> | null = null;
 
 export class SupabaseRequestError extends Error {
@@ -41,6 +42,26 @@ function isBrowser() {
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
+}
+
+function decodeJwtClaims(token: string): JwtClaims | null {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const parsed = JSON.parse(new TextDecoder().decode(bytes));
+    return parsed && typeof parsed === "object" ? parsed as JwtClaims : null;
+  } catch {
+    return null;
+  }
+}
+
+function accessTokenSubject(token: string) {
+  const claims = decodeJwtClaims(token);
+  return typeof claims?.sub === "string" && claims.sub ? claims.sub : null;
 }
 
 async function authRequest(path: string, body: Record<string, unknown>) {
@@ -123,6 +144,10 @@ export function saveSession(data: AuthResponse) {
   if (!data.access_token || !data.refresh_token || !data.user?.id) {
     throw new Error("Session yaratilmadi. Emailingizni tasdiqlash talab qilinishi mumkin.");
   }
+  const subject = accessTokenSubject(data.access_token);
+  if (!subject || subject !== data.user.id) {
+    throw new Error("Session ma’lumotlari mos kelmadi. Qayta kirib ko‘ring.");
+  }
   const session: AuthSession = {
     access_token: data.access_token,
     refresh_token: data.refresh_token,
@@ -150,7 +175,15 @@ export function getStoredSession(): AuthSession | null {
   if (!storedSession) return null;
   try {
     const session = JSON.parse(storedSession) as Partial<AuthSession> & { user?: Partial<SupabaseUser> };
-    if (!session.access_token || !session.refresh_token || !session.user?.id) return null;
+    if (!session.access_token || !session.refresh_token || !session.user?.id) {
+      clearSession();
+      return null;
+    }
+    const subject = accessTokenSubject(session.access_token);
+    if (!subject || subject !== session.user.id) {
+      clearSession();
+      return null;
+    }
     return {
       access_token: session.access_token,
       refresh_token: session.refresh_token,
@@ -200,17 +233,18 @@ export async function refreshSession(): Promise<AuthSession | null> {
 }
 
 export function sessionNeedsRefresh(session: AuthSession, now = Date.now()) {
-  try {
-    const claims = JSON.parse(atob(session.access_token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
-    return typeof claims.exp === "number" && claims.exp * 1000 <= now + 60_000;
-  } catch {
-    return false;
-  }
+  const claims = decodeJwtClaims(session.access_token);
+  if (!claims || typeof claims.exp !== "number") return true;
+  return claims.exp * 1000 <= now + 60_000;
 }
 
 export async function authenticatedSupabaseFetch(path: string, init: RequestInit = {}) {
   let session = getStoredSession();
   if (!session) throw new Error("AUTH_SESSION_MISSING");
+  if (sessionNeedsRefresh(session)) {
+    session = await refreshSession();
+    if (!session) throw new Error("AUTH_SESSION_EXPIRED");
+  }
 
   const request = (accessToken: string) => fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...init,
