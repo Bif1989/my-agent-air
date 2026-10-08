@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase-config";
+import { checkPasswordExposure, newPasswordValidationMessage } from "@/lib/server/password-security";
 
 export const runtime = "nodejs";
 export const maxDuration = 20;
@@ -86,9 +87,10 @@ export async function POST(request: NextRequest) {
   const phone = clean(input?.phone, 64);
   const city = clean(input?.city, 120);
   const agentType = clean(input?.agent_type, 60);
+  const passwordMessage = newPasswordValidationMessage(password);
 
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 8 || password.length > 1024 || !fullName || !company || !phone || !city || !AGENT_TYPES.has(agentType)) {
-    return json({ code: "INVALID_INPUT", message: "Ma’lumotlarni tekshirib qayta kiriting." }, 422);
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || passwordMessage || !fullName || !company || !phone || !city || !AGENT_TYPES.has(agentType)) {
+    return json({ code: "INVALID_INPUT", message: passwordMessage || "Ma’lumotlarni tekshirib qayta kiriting." }, 422);
   }
 
   const ip = clientIp(request);
@@ -109,6 +111,12 @@ export async function POST(request: NextRequest) {
       return json({ code: "TOO_MANY_ATTEMPTS", message: "Juda ko‘p urinish. Birozdan keyin qayta urinib ko‘ring." }, 429, retryAfter);
     }
   }
+
+  const exposure = await checkPasswordExposure(password);
+  if (exposure.status === "leaked") {
+    return json({ code: "PASSWORD_COMPROMISED", message: "Bu parol avval ma’lumot sizishlarida uchragan. Boshqa, noyob parol tanlang." }, 422);
+  }
+  if (exposure.status === "unavailable") console.warn("Pwned-password check unavailable during signup", exposure.reason);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
