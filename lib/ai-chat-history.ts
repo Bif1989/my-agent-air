@@ -16,6 +16,10 @@ export type AiHistoryMessage = {
   created_at: string;
 };
 
+const CONVERSATION_PAGE_SIZE = 100;
+const MESSAGE_PAGE_SIZE = 200;
+const SAVE_ATTEMPTS = 3;
+
 function headers(session: AuthSession) {
   return {
     apikey: SUPABASE_KEY,
@@ -24,19 +28,34 @@ function headers(session: AuthSession) {
   };
 }
 
-export async function listAiConversations(session: AuthSession, limit = 50): Promise<AiConversation[]> {
-  const params = new URLSearchParams({
-    select: "id,title,created_at,updated_at",
-    user_id: `eq.${session.user.id}`,
-    order: "updated_at.desc",
-    limit: String(limit),
-  });
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/ai_chat_conversations?${params.toString()}`, {
-    headers: headers(session),
-    cache: "no-store",
-  });
-  if (!response.ok) throw new Error("AI chatlar ro‘yxati yuklanmadi.");
-  return (await response.json()) as AiConversation[];
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function messageId() {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`;
+}
+
+export async function listAiConversations(session: AuthSession): Promise<AiConversation[]> {
+  const all: AiConversation[] = [];
+  for (let offset = 0; ; offset += CONVERSATION_PAGE_SIZE) {
+    const params = new URLSearchParams({
+      select: "id,title,created_at,updated_at",
+      user_id: `eq.${session.user.id}`,
+      order: "updated_at.desc,id.desc",
+      limit: String(CONVERSATION_PAGE_SIZE),
+      offset: String(offset),
+    });
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/ai_chat_conversations?${params.toString()}`, {
+      headers: headers(session),
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error("AI chatlar ro‘yxati yuklanmadi.");
+    const rows = (await response.json()) as AiConversation[];
+    all.push(...rows);
+    if (rows.length < CONVERSATION_PAGE_SIZE) return all;
+  }
 }
 
 export async function createAiConversation(session: AuthSession, title = "Yangi chat"): Promise<AiConversation> {
@@ -75,21 +94,26 @@ export async function deleteAiConversations(session: AuthSession, conversationId
   if (conversationId && !rows.some((row) => row.id === conversationId)) throw new Error("Chat topilmadi yoki o‘chirishga ruxsat yo‘q.");
 }
 
-export async function listAiChatHistory(session: AuthSession, conversationId: string, limit = 80): Promise<AiHistoryMessage[]> {
-  const params = new URLSearchParams({
-    select: "id,role,content,actions,created_at",
-    user_id: `eq.${session.user.id}`,
-    conversation_id: `eq.${conversationId}`,
-    order: "created_at.desc",
-    limit: String(limit),
-  });
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/ai_chat_messages?${params.toString()}`, {
-    headers: headers(session),
-    cache: "no-store",
-  });
-  if (!response.ok) throw new Error("AI tarixi yuklanmadi.");
-  const rows = (await response.json()) as AiHistoryMessage[];
-  return rows.reverse().map((row) => ({ ...row, actions: Array.isArray(row.actions) ? row.actions : [] }));
+export async function listAiChatHistory(session: AuthSession, conversationId: string): Promise<AiHistoryMessage[]> {
+  const all: AiHistoryMessage[] = [];
+  for (let offset = 0; ; offset += MESSAGE_PAGE_SIZE) {
+    const params = new URLSearchParams({
+      select: "id,role,content,actions,created_at",
+      user_id: `eq.${session.user.id}`,
+      conversation_id: `eq.${conversationId}`,
+      order: "created_at.asc,id.asc",
+      limit: String(MESSAGE_PAGE_SIZE),
+      offset: String(offset),
+    });
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/ai_chat_messages?${params.toString()}`, {
+      headers: headers(session),
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error("AI tarixi yuklanmadi.");
+    const rows = (await response.json()) as AiHistoryMessage[];
+    all.push(...rows.map((row) => ({ ...row, actions: Array.isArray(row.actions) ? row.actions : [] })));
+    if (rows.length < MESSAGE_PAGE_SIZE) return all;
+  }
 }
 
 export async function saveAiChatMessage(
@@ -98,24 +122,32 @@ export async function saveAiChatMessage(
   role: "user" | "assistant",
   content: string,
   actions: AiHistoryAction[] = [],
+  id = messageId(),
 ) {
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/ai_chat_messages`, {
-    method: "POST",
-    headers: { ...headers(session), Prefer: "return=minimal" },
-    body: JSON.stringify({
-      user_id: session.user.id,
-      conversation_id: conversationId,
-      role,
-      content: content.slice(0, 8000),
-      actions,
-    }),
+  const body = JSON.stringify({
+    id,
+    user_id: session.user.id,
+    conversation_id: conversationId,
+    role,
+    content: content.slice(0, 8000),
+    actions,
   });
-  if (!response.ok) throw new Error("AI tarixi saqlanmadi.");
+  const url = `${SUPABASE_URL}/rest/v1/ai_chat_messages?on_conflict=id`;
 
-  const params = new URLSearchParams({ id: `eq.${conversationId}`, user_id: `eq.${session.user.id}` });
-  void fetch(`${SUPABASE_URL}/rest/v1/ai_chat_conversations?${params.toString()}`, {
-    method: "PATCH",
-    headers: { ...headers(session), Prefer: "return=minimal" },
-    body: JSON.stringify({ updated_at: new Date().toISOString() }),
-  }).catch(() => undefined);
+  for (let attempt = 0; attempt < SAVE_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { ...headers(session), Prefer: "resolution=ignore-duplicates,return=minimal" },
+        body,
+        keepalive: body.length < 60_000,
+      });
+      if (response.ok) return id;
+      if (response.status < 500 && response.status !== 429) throw new Error("AI tarixi saqlanmadi.");
+    } catch (error) {
+      if (attempt === SAVE_ATTEMPTS - 1) throw error;
+    }
+    await wait(250 * (attempt + 1));
+  }
+  throw new Error("AI tarixi saqlanmadi.");
 }
