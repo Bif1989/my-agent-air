@@ -23,12 +23,24 @@ export type AgentFilterOptions = {
   services: string[];
 };
 
+export type AgentSort = "newest" | "oldest" | "name_asc" | "name_desc";
+
 async function readJson<T>(response: Response) {
   return response.json() as Promise<T>;
 }
 
-export async function listAgents(options: { search?: string; city?: string; agentType?: string; service?: string; verifiedOnly?: boolean; limit?: number; offset?: number } = {}) {
-  const params = new URLSearchParams({ select: AGENT_FIELDS, is_active: "eq.true", order: "full_name.asc,id.asc", limit: String(options.limit || 100), offset: String(options.offset || 0) });
+function agentOrder(sort: AgentSort | undefined) {
+  switch (sort) {
+    case "oldest": return "created_at.asc,id.asc";
+    case "name_asc": return "full_name.asc.nullslast,company_name.asc.nullslast,id.asc";
+    case "name_desc": return "full_name.desc.nullslast,company_name.desc.nullslast,id.asc";
+    case "newest":
+    default: return "created_at.desc,id.asc";
+  }
+}
+
+export async function listAgents(options: { search?: string; city?: string; agentType?: string; service?: string; verifiedOnly?: boolean; sort?: AgentSort; limit?: number; offset?: number } = {}) {
+  const params = new URLSearchParams({ select: AGENT_FIELDS, is_active: "eq.true", order: agentOrder(options.sort), limit: String(options.limit || 100), offset: String(options.offset || 0) });
   const search = searchFilterText(options.search || "");
   if (search) params.set("or", `(full_name.ilike.*${search}*,company_name.ilike.*${search}*,city.ilike.*${search}*)`);
   if (options.city) params.set("city", `eq.${options.city}`);
