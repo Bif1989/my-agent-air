@@ -95,6 +95,29 @@ test('signup and password recovery are routed through persistent send quotas', (
   assert.match(migration, /revoke all on function public\.consume_auth_action_quota\(text, integer, integer\) from public, anon, authenticated/);
 });
 
+test('signup OTP verification and resend use protected server-side quotas', () => {
+  const register = read('app/register/page.tsx');
+  const client = read('lib/public-auth.ts');
+  const verify = read('app/api/auth/verify-signup/route.ts');
+  const resend = read('app/api/auth/resend-signup/route.ts');
+
+  assert.match(register, /verifySignupOtpProtected/);
+  assert.match(register, /resendSignupOtpProtected/);
+  assert.match(client, /\/api\/auth\/verify-signup/);
+  assert.match(client, /\/api\/auth\/resend-signup/);
+  assert.match(verify, /consume_auth_action_quota/);
+  assert.match(verify, /otp-verify-pair/);
+  assert.match(verify, /limit: 5, window: 900/);
+  assert.match(verify, /limit: 30, window: 3600/);
+  assert.match(verify, /sec-fetch-site/);
+  assert.match(verify, /INVALID_OTP/);
+  assert.match(resend, /consume_auth_action_quota/);
+  assert.match(resend, /otp-resend-pair/);
+  assert.match(resend, /limit: 3, window: 1800/);
+  assert.match(resend, /limit: 20, window: 3600/);
+  assert.match(resend, /tasdiqlash kutilayotgan bo‘lsa/);
+});
+
 test('production smoke waits for real app content instead of only an old reachable alias', () => {
   const source = read('.github/workflows/production-smoke.yml');
   assert.match(source, /Wait for production app/);
