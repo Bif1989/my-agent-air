@@ -3,30 +3,11 @@
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { getStoredSession } from "@/lib/supabase-auth";
+import { AUTH_SESSION_CHANGED_EVENT, getStoredSession } from "@/lib/supabase-auth";
+import { VoiceCapture, VoiceError, transcribeVoice, VOICE_REQUEST_TIMEOUT_MS } from "@/lib/ai-voice";
 import { useUiSettings } from "@/lib/ui-settings";
 
-const MAX_RECORDING_MS = 90_000;
 const MOBILE_BREAKPOINT = 768;
-
-function supportedMimeType() {
-  if (typeof MediaRecorder === "undefined") return "";
-  const candidates = [
-    "audio/webm;codecs=opus",
-    "audio/mp4;codecs=mp4a.40.2",
-    "audio/mp4",
-    "audio/webm",
-    "audio/ogg;codecs=opus",
-  ];
-  return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || "";
-}
-
-function fileExtension(type: string) {
-  if (type.includes("mp4")) return "m4a";
-  if (type.includes("ogg")) return "ogg";
-  if (type.includes("wav")) return "wav";
-  return "webm";
-}
 
 function setControlledTextareaValue(textarea: HTMLTextAreaElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
@@ -56,10 +37,39 @@ export default function AiVoiceInput() {
   const [transcribing, setTranscribing] = useState(false);
   const [error, setError] = useState("");
   const [micRight, setMicRight] = useState(82);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<number | null>(null);
+  const [starting, setStarting] = useState(false);
+  const captureRef = useRef<VoiceCapture | null>(null);
+  const requestRef = useRef<AbortController | null>(null);
+  const generationRef = useRef(0);
+
+  function cancelVoice() {
+    generationRef.current++;
+    captureRef.current?.cancel();
+    captureRef.current = null;
+    requestRef.current?.abort();
+    requestRef.current = null;
+  }
+
+  function voiceMessage(error: unknown) {
+    const code = error instanceof VoiceError ? error.code
+      : error instanceof DOMException && ["NotAllowedError", "SecurityError"].includes(error.name) ? "MIC_DENIED"
+      : error instanceof DOMException && error.name === "TimeoutError" ? "TRANSCRIPTION_TIMEOUT" : "TRANSCRIPTION_FAILED";
+    const messages: Record<string, [string, string]> = {
+      MIC_DENIED: ["Brauzerda mikrofonga ruxsat bering.", "Разрешите доступ к микрофону в браузере."],
+      AUDIO_REQUIRED: ["Ovoz yozilmadi. Qayta urinib ko‘ring.", "Голос не записался. Попробуйте ещё раз."],
+      AUDIO_TOO_LARGE: ["Ovoz 4 MB dan oshdi. Qisqaroq yozing.", "Запись превышает 4 МБ. Запишите короче."],
+      UNAUTHORIZED: ["Kirish sessiyasi tugagan. Qayta kiring.", "Сессия завершена. Войдите снова."],
+      AI_NOT_CONFIGURED: ["Ovozli AI xizmati hali ulanmagan.", "Сервис голосового AI ещё не подключён."],
+      TRANSCRIPTION_TIMEOUT: ["Vaqt tugadi. Internetni tekshirib, qisqaroq yozing.", "Время ожидания истекло. Проверьте интернет и запишите короче."],
+      NO_SPEECH: ["Nutq aniqlanmadi. Aniqroq gapiring.", "Речь не распознана. Говорите чётче."],
+      AUDIO_FORMAT: ["Ovoz formati qo‘llanmaydi.", "Формат аудио не поддерживается."],
+      TOO_FAST: ["Keyingi ovozli so‘rov uchun 30 soniya kuting.", "Подождите 30 секунд перед следующим голосовым запросом."],
+      USER_LIMIT: ["Bugungi ovozli so‘rov limitingiz tugadi.", "Ваш дневной лимит голосовых запросов исчерпан."],
+      GLOBAL_LIMIT: ["Bugungi ovozli AI limiti tugadi.", "Дневной лимит голосового AI исчерпан."],
+      ACCOUNT_INACTIVE: ["Hisob faol emas. Administrator bilan bog‘laning.", "Аккаунт неактивен. Свяжитесь с администратором."],
+    };
+    return messages[code]?.[isRu ? 1 : 0] || (isRu ? "Ошибка голосового ввода. Попробуйте ещё раз." : "Ovozli kiritishda xatolik. Qayta urinib ko‘ring.");
+  }
 
   const supported = typeof window !== "undefined"
     && Boolean(navigator.mediaDevices?.getUserMedia)
@@ -67,10 +77,16 @@ export default function AiVoiceInput() {
 
   useEffect(() => {
     if (pathname !== "/dashboard") {
-      setPortalTarget(null);
-      setTextarea(null);
+      const resetTimer = window.setTimeout(() => {
+        setPortalTarget(null);
+        setTextarea(null);
+        setStarting(false);
+        setRecording(false);
+        setTranscribing(false);
+        setError("");
+      }, 0);
       delete document.documentElement.dataset.aiKeyboardOpen;
-      return;
+      return () => window.clearTimeout(resetTimer);
     }
 
     let activeTextarea: HTMLTextAreaElement | null = null;
@@ -87,6 +103,11 @@ export default function AiVoiceInput() {
     let originalNavDisplay = "";
     let baselineViewportHeight = 0;
     let resizeRaf = 0;
+    const fitTimers = new Set<number>();
+    const fitLater = (delay: number) => {
+      const timer = window.setTimeout(() => { fitTimers.delete(timer); scheduleFit(); }, delay);
+      fitTimers.add(timer);
+    };
 
     const growTextarea = () => {
       if (!activeTextarea) return;
@@ -144,19 +165,21 @@ export default function AiVoiceInput() {
       );
       growTextarea();
       scheduleFit();
-      window.setTimeout(scheduleFit, 80);
-      window.setTimeout(scheduleFit, 220);
-      window.setTimeout(scheduleFit, 420);
+      fitLater(80);
+      fitLater(220);
+      fitLater(420);
     };
 
     const onBlur = () => {
       document.documentElement.dataset.aiKeyboardOpen = "false";
       if (mobileNav) mobileNav.style.display = originalNavDisplay;
-      window.setTimeout(scheduleFit, 120);
+      fitLater(120);
     };
 
     const restore = () => {
       window.cancelAnimationFrame(resizeRaf);
+      fitTimers.forEach(timer => window.clearTimeout(timer));
+      fitTimers.clear();
       if (activeTextarea) {
         activeTextarea.removeEventListener("input", growTextarea);
         activeTextarea.removeEventListener("focus", onFocus);
@@ -183,9 +206,25 @@ export default function AiVoiceInput() {
       const nextTextarea = Array.from(document.querySelectorAll<HTMLTextAreaElement>("textarea"))
         .find((item) => /AI|ИИ/i.test(item.getAttribute("aria-label") || "")) || null;
       const nextForm = nextTextarea?.closest("form") as HTMLFormElement | null;
-      if (!nextTextarea || !nextForm) return;
+      if (!nextTextarea || !nextForm) {
+        if (activeTextarea) {
+          cancelVoice();
+          restore();
+          setTextarea(null);
+          setPortalTarget(null);
+          setRecording(false);
+          setStarting(false);
+          setTranscribing(false);
+        }
+        return;
+      }
       if (nextTextarea === activeTextarea && nextForm === activeForm) return;
 
+      if (activeTextarea) cancelVoice();
+      setStarting(false);
+      setRecording(false);
+      setTranscribing(false);
+      setError("");
       restore();
       activeTextarea = nextTextarea;
       activeForm = nextForm;
@@ -232,104 +271,87 @@ export default function AiVoiceInput() {
     };
   }, [pathname]);
 
-  useEffect(() => () => {
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-  }, []);
+  useEffect(() => {
+    let actor = getStoredSession()?.user.id;
+    const reset = () => {
+      cancelVoice();
+      setRecording(false);
+      setStarting(false);
+      setTranscribing(false);
+      setError("");
+    };
+    const onVisibility = () => { if (document.hidden) reset(); };
+    const onSession = () => {
+      const nextActor = getStoredSession()?.user.id;
+      if (nextActor !== actor) reset();
+      actor = nextActor;
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", reset);
+    window.addEventListener(AUTH_SESSION_CHANGED_EVENT, onSession);
+    window.addEventListener("storage", onSession);
+    return () => {
+      cancelVoice();
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", reset);
+      window.removeEventListener(AUTH_SESSION_CHANGED_EVENT, onSession);
+      window.removeEventListener("storage", onSession);
+    };
+  }, [pathname, textarea]);
 
-  function stopRecording() {
-    if (timerRef.current !== null) {
-      window.clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-    const recorder = recorderRef.current;
-    if (recorder?.state === "recording") recorder.stop();
-  }
-
-  async function transcribe(blob: Blob, mimeType: string) {
-    if (!textarea || blob.size < 400) {
-      setError(isRu ? "Голос не записался. Попробуйте ещё раз." : "Ovoz yozilmadi. Qayta urinib ko‘ring.");
-      return;
-    }
-
-    const session = getStoredSession();
-    if (!session) {
-      setError(isRu ? "Сессия входа завершена. Войдите снова." : "Kirish sessiyasi tugagan. Qayta kiring.");
-      return;
-    }
-
+  async function transcribe(blob: Blob, generation: number, target: HTMLTextAreaElement) {
+    const controller = new AbortController();
+    requestRef.current = controller;
+    const timeout = window.setTimeout(() => controller.abort(new DOMException("Timeout", "TimeoutError")), VOICE_REQUEST_TIMEOUT_MS);
     setTranscribing(true);
     setError("");
     try {
-      const form = new FormData();
-      const extension = fileExtension(mimeType || blob.type);
-      form.append("audio", blob, `voice-${Date.now()}.${extension}`);
-      form.append("locale", isRu ? "ru" : "uz");
-
-      const response = await fetch("/api/ai/transcribe", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${session.access_token}` },
-        body: form,
+      // Race also bounds a pending token refresh or a stalled response body.
+      const aborted = new Promise<never>((_, reject) => {
+        controller.signal.addEventListener("abort", () => reject(controller.signal.reason), { once: true });
       });
-      const data = (await response.json().catch(() => ({}))) as { text?: string; message?: string };
-      if (!response.ok || !data.text?.trim()) {
-        throw new Error(data.message || (isRu ? "Не удалось распознать голос." : "Ovozni tanib bo‘lmadi."));
-      }
-
-      const spoken = data.text.trim();
-      const current = textarea.value.trim();
-      const next = (current ? `${current} ${spoken}` : spoken).slice(0, textarea.maxLength > 0 ? textarea.maxLength : 1500);
-      setControlledTextareaValue(textarea, next);
-    } catch (voiceError) {
-      setError(voiceError instanceof Error ? voiceError.message : (isRu ? "Ошибка голосового ввода." : "Ovozli kiritishda xatolik."));
+      const spoken = await Promise.race([transcribeVoice(blob, controller.signal), aborted]);
+      if (generation !== generationRef.current || !target.isConnected) return;
+      const current = target.value.trim();
+      const next = (current ? `${current} ${spoken}` : spoken).slice(0, target.maxLength > 0 ? target.maxLength : 1500);
+      setControlledTextareaValue(target, next);
+    } catch (error) {
+      if (generation === generationRef.current) setError(voiceMessage(error));
     } finally {
-      setTranscribing(false);
+      window.clearTimeout(timeout);
+      if (generation === generationRef.current) {
+        requestRef.current = null;
+        setTranscribing(false);
+      }
     }
   }
 
-  async function startRecording() {
-    if (!supported || recording || transcribing) return;
+  function startRecording() {
+    if (!supported || recording || transcribing || !textarea || requestRef.current) return;
+    const generation = generationRef.current;
+    const target = textarea;
     setError("");
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
-      const mimeType = supportedMimeType();
-      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-      streamRef.current = stream;
-      recorderRef.current = recorder;
-      chunksRef.current = [];
-
-      recorder.addEventListener("dataavailable", (event) => {
-        if (event.data.size > 0) chunksRef.current.push(event.data);
-      });
-      recorder.addEventListener("stop", () => {
-        setRecording(false);
-        stream.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-        const actualType = recorder.mimeType || mimeType || chunksRef.current[0]?.type || "audio/webm";
-        const blob = new Blob(chunksRef.current, { type: actualType });
-        chunksRef.current = [];
-        void transcribe(blob, actualType);
-      }, { once: true });
-
-      recorder.start(250);
-      setRecording(true);
-      timerRef.current = window.setTimeout(stopRecording, MAX_RECORDING_MS);
-    } catch (micError) {
-      const denied = micError instanceof DOMException && ["NotAllowedError", "SecurityError"].includes(micError.name);
-      setError(denied
-        ? (isRu ? "Разрешите доступ к микрофону в браузере." : "Brauzerda mikrofonga ruxsat bering.")
-        : (isRu ? "Не удалось включить микрофон." : "Mikrofonni yoqib bo‘lmadi."));
-    }
+    if (!captureRef.current) captureRef.current = new VoiceCapture({
+      state: state => {
+        if (generation !== generationRef.current) return;
+        setStarting(state === "starting");
+        setRecording(state === "recording");
+      },
+      audio: blob => {
+        if (generation === generationRef.current && target.isConnected) void transcribe(blob, generation, target);
+      },
+      error: error => { if (generation === generationRef.current) setError(voiceMessage(error)); },
+    });
+    void captureRef.current.start();
   }
 
-  if (!portalTarget || !textarea) return null;
+  if (pathname !== "/dashboard" || !portalTarget || !textarea) return null;
 
   const label = !supported
     ? (isRu ? "Голосовой ввод не поддерживается этим браузером" : "Bu brauzer ovozli kiritishni qo‘llamaydi")
-    : recording
+    : starting
+      ? (isRu ? "Ожидаю разрешение микрофона" : "Mikrofon ruxsati kutilmoqda")
+      : recording
       ? (isRu ? "Остановить запись" : "Yozishni to‘xtatish")
       : transcribing
         ? (isRu ? "Распознаю голос" : "Ovoz matnga aylantirilmoqda")
@@ -339,8 +361,8 @@ export default function AiVoiceInput() {
     <>
       <button
         type="button"
-        disabled={!supported || transcribing}
-        onClick={() => recording ? stopRecording() : void startRecording()}
+        disabled={!supported || transcribing || starting}
+        onClick={() => recording ? captureRef.current?.stop() : startRecording()}
         aria-label={label}
         title={label}
         style={{ right: micRight }}
@@ -357,9 +379,11 @@ export default function AiVoiceInput() {
           </svg>
         )}
       </button>
-      {(recording || transcribing || error) && (
+      {(starting || recording || transcribing || error) && (
         <div className={`absolute bottom-12 right-2 z-20 max-w-[250px] rounded-xl px-2.5 py-1.5 text-[10px] font-semibold shadow-lg ${error ? "bg-rose-600 text-white" : "bg-[#0b1f3a] text-white"}`} role={error ? "alert" : "status"}>
-          {error || (recording
+          {error || (starting
+            ? (isRu ? "Разрешите доступ к микрофону…" : "Mikrofonga ruxsat bering…")
+            : recording
             ? (isRu ? "Говорите… нажмите квадрат для остановки" : "Gapiring… to‘xtatish uchun kvadratni bosing")
             : (isRu ? "Преобразую голос в текст…" : "Ovoz matnga aylantirilmoqda…"))}
         </div>
