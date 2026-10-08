@@ -27,13 +27,21 @@ test('production responses use baseline browser security headers', () => {
   assert.match(source, /form-action 'self'/);
 });
 
-test('auth requests are normalized, uncached and time bounded', () => {
-  const source = read('lib/supabase-auth.ts');
-  assert.match(source, /AUTH_REQUEST_TIMEOUT_MS = 15_000/);
-  assert.match(source, /controller\.abort\(\)/);
-  assert.match(source, /cache: "no-store"/);
-  assert.match(source, /referrerPolicy: "no-referrer"/);
-  assert.match(source, /email\.trim\(\)\.toLowerCase\(\)/);
+test('auth requests are normalized, uncached and time bounded without direct public bypass helpers', () => {
+  const session = read('lib/supabase-auth.ts');
+  const password = read('lib/password-auth.ts');
+  const publicAuth = read('lib/public-auth.ts');
+  assert.match(session, /AUTH_REQUEST_TIMEOUT_MS = 15_000/);
+  assert.match(session, /controller\.abort\(\)/);
+  assert.match(session, /cache: "no-store"/);
+  assert.match(session, /referrerPolicy: "no-referrer"/);
+  assert.match(password, /email\.trim\(\)\.toLowerCase\(\)/);
+  assert.match(publicAuth, /email: input\.email\.trim\(\)\.toLowerCase\(\)/);
+  assert.doesNotMatch(session, /export function signIn\(/);
+  assert.doesNotMatch(session, /export function signUp\(/);
+  assert.doesNotMatch(session, /export function verifySignupOtp\(/);
+  assert.doesNotMatch(session, /export function resendSignupOtp\(/);
+  assert.doesNotMatch(session, /export function requestPasswordReset\(/);
 });
 
 test('session storage does not keep a second duplicate access-token key', () => {
