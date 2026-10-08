@@ -1,14 +1,25 @@
 {
-  "name": "My Agent Air",
-  "short_name": "My Agent Air",
-  "description": "Aviakassa va turizm agentlari uchun so\u2018rov, taklif va bitim platformasi.",
+  "id": "/",
+  "name": "Agent Bifavia — My Agent Air",
+  "short_name": "Agent Bifavia",
+  "description": "O‘zbekiston turizm bozori uchun B2B platforma: AI yordamchi, so‘rovlar, takliflar, chat va bitimlar.",
+  "lang": "uz",
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "any",
   "background_color": "#0b1f3a",
   "theme_color": "#0b1f3a",
+  "categories": ["business", "travel", "productivity"],
+  "prefer_related_applications": false,
   "icons": [
     { "src": "/my-agent-air-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
-    { "src": "/my-agent-air-logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+    { "src": "/my-agent-air-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "AI yordamchi", "short_name": "AI", "url": "/dashboard" },
+    { "name": "So‘rovlar", "short_name": "So‘rovlar", "url": "/requests" },
+    { "name": "Chat", "short_name": "Chat", "url": "/messenger" }
   ]
 }
