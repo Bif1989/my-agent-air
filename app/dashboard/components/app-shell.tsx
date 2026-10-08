@@ -49,6 +49,7 @@ export default function AppShell({ children, session, activePath = "" }: { child
   const [companyName, setCompanyName] = useState("");
   const [role, setRole] = useState<string | null>(null);
   const [accountActive, setAccountActive] = useState(true);
+  const [registrationStatus, setRegistrationStatus] = useState<string | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [toasts, setToasts] = useState<ChatToastData[]>([]);
   const unreadRefreshTimer = useRef<number | null>(null);
@@ -91,6 +92,7 @@ export default function AppShell({ children, session, activePath = "" }: { child
         setCompanyName(profile.company_name || "");
         setRole(profile.role || "agent");
         setAccountActive(profile.is_active !== false);
+        setRegistrationStatus(profile.registration_status || null);
         setMissingFields(missingProfileFields(profile));
       }).catch(() => undefined);
       registerServiceWorker().catch(() => undefined);
@@ -111,6 +113,7 @@ export default function AppShell({ children, session, activePath = "" }: { child
       setCompanyName(profile.company_name || "");
       setRole(profile.role || "agent");
       setAccountActive(profile.is_active !== false);
+      setRegistrationStatus(profile.registration_status || null);
       setMissingFields(missingProfileFields(profile));
     }).catch(() => undefined); };
     window.addEventListener(AUTH_SESSION_CHANGED_EVENT, update);
@@ -124,9 +127,16 @@ export default function AppShell({ children, session, activePath = "" }: { child
   }, []);
 
   const visibleNavigation = role === "admin" ? [...navigation, ["Admin", "/admin"] as const] : navigation;
+  const accountReady = accountActive && registrationStatus === "active";
 
   useEffect(() => {
-    if (!currentSession) return;
+    if (registrationStatus === "incomplete" && activePath !== "/profile") {
+      router.replace("/profile?complete=1");
+    }
+  }, [activePath, registrationStatus, router]);
+
+  useEffect(() => {
+    if (!currentSession || !accountReady) return;
     const refreshUnread = () => {
       if (unreadRefreshTimer.current !== null) return;
       unreadRefreshTimer.current = window.setTimeout(() => {
@@ -195,7 +205,7 @@ export default function AppShell({ children, session, activePath = "" }: { child
       if (unreadRefreshTimer.current !== null) window.clearTimeout(unreadRefreshTimer.current);
       unreadRefreshTimer.current = null;
     };
-  }, [currentSession, addToast, isRu]);
+  }, [currentSession, accountReady, addToast, isRu]);
 
   async function handleLogout() {
     setIsSigningOut(true);
@@ -243,8 +253,9 @@ export default function AppShell({ children, session, activePath = "" }: { child
         </header>
 
         <main className={`mx-auto w-full max-w-[1500px] ${isDashboard ? "px-2 py-2 sm:px-4 sm:py-3 lg:px-6 lg:py-5" : "px-4 py-5 sm:px-8 sm:py-8"}`}>
-          {!accountActive && <div role="alert" className="mb-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 sm:mb-4 sm:p-4 sm:text-sm">{isRu ? "Ваш аккаунт заблокирован. Новые действия ограничены." : "Hisobingiz bloklangan. Yangi amallar cheklangan."}</div>}
-          {missingFields.length > 0 && activePath !== "/profile" && !isDashboard && <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{isRu ? "Чтобы начать работу с партнёрами, заполните профиль." : `Hamkorlikni boshlash uchun profilingizni to‘ldiring: ${missingFields.join(", ")}.`} <Link href="/profile?complete=1" className="font-semibold underline">{isRu ? "Заполнить профиль →" : "Profilni to‘ldirish →"}</Link></div>}
+          {(!accountActive || registrationStatus === "suspended") && <div role="alert" className="mb-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 sm:mb-4 sm:p-4 sm:text-sm">{isRu ? "Ваш аккаунт заблокирован. Новые действия ограничены." : "Hisobingiz bloklangan. Yangi amallar cheklangan."}</div>}
+          {registrationStatus === "pending_email" && <div role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{isRu ? "Подтвердите email, чтобы продолжить регистрацию." : "Registratsiyani davom ettirish uchun emailingizni tasdiqlang."}</div>}
+          {registrationStatus === "incomplete" && activePath !== "/profile" && <div role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{isRu ? "Чтобы начать работу с партнёрами, завершите профиль." : `Hamkorlikni boshlash uchun profilingizni yakunlang${missingFields.length ? `: ${missingFields.join(", ")}` : ""}.`} <Link href="/profile?complete=1" className="font-semibold underline">{isRu ? "Заполнить профиль →" : "Profilni to‘ldirish →"}</Link></div>}
           {children}
           {!isDashboard && <footer className="mt-10 flex flex-wrap gap-4 border-t border-slate-200 pt-4 text-xs text-slate-500"><Link href="/terms">{isRu ? "Условия использования" : "Foydalanish shartlari"}</Link><Link href="/privacy">{isRu ? "Конфиденциальность" : "Maxfiylik"}</Link><Link href="/help">{isRu ? "Помощь" : "Yordam"}</Link></footer>}
         </main>
@@ -262,8 +273,8 @@ export default function AppShell({ children, session, activePath = "" }: { child
         })}
       </nav>
 
-      <ChatToastStack toasts={toasts} onClose={closeToast} onOpen={openToast} />
-      <FloatingMessengerPanel activePath={activePath} />
+      {accountReady && <ChatToastStack toasts={toasts} onClose={closeToast} onOpen={openToast} />}
+      {accountReady && <FloatingMessengerPanel activePath={activePath} />}
     </div>
   );
 }
