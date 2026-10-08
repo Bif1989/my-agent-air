@@ -1,4 +1,5 @@
 import RecoveryRedirect from "@/app/components/recovery-redirect";
+import PwaInstall from "@/app/components/pwa-install";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
@@ -18,9 +19,15 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "My Agent Air — Travel Agent B2B Platform",
+  applicationName: "Agent Bifavia",
   description: "Aviakassa va turizm agentlari uchun so‘rov, taklif, bitim va hamkorlik platformasi.",
   manifest: "/manifest.webmanifest",
-  appleWebApp: { capable: true, title: "My Agent Air", statusBarStyle: "black-translucent" },
+  icons: {
+    icon: "/my-agent-air-icon.svg",
+    apple: "/my-agent-air-maskable.svg",
+  },
+  appleWebApp: { capable: true, title: "Agent Bifavia", statusBarStyle: "black-translucent" },
+  formatDetection: { telephone: false },
 };
 
 export const viewport = { themeColor: "#0b1f3a" };
@@ -48,6 +55,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <UiSettingsProvider>
           <VkMiniAppBridge />
           <RecoveryRedirect />{children}
+          <PwaInstall />
           <Analytics />
         </UiSettingsProvider>
       </body>
