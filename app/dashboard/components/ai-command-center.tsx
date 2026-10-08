@@ -12,6 +12,7 @@ import { AiResponseText } from "@/app/dashboard/components/ai-response-text";
 import { domesticTourAdvice, isUzbekistanDomesticTourism } from "@/lib/uzbekistan-tourism";
 import {
   createAiConversation,
+  deleteAiConversations,
   listAiChatHistory,
   listAiConversations,
   renameAiConversation,
@@ -160,6 +161,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
   const [historyReady, setHistoryReady] = useState(false);
   const [threadsOpen, setThreadsOpen] = useState(false);
   const [threadError, setThreadError] = useState("");
+  const [deletingHistory, setDeletingHistory] = useState(false);
   const sequence = useRef(0);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -209,7 +211,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
   }, [entries, historyReady]);
 
   async function startNewConversation() {
-    if (busy) return;
+    if (busy || deletingHistory) return;
     setThreadError("");
     try {
       const created = await createAiConversation(session, isRu ? "Новый чат" : "Yangi chat");
@@ -225,12 +227,36 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
   }
 
   function openConversation(id: string) {
-    if (busy) return;
+    if (busy || deletingHistory) return;
     if (id === activeConversationId) { setThreadsOpen(false); return; }
     setInput("");
     setHistoryReady(false);
     setActiveConversationId(id);
     setThreadsOpen(false);
+  }
+
+  async function removeConversation(conversation?: AiConversation) {
+    if (busy || deletingHistory || !historyReady) return;
+    const prompt = conversation
+      ? (isRu ? `Удалить чат «${conversation.title}» и все его сообщения? Это нельзя отменить.` : `“${conversation.title}” chati va barcha yozishmalari o‘chirilsinmi? Buni qaytarib bo‘lmaydi.`)
+      : (isRu ? "Удалить все ваши AI-чаты и сообщения? Это нельзя отменить." : "Barcha AI chatlaringiz va yozishmalaringiz o‘chirilsinmi? Buni qaytarib bo‘lmaydi.");
+    if (!window.confirm(prompt)) return;
+    setDeletingHistory(true);
+    setThreadError("");
+    try {
+      await deleteAiConversations(session, conversation?.id);
+      setConversations((current) => conversation ? current.filter((item) => item.id !== conversation.id) : []);
+      if (!conversation || conversation.id === activeConversationId) {
+        setActiveConversationId(null);
+        setEntries([greeting]);
+        setInput("");
+        setHistoryReady(true);
+      }
+    } catch {
+      setThreadError(isRu ? "Не удалось удалить историю. Попробуйте ещё раз." : "Tarixni o‘chirib bo‘lmadi. Qayta urinib ko‘ring.");
+    } finally {
+      setDeletingHistory(false);
+    }
   }
 
   function openRequestDraft(action: AiHistoryAction) {
@@ -257,7 +283,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
 
   async function send(message?: string) {
     const text = (message ?? input).trim();
-    if (!text || busy || !historyReady) return;
+    if (!text || busy || deletingHistory || !historyReady) return;
     setBusy(true);
     setInput("");
 
@@ -349,11 +375,15 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
   const historyList = (
     <div className="space-y-1.5">
       {conversations.map((conversation) => (
-        <button key={conversation.id} type="button" onClick={() => openConversation(conversation.id)} className={`w-full rounded-xl px-2.5 py-2 text-left transition ${conversation.id === activeConversationId ? "bg-blue-600 text-white" : "bg-slate-50 text-slate-700 hover:bg-blue-50 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"}`}>
+        <div key={conversation.id} className="flex items-center gap-1">
+        <button type="button" disabled={busy || deletingHistory} onClick={() => openConversation(conversation.id)} className={`min-w-0 flex-1 rounded-xl px-2.5 py-2 text-left transition ${conversation.id === activeConversationId ? "bg-blue-600 text-white" : "bg-slate-50 text-slate-700 hover:bg-blue-50 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"}`}>
           <p className="truncate text-[11px] font-semibold">{conversation.title}</p>
           <p className={`mt-0.5 text-[9px] ${conversation.id === activeConversationId ? "text-blue-100" : "text-slate-400"}`}>{new Intl.DateTimeFormat(isRu ? "ru-RU" : "uz-UZ", { day: "2-digit", month: "short" }).format(new Date(conversation.updated_at))}</p>
         </button>
+        <button type="button" disabled={busy || deletingHistory || !historyReady} onClick={() => void removeConversation(conversation)} aria-label={`${isRu ? "Удалить чат" : "Chatni o‘chirish"}: ${conversation.title}`} className="min-h-11 shrink-0 rounded-lg px-2 text-[11px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-40 dark:text-red-400 dark:hover:bg-red-950/40">{isRu ? "Удалить" : "O‘chirish"}</button>
+        </div>
       ))}
+      {!conversations.length && <p className="px-2 py-4 text-xs text-slate-500">{isRu ? "История пуста" : "Tarix bo‘sh"}</p>}
     </div>
   );
 
@@ -372,6 +402,8 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
               </div>
               <button type="button" onClick={() => void startNewConversation()} className="mt-3 rounded-xl bg-blue-600 px-3 py-2.5 text-xs font-semibold text-white hover:bg-blue-700">+ {isRu ? "Новый чат" : "Yangi chat"}</button>
               <div className="mt-3 min-h-0 flex-1 overflow-y-auto">{historyList}</div>
+              {threadError && <p role="alert" className="mt-2 text-xs text-red-600">{threadError}</p>}
+              <button type="button" disabled={busy || deletingHistory || !historyReady || !conversations.length} onClick={() => void removeConversation()} className="mt-3 min-h-11 rounded-xl border border-red-200 px-3 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-40 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40">{deletingHistory ? (isRu ? "Удаление..." : "O‘chirilmoqda...") : (isRu ? "Очистить всю историю" : "Barcha tarixni o‘chirish")}</button>
             </aside>
           </div>
         )}

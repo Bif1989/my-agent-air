@@ -61,6 +61,20 @@ export async function renameAiConversation(session: AuthSession, conversationId:
   if (!response.ok) throw new Error("AI chat nomi saqlanmadi.");
 }
 
+/** Database ownership policies apply; messages cascade with their conversation. */
+export async function deleteAiConversations(session: AuthSession, conversationId?: string) {
+  if (conversationId !== undefined && !conversationId.trim()) throw new Error("Chat tanlanmagan.");
+  const params = new URLSearchParams({ user_id: `eq.${session.user.id}`, select: "id" });
+  if (conversationId !== undefined) params.set("id", `eq.${conversationId}`);
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/ai_chat_conversations?${params.toString()}`, {
+    method: "DELETE",
+    headers: { ...headers(session), Prefer: "return=representation" },
+  });
+  if (!response.ok) throw new Error("AI chatni o‘chirib bo‘lmadi.");
+  const rows = await response.json() as { id: string }[];
+  if (conversationId && !rows.some((row) => row.id === conversationId)) throw new Error("Chat topilmadi yoki o‘chirishga ruxsat yo‘q.");
+}
+
 export async function listAiChatHistory(session: AuthSession, conversationId: string, limit = 80): Promise<AiHistoryMessage[]> {
   const params = new URLSearchParams({
     select: "id,role,content,actions,created_at",
