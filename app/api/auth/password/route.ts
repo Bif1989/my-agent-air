@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase-config";
+import { verifyTurnstile } from "@/lib/server/turnstile";
 
 export const runtime = "nodejs";
 export const maxDuration = 15;
@@ -11,7 +12,7 @@ const MAX_EMAIL_LENGTH = 320;
 const MAX_PASSWORD_LENGTH = 1024;
 const UPSTREAM_TIMEOUT_MS = 12_000;
 
-type LoginBody = { email?: unknown; password?: unknown };
+type LoginBody = { email?: unknown; password?: unknown; captcha_token?: unknown };
 type LimitStatus = { blocked?: boolean; retry_after?: number };
 type AuthSuccess = {
   access_token?: string;
@@ -106,6 +107,7 @@ export async function POST(request: NextRequest) {
   const body = await readBody(request);
   const email = typeof body?.email === "string" ? normalizeEmail(body.email) : "";
   const password = typeof body?.password === "string" ? body.password : "";
+  const captchaToken = typeof body?.captcha_token === "string" ? body.captcha_token.trim() : "";
   if (
     !email || email.length > MAX_EMAIL_LENGTH || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
     !password || password.length > MAX_PASSWORD_LENGTH
@@ -134,6 +136,9 @@ export async function POST(request: NextRequest) {
     const retryAfter = Math.max(1, Number(limit.retry_after) || 60);
     return json({ code: "TOO_MANY_ATTEMPTS", message: "Juda ko‘p noto‘g‘ri urinish. Birozdan keyin qayta urinib ko‘ring." }, 429, retryAfter);
   }
+
+  const captcha = await verifyTurnstile({ token: captchaToken, action: "login", remoteIp: ip, hostname: request.nextUrl.hostname });
+  if (!captcha.ok) return json({ code: captcha.code, message: captcha.message }, captcha.status);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
