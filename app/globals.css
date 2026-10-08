@@ -20,11 +20,16 @@
   --font-mono: var(--font-geist-mono);
 }
 
+html {
+  background: var(--background);
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), sans-serif;
   transition: background-color 160ms ease, color 160ms ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
 ::selection {
@@ -35,6 +40,72 @@ body {
 .dark ::selection {
   background: #1d4ed8;
   color: #eff6ff;
+}
+
+@keyframes pwa-splash-slide {
+  0% { transform: translateX(-110%); }
+  55% { transform: translateX(85%); }
+  100% { transform: translateX(220%); }
+}
+
+@keyframes pwa-splash-out {
+  0%, 72% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.pwa-launch-screen {
+  animation: pwa-splash-out 850ms ease forwards;
+}
+
+.pwa-splash-progress {
+  animation: pwa-splash-slide 760ms ease-in-out infinite;
+}
+
+html[data-pwa-standalone="true"],
+html[data-pwa-standalone="true"] body {
+  min-height: 100dvh;
+  overscroll-behavior-y: none;
+}
+
+html[data-pwa-standalone="true"] body {
+  padding-top: env(safe-area-inset-top);
+  background: #eef5fb;
+}
+
+html.dark[data-pwa-standalone="true"] body {
+  background: #08111f;
+}
+
+html[data-pwa-standalone="true"] nav[aria-label="Mobil asosiy navigatsiya"],
+html[data-pwa-standalone="true"] nav[aria-label="Мобильная навигация"] {
+  min-height: calc(4.25rem + env(safe-area-inset-bottom));
+  height: calc(4.25rem + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  border-top-color: rgba(148, 163, 184, 0.28);
+  box-shadow: 0 -10px 32px rgba(15, 23, 42, 0.1);
+}
+
+html[data-pwa-standalone="true"] nav[aria-label="Mobil asosiy navigatsiya"] a,
+html[data-pwa-standalone="true"] nav[aria-label="Мобильная навигация"] a {
+  min-height: 4.1rem;
+  touch-action: manipulation;
+}
+
+html[data-pwa-standalone="true"] main {
+  scroll-margin-top: env(safe-area-inset-top);
+}
+
+@media (max-width: 1023px) and (display-mode: standalone) {
+  body {
+    user-select: none;
+  }
+
+  input,
+  textarea,
+  select,
+  [contenteditable="true"] {
+    user-select: text;
+  }
 }
 
 /* Existing screens use utility colors directly. These aliases make the whole app
