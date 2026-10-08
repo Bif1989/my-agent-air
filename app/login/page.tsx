@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import BrandMark from "@/app/components/brand-mark";
+import TurnstileChallenge, { TURNSTILE_SITE_KEY } from "@/app/components/turnstile-challenge";
 import { UiControls, useUiSettings } from "@/lib/ui-settings";
 import { FormEvent, useState } from "react";
 import { saveSession } from "@/lib/supabase-auth";
@@ -12,20 +13,28 @@ import { safeNextPath } from "@/lib/navigation";
 export default function LoginPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaReset, setCaptchaReset] = useState(0);
   const router = useRouter();
   const { isRu } = useUiSettings();
+  const captchaRequired = Boolean(TURNSTILE_SITE_KEY);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    if (captchaRequired && !captchaToken) {
+      setError(isRu ? "Завершите проверку безопасности." : "Xavfsizlik tekshiruvini yakunlang.");
+      return;
+    }
     const formData = new FormData(event.currentTarget);
     setIsLoading(true);
     try {
-      const response = await signInProtected(String(formData.get("email") || ""), String(formData.get("password") || ""));
+      const response = await signInProtected(String(formData.get("email") || ""), String(formData.get("password") || ""), captchaToken);
       saveSession(response);
       router.push(safeNextPath(new URLSearchParams(window.location.search).get("next")));
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : (isRu ? "Ошибка при входе." : "Kirishda xatolik yuz berdi."));
+      if (captchaRequired) setCaptchaReset((value) => value + 1);
       setIsLoading(false);
     }
   }
@@ -41,8 +50,9 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="mt-8 space-y-5">
             <label className="block text-sm font-medium text-slate-700">Email<input required name="email" type="email" placeholder="agent@example.com" autoComplete="email" className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3.5 outline-none transition placeholder:text-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-100" /></label>
             <label className="block text-sm font-medium text-slate-700">{isRu ? "Пароль" : "Parol"}<input required name="password" type="password" autoComplete="current-password" className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3.5 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100" /></label>
+            <TurnstileChallenge action="login" onToken={setCaptchaToken} resetNonce={captchaReset} />
             {error && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
-            <button type="submit" disabled={isLoading} className="w-full rounded-xl bg-blue-600 py-3.5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-4 focus:ring-blue-100">{isLoading ? (isRu ? "Вход..." : "Kirilmoqda...") : (isRu ? "Войти" : "Kirish")}</button>
+            <button type="submit" disabled={isLoading || (captchaRequired && !captchaToken)} className="w-full rounded-xl bg-blue-600 py-3.5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-4 focus:ring-blue-100">{isLoading ? (isRu ? "Вход..." : "Kirilmoqda...") : (isRu ? "Войти" : "Kirish")}</button>
           </form>
           <div className="mt-6 flex flex-wrap justify-between gap-3 text-sm"><Link href="/forgot-password" className="font-medium text-blue-600 hover:text-blue-700">{isRu ? "Забыли пароль?" : "Parolni unutdingizmi?"}</Link><Link href="/register" className="font-medium text-blue-600 hover:text-blue-700">{isRu ? "Регистрация" : "Ro‘yxatdan o‘tish"}</Link></div>
         </div></section>
