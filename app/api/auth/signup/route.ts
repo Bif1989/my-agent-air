@@ -97,6 +97,9 @@ export async function POST(request: NextRequest) {
   }
 
   const ip = clientIp(request);
+  const captcha = await verifyTurnstile({ token: captchaToken, action: "signup", remoteIp: ip, hostname: request.nextUrl.hostname });
+  if (!captcha.ok) return json({ code: captcha.code, message: captcha.message }, captcha.status);
+
   const admin = createClient(SUPABASE_URL, secret, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
   const quotas = [
     { scope: hash(secret, `signup-pair:${ip}\u0000${email}`), limit: 3, window: 1800 },
@@ -114,9 +117,6 @@ export async function POST(request: NextRequest) {
       return json({ code: "TOO_MANY_ATTEMPTS", message: "Juda ko‘p urinish. Birozdan keyin qayta urinib ko‘ring." }, 429, retryAfter);
     }
   }
-
-  const captcha = await verifyTurnstile({ token: captchaToken, action: "signup", remoteIp: ip, hostname: request.nextUrl.hostname });
-  if (!captcha.ok) return json({ code: captcha.code, message: captcha.message }, captcha.status);
 
   const exposure = await checkPasswordExposure(password);
   if (exposure.status === "leaked") {
