@@ -27,6 +27,8 @@ jobs:
           npm audit fix --omit=dev
       - name: Verify production dependency audit
         run: npm audit --omit=dev --audit-level=high
+      - name: Restore full dependency set for validation
+        run: npm ci
       - run: npm test
       - run: npm run lint
       - run: npm run build
