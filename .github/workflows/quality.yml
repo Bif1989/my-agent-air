@@ -9,6 +9,7 @@ on:
 permissions:
   contents: read
 
+# P0 gate: production dependency audit, tests, lint, build and browser smoke must all pass.
 jobs:
   test-build-browser-smoke:
     runs-on: ubuntu-latest
