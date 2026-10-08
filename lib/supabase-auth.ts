@@ -40,10 +40,6 @@ function isBrowser() {
   return typeof window !== "undefined";
 }
 
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
-}
-
 function decodeJwtClaims(token: string): JwtClaims | null {
   try {
     const payload = token.split(".")[1];
@@ -97,47 +93,6 @@ async function authRequest(path: string, body: Record<string, unknown>) {
     throw new SupabaseRequestError("Kirish xizmatida vaqtinchalik xatolik. Qayta urinib ko‘ring.", response.status, data.error_code);
   }
   return data;
-}
-
-export function signUp(body: {
-  email: string;
-  password: string;
-  full_name: string;
-  company_name: string;
-  phone: string;
-  city: string;
-  agent_type: string;
-}) {
-  return authRequest("signup", {
-    email: normalizeEmail(body.email),
-    password: body.password,
-    data: {
-      full_name: body.full_name.trim(),
-      company_name: body.company_name.trim(),
-      phone: body.phone.trim(),
-      city: body.city.trim(),
-      agent_type: body.agent_type.trim(),
-    },
-  });
-}
-
-export function verifySignupOtp(email: string, token: string) {
-  return authRequest("verify", {
-    email: normalizeEmail(email),
-    token: token.trim(),
-    type: "email",
-  });
-}
-
-export function resendSignupOtp(email: string) {
-  return authRequest("resend", {
-    email: normalizeEmail(email),
-    type: "signup",
-  });
-}
-
-export function signIn(email: string, password: string) {
-  return authRequest("token?grant_type=password", { email: normalizeEmail(email), password });
 }
 
 export function saveSession(data: AuthResponse) {
@@ -285,10 +240,6 @@ export async function authenticatedSupabaseFetch(path: string, init: RequestInit
     throw new SupabaseRequestError(message, response.status, data.code);
   }
   return response;
-}
-
-export function requestPasswordReset(email: string, redirectTo: string) {
-  return authRequest(`recover?redirect_to=${encodeURIComponent(redirectTo)}`, { email: normalizeEmail(email) });
 }
 
 export async function consumeRecoveryLink(href: string) {
