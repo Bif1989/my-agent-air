@@ -16,9 +16,12 @@ export default function PwaSplash() {
     document.documentElement.dataset.pwaStandalone = standalone ? "true" : "false";
     if (!standalone) return;
 
-    setVisible(true);
-    const timer = window.setTimeout(() => setVisible(false), 850);
-    return () => window.clearTimeout(timer);
+    const showTimer = window.setTimeout(() => setVisible(true), 0);
+    const hideTimer = window.setTimeout(() => setVisible(false), 850);
+    return () => {
+      window.clearTimeout(showTimer);
+      window.clearTimeout(hideTimer);
+    };
   }, []);
 
   if (!visible) return null;
