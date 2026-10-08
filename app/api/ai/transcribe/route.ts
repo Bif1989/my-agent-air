@@ -6,6 +6,11 @@ export const maxDuration = 30;
 
 const MAX_AUDIO_BYTES = 4 * 1024 * 1024;
 const MAX_BODY_BYTES = MAX_AUDIO_BYTES + 64 * 1024;
+const TRANSCRIPTION_KEYWORDS = [
+  "Toshkent", "Samarqand", "Buxoro", "Xiva", "Namangan", "Chust", "Zomin",
+  "aviabilet", "mehmonxona", "turagent", "turoperator", "transfer", "gid",
+  "Uzbekistan Airways", "Centrum Air", "Qanot Sharq", "Air Arabia",
+];
 class VoiceRouteError extends Error {
   constructor(public code: string, public status: number, message: string) { super(message); }
 }
@@ -100,8 +105,23 @@ async function handlePost(request: NextRequest, signal: AbortSignal) {
   signal.throwIfAborted();
   const upstream = new FormData();
   upstream.append("file", audio, `voice.${extension}`);
-  upstream.append("model", process.env.OPENAI_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe");
+
+  // gpt-transcribe handles Uzbek/Russian mixed speech better when expected languages
+  // and a small domain vocabulary are supplied. Keep an explicit env override for
+  // future model changes, but transparently upgrade the old mini default.
+  const configuredModel = process.env.OPENAI_TRANSCRIBE_MODEL?.trim();
+  const model = !configuredModel || configuredModel === "gpt-4o-mini-transcribe" ? "gpt-transcribe" : configuredModel;
+  upstream.append("model", model);
   upstream.append("response_format", "json");
+  upstream.append("temperature", "0");
+
+  if (model === "gpt-transcribe") {
+    upstream.append("languages[]", "uz");
+    upstream.append("languages[]", "ru");
+    upstream.append("chunking_strategy", "auto");
+    TRANSCRIPTION_KEYWORDS.forEach(keyword => upstream.append("keywords[]", keyword));
+  }
+
   const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST", headers: { Authorization: `Bearer ${apiKey}` }, body: upstream, signal,
   });
