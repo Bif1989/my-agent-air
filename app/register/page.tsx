@@ -10,6 +10,8 @@ import { FormEvent, useEffect, useState } from "react";
 import { saveSession } from "@/lib/supabase-auth";
 import { resendSignupOtpProtected, signUpProtected, verifySignupOtpProtected } from "@/lib/public-auth";
 
+const MIN_PASSWORD_LENGTH = 10;
+
 function maskEmail(email: string) {
   const [localPart, domainPart] = email.split("@");
   if (!localPart || !domainPart) return email;
@@ -41,6 +43,10 @@ export default function RegisterPage() {
     const formData = new FormData(event.currentTarget);
     const email = String(formData.get("email") || "").trim();
     const password = String(formData.get("password") || "");
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setError(isRu ? `Пароль должен содержать не менее ${MIN_PASSWORD_LENGTH} символов.` : `Parol kamida ${MIN_PASSWORD_LENGTH} belgidan iborat bo‘lsin.`);
+      return;
+    }
     if (password !== String(formData.get("passwordConfirmation") || "")) {
       setError(isRu ? "Пароли должны совпадать." : "Parollar bir xil bo‘lishi kerak.");
       return;
@@ -149,8 +155,8 @@ export default function RegisterPage() {
               <label className="block text-sm font-medium text-slate-700">{isRu ? "Город" : "Shahar"}<input required name="city" type="text" placeholder={isRu ? "Например: Наманган" : "Masalan: Namangan"} autoComplete="address-level2" className={inputClass} /></label>
               <label className="block text-sm font-medium text-slate-700">{isRu ? "Тип партнёра" : "Agent turi"}<select required name="agentType" defaultValue="" className={`${inputClass} bg-white`}><option value="" disabled>{isRu ? "Выберите" : "Tanlang"}</option>{AGENT_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
 
-              <label className="block text-sm font-medium text-slate-700">{isRu ? "Пароль" : "Parol"}<input required name="password" type="password" minLength={8} autoComplete="new-password" className={inputClass} /></label>
-              <label className="block text-sm font-medium text-slate-700">{isRu ? "Повторите пароль" : "Parolni tasdiqlash"}<input required name="passwordConfirmation" type="password" minLength={8} autoComplete="new-password" className={inputClass} /></label>
+              <label className="block text-sm font-medium text-slate-700">{isRu ? "Пароль" : "Parol"}<input required name="password" type="password" minLength={MIN_PASSWORD_LENGTH} autoComplete="new-password" className={inputClass} /></label>
+              <label className="block text-sm font-medium text-slate-700">{isRu ? "Повторите пароль" : "Parolni tasdiqlash"}<input required name="passwordConfirmation" type="password" minLength={MIN_PASSWORD_LENGTH} autoComplete="new-password" className={inputClass} /></label>
 
               <label className="flex items-start gap-3 text-sm text-slate-500 sm:col-span-2"><input required name="terms" type="checkbox" className="mt-1 h-4 w-4 accent-blue-600" /><span>{isRu ? "Я ознакомился и согласен с " : ""}<Link href="/terms" target="_blank" className="text-blue-600 underline">{isRu ? "условиями использования" : "Foydalanish shartlari"}</Link>{isRu ? " и " : " va "}<Link href="/privacy" target="_blank" className="text-blue-600 underline">{isRu ? "политикой конфиденциальности" : "maxfiylik qoidalari"}</Link>{isRu ? "." : " bilan tanishdim va roziman."}</span></label>
               {error && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700 sm:col-span-2">{error}</p>}
