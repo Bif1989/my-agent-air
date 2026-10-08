@@ -196,9 +196,12 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
   useEffect(() => {
     if (!activeConversationId) return;
     let active = true;
-    setHistoryReady(false);
-    setHistoryError("");
-    setEntries([]);
+    queueMicrotask(() => {
+      if (!active) return;
+      setHistoryReady(false);
+      setHistoryError("");
+      setEntries([]);
+    });
     listAiChatHistory(session, activeConversationId).then((rows) => {
       if (!active) return;
       setEntries(rows.length ? rows.map((row) => ({ id: row.id, sender: row.role, text: row.content, actions: row.actions })) : [greeting]);
@@ -467,7 +470,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
         <div className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-blue-50/40 via-white to-white px-3 py-3 dark:from-slate-900 dark:via-slate-950 dark:to-slate-950 sm:px-5 sm:py-5" aria-live="polite">
           <div className="mx-auto flex min-h-full max-w-3xl flex-col">
             {!historyReady && !historyError && activeConversationId && <div className="flex min-h-32 items-center justify-center text-xs text-slate-400">{isRu ? "Загрузка истории чата..." : "Chat tarixi yuklanmoqda..."}</div>}
-            {historyError && <div role="alert" className="my-auto rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"><p>{historyError}</p><button type="button" onClick={() => setHistoryReloadKey((value) => value + 1)} className="mt-3 rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-700">{isRu ? "Загрузить снова" : "Qayta yuklash"}</button></div>}
+            {historyError && <div role="alert" className="my-auto rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"><p>{historyError}</p><button type="button" onClick={() => { setHistoryError(""); setHistoryReady(false); setEntries([]); setHistoryReloadKey((value) => value + 1); }} className="mt-3 rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-700">{isRu ? "Загрузить снова" : "Qayta yuklash"}</button></div>}
             {historyReady && <div className="space-y-3 sm:space-y-5">
               {entries.map((entry) => (
                 <div key={entry.id} className={`flex gap-3 ${entry.sender === "user" ? "justify-end" : "justify-start"}`}>
