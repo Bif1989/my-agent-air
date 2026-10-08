@@ -52,6 +52,16 @@ test('external supplier public RPCs require high-entropy token shape and are ano
   assert.match(source, /already_responded/);
 });
 
+test('external supplier admin import matches table constraints and bounds each batch', () => {
+  const source = read('supabase/migrations/20261008124500_p0_external_supplier_import_hardening.sql');
+  assert.match(source, /registration_status = 'active'/);
+  assert.match(source, /jsonb_array_length\(p_items\) > 1000/);
+  assert.match(source, /official_registry','open_data','public_business_contact','manual/);
+  assert.match(source, /source_name is not distinct from v_source_name/);
+  assert.match(source, /then 'registry' else 'public_contact' end/);
+  assert.match(source, /\^\[1-5\]\$/);
+});
+
 test('CI blocks high production dependency vulnerabilities and runs Chromium plus WebKit smoke', () => {
   const source = read('.github/workflows/quality.yml');
   assert.match(source, /npm audit --omit=dev --audit-level=high/);
