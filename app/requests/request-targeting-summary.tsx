@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getOwnRequestTarget, listRequestTargets, type RequestTargetRecord } from "@/app/requests/request-targeting-api";
+import { getOwnRequestTarget, listRequestTargets, markOwnRequestTargetViewed, type RequestTargetRecord } from "@/app/requests/request-targeting-api";
 
 const STATUS_LABELS: Record<string, string> = {
   matched: "Mos keldi",
@@ -44,7 +44,9 @@ export default function RequestTargetingSummary({ requestId, isOwner, distributi
   useEffect(() => {
     if (!isTargeted) return;
     let active = true;
-    const task = isOwner ? listRequestTargets(requestId) : getOwnRequestTarget(requestId);
+    const task = isOwner
+      ? listRequestTargets(requestId)
+      : markOwnRequestTargetViewed(requestId).catch(() => false).then(() => getOwnRequestTarget(requestId));
     Promise.resolve(task)
       .then((data) => {
         if (!active) return;
