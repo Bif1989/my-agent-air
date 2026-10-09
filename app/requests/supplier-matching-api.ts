@@ -62,12 +62,18 @@ export type SupplierDeliveryResult = {
   message?: string;
 };
 
-function rpc<T>(name: string, body: Record<string, unknown>) {
-  return authenticatedSupabaseFetch(`rpc/${name}`, {
+async function rpc<T>(name: string, body: Record<string, unknown>) {
+  const response = await authenticatedSupabaseFetch(`rpc/${name}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-  }).then((response) => response.json() as Promise<T>);
+  });
+  const data = await response.json().catch(() => ({})) as Record<string, unknown>;
+  if (!response.ok) {
+    const message = typeof data.message === "string" ? data.message : "SUPPLIER_RPC_FAILED";
+    throw new Error(message);
+  }
+  return data as T;
 }
 
 export function matchSuppliersForRequest(requestId: string, supplierType?: SupplierType, limit = 20) {
@@ -90,11 +96,11 @@ export function listSupplierInvites(requestId: string) {
   return rpc<SupplierInviteRow[]>("list_request_supplier_invites", { p_request_id: requestId });
 }
 
-export async function deliverSupplierInviteEmail(inviteId: string, token: string) {
+async function deliverSupplierInvite(path: string, inviteId: string, token: string) {
   const session = getStoredSession();
   if (!session?.access_token) throw new Error("AUTH_SESSION_MISSING");
 
-  const response = await fetch("/api/supplier-outreach/send", {
+  const response = await fetch(path, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${session.access_token}`,
@@ -112,4 +118,12 @@ export async function deliverSupplierInviteEmail(inviteId: string, token: string
     throw error;
   }
   return data;
+}
+
+export function deliverSupplierInviteEmail(inviteId: string, token: string) {
+  return deliverSupplierInvite("/api/supplier-outreach/send", inviteId, token);
+}
+
+export function deliverSupplierInviteSms(inviteId: string, token: string) {
+  return deliverSupplierInvite("/api/supplier-outreach/send-sms", inviteId, token);
 }
