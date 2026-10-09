@@ -133,6 +133,14 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
     opened: invites.filter((invite) => ["opened", "responded"].includes(invite.status)).length,
     responded: invites.filter((invite) => invite.status === "responded").length,
   }), [invites]);
+  const activeInviteBySupplier = useMemo(() => {
+    const map = new Map<string, SupplierInviteRow>();
+    for (const invite of invites) {
+      if (!["sent", "opened", "responded"].includes(invite.status)) continue;
+      if (!map.has(invite.supplier_id)) map.set(invite.supplier_id, invite);
+    }
+    return map;
+  }, [invites]);
 
   async function refresh(type = effectiveSupplierType) {
     setLoading(true);
@@ -159,6 +167,7 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
   }, [enabled, effectiveSupplierType, request.id]);
 
   async function makeInvite(supplier: SupplierMatch) {
+    if (activeInviteBySupplier.has(supplier.id)) return;
     setWorkingId(supplier.id);
     setGenerated(null);
     setCopied(false);
@@ -187,6 +196,7 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
       setInvites(await listSupplierInvites(request.id));
     } catch {
       setError("invite");
+      setInvites(await listSupplierInvites(request.id).catch(() => invites));
     } finally {
       setWorkingId("");
     }
@@ -201,7 +211,7 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
   const errorText = error === "match"
     ? tr(isRu, "Tashqi supplierlarni topishda xatolik yuz berdi. Qayta urinib ko‘ring.", "Не удалось найти внешних поставщиков. Попробуйте ещё раз.")
     : error === "invite"
-      ? tr(isRu, "Taklif so‘rovini tayyorlab bo‘lmadi. Qayta urinib ko‘ring.", "Не удалось подготовить запрос предложения. Попробуйте ещё раз.")
+      ? tr(isRu, "Taklif so‘rovini tayyorlab bo‘lmadi. Holatni yangilab qayta tekshiring.", "Не удалось подготовить запрос. Обновите статус и проверьте ещё раз.")
       : "";
   const targetingSummary = <RequestTargetingSummary requestId={request.id} isOwner distributionMode={request.distribution_mode || "targeted"} />;
   if (!enabled) return targetingSummary;
@@ -238,18 +248,21 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
       <div className="mt-6 grid gap-3 md:grid-cols-2">
         {loading && matches.length === 0 && <div className="h-32 animate-pulse rounded-2xl bg-slate-100 md:col-span-2" />}
         {!loading && matches.length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-7 text-center text-sm text-slate-500 md:col-span-2">{tr(isRu, "Hozircha ushbu hudud va xizmatga mos tashqi supplier topilmadi. Rasmiy baza kengaygani sari natijalar shu yerda chiqadi.", "Пока внешние поставщики для этого региона и услуги не найдены. По мере расширения базы результаты появятся здесь.")}</div>}
-        {matches.map((supplier) => <article key={supplier.id} className="rounded-2xl border border-slate-200 p-5">
-          <div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-[#0b1f3a]">{supplier.name}</h3><p className="mt-1 text-sm text-slate-500">{[supplier.city, supplier.region].filter(Boolean).join(" · ") || tr(isRu, "Hudud ko‘rsatilmagan", "Регион не указан")}</p></div><span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">{statusLabel(supplier.status, isRu)}</span></div>
-          <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-600">
-            <span className="rounded-full bg-cyan-50 px-2.5 py-1 font-semibold text-cyan-800">{tr(isRu, "Moslik", "Совпадение")}: {supplier.match_score}</span>
-            <span className="rounded-full bg-slate-100 px-2.5 py-1">{sourceLabel(supplier.source_type, isRu)}</span>
-            {supplier.star_rating && <span className="rounded-full bg-slate-100 px-2.5 py-1">{supplier.star_rating}★</span>}
-            {supplier.capacity != null && <span className="rounded-full bg-slate-100 px-2.5 py-1">{tr(isRu, "Sig‘im", "Вместимость")}: {supplier.capacity}</span>}
-            {supplier.has_phone && <span className="rounded-full bg-slate-100 px-2.5 py-1">{tr(isRu, "Telefon bor", "Есть телефон")}</span>}
-            {supplier.has_email && <span className="rounded-full bg-slate-100 px-2.5 py-1">{tr(isRu, "Email bor", "Есть email")}</span>}
-          </div>
-          <button type="button" onClick={() => void makeInvite(supplier)} disabled={Boolean(workingId)} className="mt-5 w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">{workingId === supplier.id ? tr(isRu, "Yuborilmoqda...", "Отправка...") : tr(isRu, "Taklif so‘rash", "Запросить предложение")}</button>
-        </article>)}
+        {matches.map((supplier) => {
+          const activeInvite = activeInviteBySupplier.get(supplier.id);
+          return <article key={supplier.id} className="rounded-2xl border border-slate-200 p-5">
+            <div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-[#0b1f3a]">{supplier.name}</h3><p className="mt-1 text-sm text-slate-500">{[supplier.city, supplier.region].filter(Boolean).join(" · ") || tr(isRu, "Hudud ko‘rsatilmagan", "Регион не указан")}</p></div><span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">{statusLabel(supplier.status, isRu)}</span></div>
+            <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-600">
+              <span className="rounded-full bg-cyan-50 px-2.5 py-1 font-semibold text-cyan-800">{tr(isRu, "Moslik", "Совпадение")}: {supplier.match_score}</span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1">{sourceLabel(supplier.source_type, isRu)}</span>
+              {supplier.star_rating && <span className="rounded-full bg-slate-100 px-2.5 py-1">{supplier.star_rating}★</span>}
+              {supplier.capacity != null && <span className="rounded-full bg-slate-100 px-2.5 py-1">{tr(isRu, "Sig‘im", "Вместимость")}: {supplier.capacity}</span>}
+              {supplier.has_phone && <span className="rounded-full bg-slate-100 px-2.5 py-1">{tr(isRu, "Telefon bor", "Есть телефон")}</span>}
+              {supplier.has_email && <span className="rounded-full bg-slate-100 px-2.5 py-1">{tr(isRu, "Email bor", "Есть email")}</span>}
+            </div>
+            <button type="button" onClick={() => void makeInvite(supplier)} disabled={Boolean(workingId) || Boolean(activeInvite)} className="mt-5 w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">{activeInvite ? statusLabel(activeInvite.status, isRu) : workingId === supplier.id ? tr(isRu, "Yuborilmoqda...", "Отправка...") : tr(isRu, "Taklif so‘rash", "Запросить предложение")}</button>
+          </article>;
+        })}
       </div>
 
       {invites.length > 0 && <div className="mt-8 border-t border-slate-100 pt-6">

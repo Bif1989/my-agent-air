@@ -39,3 +39,17 @@ test('supplier outreach keeps recipient private and falls back to manual sharing
   assert.match(ui, /linkni qo‘lda ulashish mumkin/);
   assert.match(ui, /inviteStats\.sent/);
 });
+
+test('supplier outreach prevents duplicate active sends in UI and surfaces RPC failures', () => {
+  const api = read('app/requests/supplier-matching-api.ts');
+  const ui = read('app/requests/supplier-matching.tsx');
+  const migration = read('supabase/migrations/20261009104418_p2_supplier_outreach_dedup_guard.sql');
+  assert.match(api, /if \(!response\.ok\)/);
+  assert.match(api, /SUPPLIER_RPC_FAILED/);
+  assert.match(ui, /activeInviteBySupplier/);
+  assert.match(ui, /disabled=\{Boolean\(workingId\) \|\| Boolean\(activeInvite\)\}/);
+  assert.match(ui, /statusLabel\(activeInvite\.status, isRu\)/);
+  assert.match(migration, /invite_already_sent/);
+  assert.match(migration, /v_existing\.status in \('sent','opened','responded'\)/);
+  assert.match(migration, /from public\.requests r where r\.id=p_request_id/);
+});
