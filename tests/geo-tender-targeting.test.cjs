@@ -24,6 +24,7 @@ test('new targeted requests are matched automatically and marketplace visibility
   assert.match(source, /refresh_request_targets_internal/);
   assert.match(source, /trg_requests_auto_target/);
   assert.match(source, /exists\(select 1 from public\.request_targets rt where rt\.request_id=requests\.id and rt\.profile_id=\(select auth\.uid\(\)\)/);
+  assert.match(source, /rt\.status in \('matched','notified','viewed','responded'\)/);
   assert.match(source, /r\.distribution_mode='broadcast'/);
   assert.match(source, /Agents can create own offers/);
 });
@@ -51,6 +52,17 @@ test('matched suppliers can only record their own request view through a narrow 
   assert.match(source, /grant execute on function public\.mark_request_target_viewed\(uuid\) to authenticated/);
 });
 
+test('matched suppliers can decline only their own unresponded target', () => {
+  const source = read('supabase/migrations/20261009020000_geo_tender_engagement_tracking.sql');
+  assert.match(source, /create or replace function app_private\.decline_request_target_internal\(p_request_id uuid\)/);
+  assert.match(source, /profile_id = v_uid/);
+  assert.match(source, /set status = 'declined'/);
+  assert.match(source, /status in \('matched', 'notified', 'viewed'\)/);
+  assert.match(source, /create or replace function public\.decline_request_target\(p_request_id uuid\)/);
+  assert.match(source, /app_private\.decline_request_target_internal\(p_request_id\)/);
+  assert.match(source, /grant execute on function public\.decline_request_target\(uuid\) to authenticated/);
+});
+
 test('creating an offer marks the matching request target as responded on the database', () => {
   const source = read('supabase/migrations/20261009020000_geo_tender_engagement_tracking.sql');
   assert.match(source, /create or replace function app_private\.mark_request_target_responded\(\)/);
@@ -68,4 +80,13 @@ test('request targeting client records a view before loading the supplier match 
   assert.match(api, /p_request_id: requestId/);
   assert.match(summary, /markOwnRequestTargetViewed\(requestId\)/);
   assert.match(summary, /then\(\(\) => getOwnRequestTarget\(requestId\)\)/);
+});
+
+test('request targeting client can decline an unsuitable match and leave the request', () => {
+  const api = read('app/requests/request-targeting-api.ts');
+  const summary = read('app/requests/request-targeting-summary.tsx');
+  assert.match(api, /rpc\/decline_request_target/);
+  assert.match(summary, /declineOwnRequestTarget\(requestId\)/);
+  assert.match(summary, /So‘rov mos emas/);
+  assert.match(summary, /router\.replace\("\/requests\?tab=market"\)/);
 });
