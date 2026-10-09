@@ -82,7 +82,7 @@ export default function RequestTargetingSummary({ requestId, isOwner, distributi
   }
 
   return <section className="mt-8 rounded-3xl border border-cyan-100 bg-white p-6 shadow-sm sm:p-8">
-    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-700">Geo Tender tarqatish</p><h2 className="mt-2 text-xl font-semibold text-[#0b1f3a]">Mos hamkorlar voronkasi</h2><p className="mt-2 text-sm text-slate-500">So‘rov avtomatik matching orqali tanlangan ichki hamkorlarga yo‘naltiriladi. Ko‘rish va javob bosqichlari real harakatlardan olinadi.</p></div><span className="w-fit rounded-full bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-800">Targeted</span></div>
+    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-700">Geo Tender tarqatish</p><h2 className="mt-2 text-xl font-semibold text-[#0b1f3a]">Mos hamkorlar voronkasi</h2><p className="mt-2 text-sm text-slate-500">Ko‘rish va javob bosqichlari hamkorlarning real harakatlaridan olinadi.</p></div><span className="w-fit rounded-full bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-800">Targeted</span></div>
     <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
       <div className="rounded-2xl bg-slate-50 p-4"><p className="text-2xl font-semibold text-[#0b1f3a]">{funnel.total}</p><p className="mt-1 text-xs font-medium text-slate-500">Mos hamkor</p></div>
       <div className="rounded-2xl bg-blue-50 p-4"><p className="text-2xl font-semibold text-blue-800">{funnel.notified}</p><p className="mt-1 text-xs font-medium text-blue-600">Xabar yuborildi</p></div>
