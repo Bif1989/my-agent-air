@@ -5,6 +5,7 @@
 revoke all on table public.request_targets from anon;
 revoke insert, update, delete, truncate, references, trigger on table public.request_targets from authenticated;
 grant select on table public.request_targets to authenticated;
+grant select, insert, update, delete on table public.request_targets to service_role;
 
 grant usage on schema app_private to authenticated;
 
