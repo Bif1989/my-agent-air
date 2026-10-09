@@ -6,6 +6,7 @@ import RequestTargetingSummary from "@/app/requests/request-targeting-summary";
 import {
   createSupplierInvite,
   deliverSupplierInviteEmail,
+  deliverSupplierInviteSms,
   listSupplierInvites,
   matchSuppliersForRequest,
   type SupplierDeliveryResult,
@@ -75,6 +76,27 @@ function responseSummary(invite: SupplierInviteRow, isRu: boolean) {
 
 function deliveryMessage(invite: GeneratedInvite, isRu: boolean) {
   const delivery = invite.delivery;
+  if (invite.channel === "sms" && delivery?.sent) {
+    return tr(
+      isRu,
+      `SMS avtomatik yuborildi: ${invite.recipient_hint}. Supplier linkni ochganda holat avtomatik yangilanadi.`,
+      `SMS отправлено автоматически: ${invite.recipient_hint}. Когда поставщик откроет ссылку, статус обновится автоматически.`,
+    );
+  }
+  if (invite.channel === "sms" && delivery?.configured === false) {
+    return tr(
+      isRu,
+      "Avtomatik SMS yuborish productionda sozlanmagan. Hozircha linkni qo‘lda ulashish mumkin.",
+      "Автоматическая отправка SMS пока не настроена в production. Ссылкой можно поделиться вручную.",
+    );
+  }
+  if (invite.channel === "sms" && delivery?.status === "failed") {
+    return tr(
+      isRu,
+      "SMS yuborishda xatolik bo‘ldi. Individual link saqlandi — uni qo‘lda yuborish mumkin.",
+      "Не удалось отправить SMS. Индивидуальная ссылка сохранена — её можно отправить вручную.",
+    );
+  }
   if (invite.channel === "email" && delivery?.sent) {
     return tr(
       isRu,
@@ -96,7 +118,7 @@ function deliveryMessage(invite: GeneratedInvite, isRu: boolean) {
       "Не удалось отправить email. Индивидуальная ссылка сохранена — её можно отправить вручную.",
     );
   }
-  if (invite.channel !== "email") {
+  if (!["email", "sms"].includes(invite.channel)) {
     return tr(
       isRu,
       `Kanal: ${invite.channel} · Kontakt: ${invite.recipient_hint}. Bu kanal uchun avtomatik yuborish keyingi bosqichda ulanadi; linkni hozir qo‘lda ulashish mumkin.`,
@@ -168,17 +190,19 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
       const url = `${window.location.origin}/supplier-request/${draft.token}`;
       let delivery: SupplierDeliveryResult | undefined;
 
-      if (draft.channel === "email") {
+      if (draft.channel === "email" || draft.channel === "sms") {
         try {
-          delivery = await deliverSupplierInviteEmail(draft.invite_id, draft.token);
+          delivery = draft.channel === "sms"
+            ? await deliverSupplierInviteSms(draft.invite_id, draft.token)
+            : await deliverSupplierInviteEmail(draft.invite_id, draft.token);
         } catch (cause) {
           const deliveryError = cause as Error & { delivery?: SupplierDeliveryResult };
           delivery = deliveryError.delivery || {
             sent: false,
             configured: true,
             status: "failed",
-            channel: "email",
-            code: "EMAIL_SEND_FAILED",
+            channel: draft.channel,
+            code: draft.channel === "sms" ? "SMS_SEND_FAILED" : "EMAIL_SEND_FAILED",
           };
         }
       }
@@ -213,7 +237,7 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Supplier Outreach</p>
           <h2 className="mt-2 text-xl font-semibold text-[#0b1f3a]">{tr(isRu, "Tashqi hamkorlardan taklif so‘rash", "Запросить предложение у внешних партнёров")}</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{tr(isRu, "Mos hamkor topiladi va email mavjud bo‘lsa individual so‘rov avtomatik yuboriladi. Kontakt oshkor qilinmaydi; javob xavfsiz havola orqali olinadi.", "Система подбирает подходящего партнёра и, если есть email, автоматически отправляет индивидуальный запрос. Контакт не раскрывается; ответ поступает по защищённой ссылке.")}</p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{tr(isRu, "Mos hamkor topiladi. Telefon mavjud bo‘lsa individual so‘rov SMS orqali, telefon bo‘lmasa email orqali avtomatik yuboriladi. Kontakt oshkor qilinmaydi; javob xavfsiz havola orqali olinadi.", "Система подбирает подходящего партнёра. Если есть телефон, индивидуальный запрос автоматически отправляется по SMS, иначе по email. Контакт не раскрывается; ответ поступает по защищённой ссылке.")}</p>
         </div>
         <button type="button" onClick={() => void refresh()} disabled={loading} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:border-blue-300 disabled:opacity-50">{loading ? tr(isRu, "Qidirilmoqda...", "Поиск...") : tr(isRu, "Qayta qidirish", "Повторить поиск")}</button>
       </div>
