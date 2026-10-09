@@ -99,3 +99,26 @@ test('request targeting client can decline an unsuitable match and leave the req
   assert.match(summary, /So‘rov mos emas/);
   assert.match(summary, /router\.replace\("\/requests\?tab=market"\)/);
 });
+
+test('request owner funnel receives realtime target changes with resilient refresh fallbacks', () => {
+  const migration = read('supabase/migrations/20261009143000_geo_tender_realtime_funnel.sql');
+  const realtime = read('lib/supabase-realtime.ts');
+  const summary = read('app/requests/request-targeting-summary.tsx');
+  assert.match(migration, /alter publication supabase_realtime add table public\.request_targets/);
+  assert.match(realtime, /subscribeToRequestTargets\(requestId/);
+  assert.match(realtime, /table === "messages" \|\| table === "request_targets"/);
+  assert.match(summary, /subscribeToRequestTargets\(requestId, scheduleRefresh\)/);
+  assert.match(summary, /visibilitychange/);
+  assert.match(summary, /60_000/);
+  assert.match(summary, /removeChannel\(subscription\.channel\)/);
+  assert.match(summary, /Avtomatik yangilanadi/);
+});
+
+test('external supplier matching shows bilingual operational status and match scores', () => {
+  const source = read('app/requests/supplier-matching.tsx');
+  assert.match(source, /useUiSettings/);
+  assert.match(source, /inviteStats/);
+  assert.match(source, /Совпадение/);
+  assert.match(source, /Статус внешних запросов/);
+  assert.match(source, /supplier\.match_score/);
+});

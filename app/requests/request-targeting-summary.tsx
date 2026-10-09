@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { declineOwnRequestTarget, getOwnRequestTarget, listRequestTargets, markOwnRequestTargetViewed, type RequestTargetRecord } from "@/app/requests/request-targeting-api";
+import { subscribeToRequestTargets } from "@/lib/supabase-realtime";
 import { useUiSettings } from "@/lib/ui-settings";
 
 const STATUS_LABELS: Record<string, { uz: string; ru: string }> = {
@@ -54,6 +55,7 @@ export default function RequestTargetingSummary({ requestId, isOwner, distributi
   const [refreshing, setRefreshing] = useState(false);
   const [declining, setDeclining] = useState(false);
   const [error, setError] = useState<ErrorCode>("");
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
   useEffect(() => {
     if (!isTargeted) return;
@@ -64,26 +66,53 @@ export default function RequestTargetingSummary({ requestId, isOwner, distributi
     Promise.resolve(task)
       .then((data) => {
         if (!active) return;
-        if (Array.isArray(data)) setTargets(data);
-        else setOwnTarget(data);
+        if (Array.isArray(data)) {
+          setTargets(data);
+          setLastUpdatedAt(new Date());
+        } else setOwnTarget(data);
+        setError("");
       })
       .catch(() => { if (active) setError("load"); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [isOwner, isTargeted, requestId]);
 
-  async function refreshOwner() {
-    if (!isOwner || refreshing) return;
-    setRefreshing(true);
-    setError("");
+  const refreshOwner = useCallback(async (showSpinner = true, showError = true) => {
+    if (!isOwner) return;
+    if (showSpinner) setRefreshing(true);
+    if (showError) setError("");
     try {
       setTargets(await listRequestTargets(requestId));
+      setLastUpdatedAt(new Date());
+      setError("");
     } catch {
-      setError("load");
+      if (showError) setError("load");
     } finally {
-      setRefreshing(false);
+      if (showSpinner) setRefreshing(false);
     }
-  }
+  }, [isOwner, requestId]);
+
+  useEffect(() => {
+    if (!isTargeted || !isOwner) return;
+    let debounceTimer: number | undefined;
+    const scheduleRefresh = () => {
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => { void refreshOwner(false, false); }, 150);
+    };
+    const subscription = subscribeToRequestTargets(requestId, scheduleRefresh);
+    const onOnline = () => scheduleRefresh();
+    const onVisibility = () => { if (document.visibilityState === "visible") scheduleRefresh(); };
+    window.addEventListener("online", onOnline);
+    document.addEventListener("visibilitychange", onVisibility);
+    const fallbackInterval = window.setInterval(scheduleRefresh, 60_000);
+    return () => {
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      window.clearInterval(fallbackInterval);
+      window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVisibility);
+      if (subscription) void subscription.client.removeChannel(subscription.channel);
+    };
+  }, [isOwner, isTargeted, refreshOwner, requestId]);
 
   async function decline() {
     if (!ownTarget || declining || ownTarget.status === "responded" || ownTarget.status === "declined") return;
@@ -110,6 +139,9 @@ export default function RequestTargetingSummary({ requestId, isOwner, distributi
     return { total, notified, viewed, responded, declined };
   }, [targets]);
 
+  const lastUpdatedLabel = lastUpdatedAt
+    ? new Intl.DateTimeFormat(isRu ? "ru-RU" : "uz-UZ", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(lastUpdatedAt)
+    : "";
   const errorText = error === "load"
     ? tr(isRu, "Geo Tender matching holatini yuklab bo‘lmadi.", "Не удалось загрузить состояние подбора Geo Tender.")
     : error === "decline"
@@ -134,7 +166,7 @@ export default function RequestTargetingSummary({ requestId, isOwner, distributi
 
   return <section className="mt-8 rounded-3xl border border-cyan-100 bg-white p-6 shadow-sm sm:p-8">
     <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
-      <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-700">{tr(isRu, "Geo Tender tarqatish", "Распределение Geo Tender")}</p><h2 className="mt-2 text-xl font-semibold text-[#0b1f3a]">{tr(isRu, "Mos hamkorlar voronkasi", "Воронка подходящих партнёров")}</h2><p className="mt-2 text-sm text-slate-500">{tr(isRu, "Ko‘rish va javob bosqichlari hamkorlarning real harakatlaridan olinadi.", "Просмотры и ответы отражают реальные действия партнёров.")}</p></div>
+      <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-700">{tr(isRu, "Geo Tender tarqatish", "Распределение Geo Tender")}</p><h2 className="mt-2 text-xl font-semibold text-[#0b1f3a]">{tr(isRu, "Mos hamkorlar voronkasi", "Воронка подходящих партнёров")}</h2><p className="mt-2 text-sm text-slate-500">{tr(isRu, "Ko‘rish va javob bosqichlari hamkorlarning real harakatlaridan olinadi.", "Просмотры и ответы отражают реальные действия партнёров.")}</p><p className="mt-2 text-xs font-medium text-emerald-700">● {tr(isRu, "Avtomatik yangilanadi", "Обновляется автоматически")}{lastUpdatedLabel ? ` · ${tr(isRu, "so‘nggi", "последнее")}: ${lastUpdatedLabel}` : ""}</p></div>
       <div className="flex flex-wrap items-center gap-2"><span className="w-fit rounded-full bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-800">Targeted</span><button type="button" onClick={() => void refreshOwner()} disabled={refreshing} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-cyan-300 hover:text-cyan-800 disabled:opacity-50">{refreshing ? tr(isRu, "Yangilanmoqda...", "Обновление...") : tr(isRu, "Yangilash", "Обновить")}</button></div>
     </div>
     {errorText && <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errorText}</p>}
