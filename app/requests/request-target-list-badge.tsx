@@ -52,17 +52,18 @@ export default function RequestTargetListBadge({ requestId, createdBy, distribut
     const session = getStoredSession();
     if (!session || createdBy === session.user.id) return;
     const key = cacheKey(session.user.id, requestId);
-    const cached = cache.get(key);
+    let active = true;
     if (cache.has(key)) {
-      setTarget(cached || null);
-      return;
+      queueMicrotask(() => { if (active) setTarget(cache.get(key) || null); });
+      return () => { active = false; };
     }
     const bucket = listeners.get(key) || new Set<Listener>();
-    const listener: Listener = (next) => setTarget(next);
+    const listener: Listener = (next) => { if (active) setTarget(next); };
     bucket.add(listener);
     listeners.set(key, bucket);
     queueLookup(session.user.id, requestId);
     return () => {
+      active = false;
       const current = listeners.get(key);
       current?.delete(listener);
       if (current && current.size === 0) listeners.delete(key);
