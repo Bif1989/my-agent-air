@@ -51,7 +51,7 @@ async function filterByPreference(recipients: Recipient[]) {
 async function sendToRecipients(recipients: Recipient[], payload: NotificationPayload) {
   const allowed = await filterByPreference(recipients);
   const userIds = [...new Set(allowed.map((r) => r.userId))];
-  if (!userIds.length) return;
+  if (!userIds.length) return [] as string[];
   const { data: subscriptions } = await supabase.from("push_subscriptions").select("id,user_id,endpoint,p256dh,auth_key").in("user_id", userIds);
   for (const subscription of subscriptions || []) {
     const pushSubscription = { endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth_key } };
@@ -65,6 +65,7 @@ async function sendToRecipients(recipients: Recipient[], payload: NotificationPa
       }
     }
   }
+  return userIds;
 }
 
 async function handleChatMessage(id: string) {
@@ -127,19 +128,29 @@ async function handleOffer(id: string) {
 }
 
 async function handleNewRequest(id: string) {
-  const { data: request } = await supabase.from("requests").select("created_by,origin,destination,category,status").eq("id", id).maybeSingle();
+  const { data: request } = await supabase.from("requests").select("created_by,origin,destination,category,status,distribution_mode").eq("id", id).maybeSingle();
   if (!request || request.status !== "open") return;
-  const { data: profiles } = await supabase.from("profiles").select("id").neq("id", request.created_by);
-  const recipientIds = (profiles || []).map((p) => p.id);
+
+  let recipientIds: string[] = [];
+  if (request.distribution_mode === "broadcast") {
+    const { data: profiles } = await supabase.from("profiles").select("id").eq("is_active", true).eq("registration_status", "active").neq("id", request.created_by);
+    recipientIds = (profiles || []).map((profile) => profile.id);
+  } else {
+    const { data: targets } = await supabase.from("request_targets").select("profile_id").eq("request_id", id).in("status", ["matched", "notified", "viewed", "responded"]);
+    recipientIds = (targets || []).map((target) => target.profile_id).filter((userId) => userId !== request.created_by);
+  }
   if (!recipientIds.length) return;
 
   const payload: NotificationPayload = {
-    title: `Yangi so‘rov — ${request.origin || "—"} → ${request.destination || "—"}`,
-    body: toPlainPreview(request.category || "Yangi so‘rov joylandi"),
+    title: `Yangi mos so‘rov — ${request.origin || "—"} → ${request.destination || "—"}`,
+    body: toPlainPreview(request.category || "Sizga mos yangi so‘rov"),
     url: `/requests/${id}`,
     tag: `request-${id}`,
   };
-  await sendToRecipients(recipientIds.map((userId) => ({ userId, preferenceKey: "new_requests" as const })), payload);
+  const notifiedIds = await sendToRecipients(recipientIds.map((userId) => ({ userId, preferenceKey: "new_requests" as const })), payload);
+  if (request.distribution_mode !== "broadcast" && notifiedIds.length) {
+    await supabase.from("request_targets").update({ status: "notified", updated_at: new Date().toISOString() }).eq("request_id", id).eq("status", "matched").in("profile_id", notifiedIds);
+  }
 }
 
 Deno.serve(async (req) => {
