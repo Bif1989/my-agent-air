@@ -62,6 +62,16 @@ test('external supplier admin import matches table constraints and bounds each b
   assert.match(source, /\^\[1-5\]\$/);
 });
 
+test('all privileged admin RPCs require an active completed admin registration', () => {
+  const source = read('supabase/migrations/20261009003500_p1_admin_rpc_registration_status_gate.sql');
+  assert.match(source, /admin_external_supplier_stats/);
+  assert.match(source, /admin_set_agent_active/);
+  assert.match(source, /admin_set_agent_verified/);
+  assert.match(source, /review_verification_request/);
+  assert.ok((source.match(/registration_status = 'active'/g) || []).length >= 2);
+  assert.ok((source.match(/registration_status <> 'active'/g) || []).length >= 2);
+});
+
 test('trigger-only helper functions are not directly executable by client roles', () => {
   const source = read('supabase/migrations/20261008125500_p0_trigger_function_execute_hardening.sql');
   assert.match(source, /touch_comment_edited_at\(\).*public, anon, authenticated/);
