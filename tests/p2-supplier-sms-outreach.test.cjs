@@ -38,6 +38,28 @@ test('supplier SMS route normalizes Uzbekistan numbers and records provider stat
   assert.match(route, /configured: false/);
 });
 
+test('supplier SMS uses the short branded public link and support phone', () => {
+  const route = read('app/api/supplier-outreach/send-sms/route.ts');
+  const shortRoute = read('app/s/[token]/page.tsx');
+  assert.match(route, /new URL\(`\/s\/\$\{encodeURIComponent\(token\)\}`/);
+  assert.match(route, /My Agent Air B2B turizm platformasi/);
+  assert.match(route, /Tel:\+998912924010/);
+  assert.match(route, /providerMessage/);
+  assert.match(shortRoute, /redirect\(`\/supplier-request\/\$\{encodeURIComponent\(token\)\}`\)/);
+});
+
+test('public supplier landing explains the platform in Uzbek and Russian and promotes registration', () => {
+  const page = read('app/supplier-request/[token]/page.tsx');
+  assert.match(page, /Turizm biznesi uchun B2B platforma/);
+  assert.match(page, /B2B-платформа для туристического бизнеса/);
+  assert.match(page, /Bepul ro‘yxatdan o‘tish/);
+  assert.match(page, /Бесплатная регистрация/);
+  assert.match(page, /\+998 91 292 40 10/);
+  assert.match(page, /href="\/register"/);
+  assert.match(page, />UZ</);
+  assert.match(page, />RU</);
+});
+
 test('supplier outreach client automatically delivers SMS and keeps email fallback', () => {
   const api = read('app/requests/supplier-matching-api.ts');
   const ui = read('app/requests/supplier-matching.tsx');
