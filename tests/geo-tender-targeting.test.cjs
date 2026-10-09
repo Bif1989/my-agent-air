@@ -47,6 +47,7 @@ test('matched suppliers can only record their own request view through a narrow 
   assert.match(source, /app_private\.mark_request_target_viewed_internal\(p_request_id\)/);
   assert.match(source, /revoke insert, update, delete, truncate, references, trigger on table public\.request_targets from authenticated/);
   assert.match(source, /grant select on table public\.request_targets to authenticated/);
+  assert.match(source, /grant select, insert, update, delete on table public\.request_targets to service_role/);
   assert.match(source, /grant execute on function public\.mark_request_target_viewed\(uuid\) to authenticated/);
 });
 
