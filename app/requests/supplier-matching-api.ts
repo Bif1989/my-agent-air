@@ -62,12 +62,18 @@ export type SupplierDeliveryResult = {
   message?: string;
 };
 
-function rpc<T>(name: string, body: Record<string, unknown>) {
-  return authenticatedSupabaseFetch(`rpc/${name}`, {
+async function rpc<T>(name: string, body: Record<string, unknown>) {
+  const response = await authenticatedSupabaseFetch(`rpc/${name}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-  }).then((response) => response.json() as Promise<T>);
+  });
+  const data = await response.json().catch(() => ({})) as Record<string, unknown>;
+  if (!response.ok) {
+    const message = typeof data.message === "string" ? data.message : "SUPPLIER_RPC_FAILED";
+    throw new Error(message);
+  }
+  return data as T;
 }
 
 export function matchSuppliersForRequest(requestId: string, supplierType?: SupplierType, limit = 20) {
