@@ -21,6 +21,13 @@ export type SupplierPriceBasis =
   | "per_day"
   | "per_unit";
 
+export type SupplierCapabilityDetails = {
+  service_areas?: string[];
+  notes?: string;
+  services?: string[];
+  [key: string]: unknown;
+};
+
 export type SupplierCapabilityRecord = {
   id: string;
   profile_id: string;
@@ -35,7 +42,7 @@ export type SupplierCapabilityRecord = {
   min_price: number | null;
   currency: "USD" | "UZS" | "EUR" | "RUB" | null;
   price_basis: SupplierPriceBasis | null;
-  details: Record<string, unknown>;
+  details: SupplierCapabilityDetails;
   onboarding_status: "seeded" | "in_progress" | "complete";
   is_active: boolean;
   created_at: string;
@@ -53,6 +60,9 @@ export type EditableSupplierCapability = {
   min_price: string;
   currency: "USD" | "UZS" | "EUR" | "RUB";
   price_basis: SupplierPriceBasis;
+  service_areas: string;
+  notes: string;
+  details: SupplierCapabilityDetails;
   is_active: boolean;
 };
 
@@ -74,6 +84,32 @@ function nullableNumber(value: string) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) throw new Error("INVALID_NUMBER");
   return parsed;
+}
+
+export function normalizeServiceAreas(value: string) {
+  const seen = new Set<string>();
+  const areas: string[] = [];
+  for (const raw of value.split(/[\n,;]+/)) {
+    const area = raw.trim().replace(/\s+/g, " ");
+    if (!area) continue;
+    const key = area.toLocaleLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    areas.push(area.slice(0, 100));
+    if (areas.length >= 20) break;
+  }
+  return areas;
+}
+
+function cleanDetails(capability: EditableSupplierCapability): SupplierCapabilityDetails {
+  const details: SupplierCapabilityDetails = { ...capability.details };
+  const serviceAreas = normalizeServiceAreas(capability.service_areas);
+  const notes = capability.notes.trim().slice(0, 1200);
+  if (serviceAreas.length) details.service_areas = serviceAreas;
+  else delete details.service_areas;
+  if (notes) details.notes = notes;
+  else delete details.notes;
+  return details;
 }
 
 export async function listOwnSupplierCapabilities() {
@@ -101,6 +137,7 @@ export async function saveOwnSupplierCapability(capability: EditableSupplierCapa
     min_price: nullableNumber(capability.min_price),
     currency: capability.currency,
     price_basis: capability.price_basis,
+    details: cleanDetails(capability),
     onboarding_status: city ? "complete" : "in_progress",
     is_active: capability.is_active,
   };
