@@ -43,6 +43,15 @@ export async function markOwnRequestTargetViewed(requestId: string) {
   return response.json() as Promise<boolean>;
 }
 
+export async function declineOwnRequestTarget(requestId: string) {
+  const response = await authenticatedSupabaseFetch("rpc/decline_request_target", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ p_request_id: requestId }),
+  });
+  return response.json() as Promise<boolean>;
+}
+
 export async function getOwnRequestTarget(requestId: string) {
   const session = getStoredSession();
   if (!session) throw new Error("AUTH_SESSION_MISSING");
