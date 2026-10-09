@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getOwnRequestTarget, listRequestTargets, markOwnRequestTargetViewed, type RequestTargetRecord } from "@/app/requests/request-targeting-api";
+import { useRouter } from "next/navigation";
+import { declineOwnRequestTarget, getOwnRequestTarget, listRequestTargets, markOwnRequestTargetViewed, type RequestTargetRecord } from "@/app/requests/request-targeting-api";
 
 const STATUS_LABELS: Record<string, string> = {
   matched: "Mos keldi",
@@ -35,10 +36,12 @@ function reasonText(target: RequestTargetRecord) {
 }
 
 export default function RequestTargetingSummary({ requestId, isOwner, distributionMode = "targeted" }: { requestId: string; isOwner: boolean; distributionMode?: "targeted" | "broadcast" }) {
+  const router = useRouter();
   const isTargeted = distributionMode === "targeted";
   const [targets, setTargets] = useState<RequestTargetRecord[]>([]);
   const [ownTarget, setOwnTarget] = useState<RequestTargetRecord | null>(null);
   const [loading, setLoading] = useState(isTargeted);
+  const [declining, setDeclining] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -58,6 +61,22 @@ export default function RequestTargetingSummary({ requestId, isOwner, distributi
     return () => { active = false; };
   }, [isOwner, isTargeted, requestId]);
 
+  async function decline() {
+    if (!ownTarget || declining || ownTarget.status === "responded" || ownTarget.status === "declined") return;
+    if (!window.confirm("Bu so‘rov sizga mos emasligini tasdiqlaysizmi? U Geo Tender ro‘yxatingizdan chiqadi.")) return;
+    setDeclining(true);
+    setError("");
+    try {
+      const declined = await declineOwnRequestTarget(requestId);
+      if (!declined) throw new Error("TARGET_NOT_DECLINED");
+      router.replace("/requests?tab=market");
+      router.refresh();
+    } catch {
+      setError("So‘rovni rad etib bo‘lmadi. Qayta urinib ko‘ring.");
+      setDeclining(false);
+    }
+  }
+
   const funnel = useMemo(() => {
     const total = targets.length;
     const notified = targets.filter((target) => ["notified", "viewed", "responded"].includes(target.status)).length;
@@ -69,18 +88,21 @@ export default function RequestTargetingSummary({ requestId, isOwner, distributi
 
   if (!isTargeted) return null;
   if (loading) return <div className="mt-6 h-24 animate-pulse rounded-2xl bg-slate-100" />;
-  if (error) return <p role="alert" className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>;
+  if (error && !ownTarget && !isOwner) return <p role="alert" className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>;
 
   if (!isOwner) {
     if (!ownTarget) return null;
     return <section className="mt-6 rounded-2xl border border-cyan-200 bg-cyan-50 p-5">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
         <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-700">Geo Tender</p><h2 className="mt-2 text-lg font-semibold text-[#0b1f3a]">Sizga mos so‘rov</h2><p className="mt-2 text-sm leading-6 text-slate-600">{reasonText(ownTarget)}</p></div>
-        <div className="flex gap-2"><span className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-cyan-800">Moslik: {ownTarget.match_score}</span><span className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-600">{STATUS_LABELS[ownTarget.status] || ownTarget.status}</span></div>
+        <div className="flex flex-wrap gap-2"><span className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-cyan-800">Moslik: {ownTarget.match_score}</span><span className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-600">{STATUS_LABELS[ownTarget.status] || ownTarget.status}</span></div>
       </div>
+      {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
+      {ownTarget.status !== "responded" && ownTarget.status !== "declined" && <div className="mt-5 border-t border-cyan-200 pt-4"><button type="button" onClick={() => void decline()} disabled={declining} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:border-red-300 hover:text-red-700 focus:outline-none focus:ring-4 focus:ring-red-100 disabled:cursor-not-allowed disabled:opacity-50">{declining ? "Rad etilmoqda..." : "So‘rov mos emas"}</button></div>}
     </section>;
   }
 
+  if (error) return <p role="alert" className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>;
   return <section className="mt-8 rounded-3xl border border-cyan-100 bg-white p-6 shadow-sm sm:p-8">
     <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-700">Geo Tender tarqatish</p><h2 className="mt-2 text-xl font-semibold text-[#0b1f3a]">Mos hamkorlar voronkasi</h2><p className="mt-2 text-sm text-slate-500">Ko‘rish va javob bosqichlari hamkorlarning real harakatlaridan olinadi.</p></div><span className="w-fit rounded-full bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-800">Targeted</span></div>
     <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
