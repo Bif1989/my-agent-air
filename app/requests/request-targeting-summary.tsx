@@ -35,13 +35,14 @@ function reasonText(target: RequestTargetRecord) {
 }
 
 export default function RequestTargetingSummary({ requestId, isOwner, distributionMode = "targeted" }: { requestId: string; isOwner: boolean; distributionMode?: "targeted" | "broadcast" }) {
+  const isTargeted = distributionMode === "targeted";
   const [targets, setTargets] = useState<RequestTargetRecord[]>([]);
   const [ownTarget, setOwnTarget] = useState<RequestTargetRecord | null>(null);
-  const [loading, setLoading] = useState(distributionMode === "targeted");
+  const [loading, setLoading] = useState(isTargeted);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (distributionMode !== "targeted") { setLoading(false); return; }
+    if (!isTargeted) return;
     let active = true;
     const task = isOwner ? listRequestTargets(requestId) : getOwnRequestTarget(requestId);
     Promise.resolve(task)
@@ -53,7 +54,7 @@ export default function RequestTargetingSummary({ requestId, isOwner, distributi
       .catch(() => { if (active) setError("Geo Tender matching holatini yuklab bo‘lmadi."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [distributionMode, isOwner, requestId]);
+  }, [isOwner, isTargeted, requestId]);
 
   const funnel = useMemo(() => {
     const total = targets.length;
@@ -64,7 +65,7 @@ export default function RequestTargetingSummary({ requestId, isOwner, distributi
     return { total, notified, viewed, responded, declined };
   }, [targets]);
 
-  if (distributionMode !== "targeted") return null;
+  if (!isTargeted) return null;
   if (loading) return <div className="mt-6 h-24 animate-pulse rounded-2xl bg-slate-100" />;
   if (error) return <p role="alert" className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>;
 
