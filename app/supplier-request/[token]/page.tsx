@@ -70,28 +70,21 @@ export default function SupplierRequestPage() {
   const [optedOut, setOptedOut] = useState(false);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem("supplier-request-lang");
-    if (saved === "uz" || saved === "ru") setLang(saved);
-    else if (window.navigator.language.toLowerCase().startsWith("ru")) setLang("ru");
-  }, []);
-
-  useEffect(() => {
     if (!token) return;
     const timeout = window.setTimeout(() => {
       getPublicSupplierInvite(token)
         .then(setInvite)
-        .catch((cause) => setError(cause instanceof Error ? cause.message : tr(lang, "So‘rov yuklanmadi.", "Не удалось загрузить запрос.")))
+        .catch((cause) => setError(cause instanceof Error ? cause.message : "So‘rov yuklanmadi / Не удалось загрузить запрос."))
         .finally(() => setLoading(false));
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [token, lang]);
+  }, [token]);
 
   const details = useMemo(() => Object.entries(invite?.service_details || {}).filter(([, value]) => value != null && String(value).trim() !== ""), [invite]);
   const pax = invite ? Math.max(0, Number(invite.adults || 0) + Number(invite.children || 0) + Number(invite.infants || 0)) : 0;
 
   function chooseLanguage(next: Lang) {
     setLang(next);
-    window.localStorage.setItem("supplier-request-lang", next);
   }
 
   async function submit(event: React.FormEvent) {
