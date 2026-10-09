@@ -1,5 +1,6 @@
 "use client";
 
+import RequestTargetListBadge from "@/app/requests/request-target-list-badge";
 import { daysBetween, hasAirTravel, hydrateServiceRequest, isCalendarDate, localize, requestBudget, serviceDefinition, serviceDetailEntries, type ServiceRequestInput } from "@/lib/service-request";
 import { useUiSettings } from "@/lib/ui-settings";
 
@@ -7,9 +8,16 @@ function dateLabel(value: string | null | undefined, isRu: boolean) {
   return isCalendarDate(value) ? new Intl.DateTimeFormat(isRu ? "ru-RU" : "uz-UZ", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`)) : value || "—";
 }
 
+type TargetableRequest = ServiceRequestInput & {
+  id?: string;
+  created_by?: string | null;
+  distribution_mode?: "targeted" | "broadcast";
+};
+
 export default function RequestServiceDetails({ request, compact = false }: { request: ServiceRequestInput; compact?: boolean }) {
   const { isRu } = useUiSettings();
   const data = hydrateServiceRequest(request);
+  const meta = request as TargetableRequest;
   const definition = serviceDefinition(data.category);
   const tr = (uz: string, ru: string) => isRu ? ru : uz;
   const details = serviceDetailEntries(data, isRu).filter((item) => item.key !== "budget_basis").map((item) => ({ ...item, value: /^(check_out|return_date)$/.test(item.key) ? dateLabel(item.value, isRu) : item.value }));
@@ -24,6 +32,7 @@ export default function RequestServiceDetails({ request, compact = false }: { re
     { key: "budget", label: tr("Budjet", "Бюджет"), value: requestBudget(data, isRu) },
   ];
   return <div className="mt-5 border-t border-slate-100 pt-4 dark:border-slate-700">
+    {compact && meta.id && <div className="mb-3"><RequestTargetListBadge requestId={meta.id} createdBy={meta.created_by} distributionMode={meta.distribution_mode} /></div>}
     {compact && <div className="mb-4 flex flex-wrap justify-between gap-3 text-sm"><p className="text-slate-500 dark:text-slate-400">{passengers}</p><p className="font-semibold text-[#0b1f3a] dark:text-slate-100">{requestBudget(data, isRu)}</p></div>}
     <dl className={`grid gap-4 ${compact ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>{rows.map((item) => <div key={item.key} className="min-w-0"><dt className="text-xs text-slate-500 dark:text-slate-400">{item.label}</dt><dd className="mt-1 whitespace-pre-wrap break-words text-sm font-medium text-[#0b1f3a] dark:text-slate-100">{item.value}</dd></div>)}</dl>
     {!compact && data.description && <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-700"><h3 className="text-sm font-semibold text-[#0b1f3a] dark:text-slate-100">{tr("Qo‘shimcha ma’lumot", "Дополнительная информация")}</h3><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-600 dark:text-slate-300">{data.description}</p></div>}

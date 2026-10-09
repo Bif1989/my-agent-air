@@ -34,6 +34,21 @@ export async function listRequestTargets(requestId: string) {
   return response.json() as Promise<RequestTargetRecord[]>;
 }
 
+export async function listOwnRequestTargets(requestIds: string[]) {
+  const session = getStoredSession();
+  if (!session) throw new Error("AUTH_SESSION_MISSING");
+  const uniqueIds = [...new Set(requestIds.filter(Boolean))].slice(0, 100);
+  if (!uniqueIds.length) return [] as RequestTargetRecord[];
+  const params = new URLSearchParams({
+    select: SELECT_FIELDS,
+    request_id: `in.(${uniqueIds.join(",")})`,
+    profile_id: `eq.${session.user.id}`,
+    order: "match_score.desc,request_id.asc",
+  });
+  const response = await authenticatedSupabaseFetch(`request_targets?${params}`);
+  return response.json() as Promise<RequestTargetRecord[]>;
+}
+
 export async function markOwnRequestTargetViewed(requestId: string) {
   const response = await authenticatedSupabaseFetch("rpc/mark_request_target_viewed", {
     method: "POST",
@@ -53,15 +68,6 @@ export async function declineOwnRequestTarget(requestId: string) {
 }
 
 export async function getOwnRequestTarget(requestId: string) {
-  const session = getStoredSession();
-  if (!session) throw new Error("AUTH_SESSION_MISSING");
-  const params = new URLSearchParams({
-    select: SELECT_FIELDS,
-    request_id: `eq.${requestId}`,
-    profile_id: `eq.${session.user.id}`,
-    limit: "1",
-  });
-  const response = await authenticatedSupabaseFetch(`request_targets?${params}`);
-  const rows = await response.json() as RequestTargetRecord[];
+  const rows = await listOwnRequestTargets([requestId]);
   return rows[0] || null;
 }
