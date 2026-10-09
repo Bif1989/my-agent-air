@@ -11,12 +11,12 @@ begin
   if p_value is null or trim(p_value) = '' then return null; end if;
 
   foreach v_part in array pg_catalog.regexp_split_to_array(p_value, E'[,;\\r\\n/]+') loop
-    v_digits := pg_catalog.regexp_replace(v_part, '\\D', '', 'g');
+    v_digits := pg_catalog.regexp_replace(v_part, '[^0-9]', '', 'g');
     if v_digits ~ '^998[0-9]{9}$' then return v_digits; end if;
     if v_digits ~ '^[0-9]{9}$' then return '998' || v_digits; end if;
   end loop;
 
-  v_digits := pg_catalog.regexp_replace(p_value, '\\D', '', 'g');
+  v_digits := pg_catalog.regexp_replace(p_value, '[^0-9]', '', 'g');
   if v_digits ~ '^998[0-9]{9}$' then return v_digits; end if;
   if v_digits ~ '^[0-9]{9}$' then return '998' || v_digits; end if;
   return null;
