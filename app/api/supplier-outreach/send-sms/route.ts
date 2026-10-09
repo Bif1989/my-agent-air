@@ -73,7 +73,7 @@ function normalizeUzPhone(value: string) {
 }
 
 function supplierSmsText(url: string) {
-  return `My Agent Air: yangi B2B so'rov. Taklif yuborish: ${url}`;
+  return `My Agent Air B2B turizm platformasi. Yangi so'rov: ${url} Tel:+998912924010`;
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit) {
@@ -221,7 +221,7 @@ export async function POST(request: NextRequest) {
     return json({ sent: false, configured: false, status: typedInvite.status, channel: "sms", code: "SMS_NOT_CONFIGURED" });
   }
 
-  const supplierUrl = new URL(`/supplier-request/${encodeURIComponent(token)}`, request.nextUrl.origin).toString();
+  const supplierUrl = new URL(`/s/${encodeURIComponent(token)}`, request.nextUrl.origin).toString();
   const message = supplierSmsText(supplierUrl);
 
   try {
@@ -236,7 +236,9 @@ export async function POST(request: NextRequest) {
 
     if (!result.response.ok) {
       const providerStatus = typeof result.payload.status === "string" ? result.payload.status : "unknown";
-      await markInviteFailed(typedInvite.id, `eskiz_send_failed:${result.response.status}:${providerStatus}`);
+      const providerMessage = typeof result.payload.message === "string" ? result.payload.message.replace(/\s+/g, " ").trim().slice(0, 200) : "";
+      const failureReason = `eskiz_send_failed:${result.response.status}:${providerStatus}${providerMessage ? `:${providerMessage}` : ""}`;
+      await markInviteFailed(typedInvite.id, failureReason);
       return json({ code: "SMS_SEND_FAILED", message: "SMS yuborilmadi." }, 502);
     }
 
