@@ -147,14 +147,6 @@ function emailContent(supplierName: string, record: RequestRow, supplierUrl: str
   return { subject, text, html };
 }
 
-async function markFailed(admin: ReturnType<typeof createClient>, inviteId: string, reason: string) {
-  await admin
-    .from("supplier_invites")
-    .update({ status: "failed", failure_reason: reason.slice(0, 500) })
-    .eq("id", inviteId)
-    .eq("status", "queued");
-}
-
 export async function POST(request: NextRequest) {
   if (requestIsCrossSite(request)) return json({ code: "FORBIDDEN", message: "So‘rov qabul qilinmadi." }, 403);
 
@@ -184,6 +176,14 @@ export async function POST(request: NextRequest) {
   const admin = createClient(SUPABASE_URL, secretKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
+
+  async function markInviteFailed(inviteIdToMark: string, reason: string) {
+    await admin
+      .from("supplier_invites")
+      .update({ status: "failed", failure_reason: reason.slice(0, 500) })
+      .eq("id", inviteIdToMark)
+      .eq("status", "queued");
+  }
 
   const [{ data: actor, error: actorError }, { data: invite, error: inviteError }] = await Promise.all([
     admin.from("profiles").select("id,role,is_active,registration_status").eq("id", user.id).maybeSingle(),
@@ -221,7 +221,7 @@ export async function POST(request: NextRequest) {
 
   const recipient = typedInvite.recipient?.trim() || "";
   if (!EMAIL_RE.test(recipient) || recipient.length > 320) {
-    await markFailed(admin, typedInvite.id, "invalid_email_recipient");
+    await markInviteFailed(typedInvite.id, "invalid_email_recipient");
     return json({ code: "INVALID_RECIPIENT", message: "Supplier email manzili noto‘g‘ri." }, 422);
   }
 
@@ -287,7 +287,7 @@ export async function POST(request: NextRequest) {
     providerData = await providerResponse.json().catch(() => ({})) as ResendPayload;
   } catch (error) {
     const reason = controller.signal.aborted ? "resend_timeout" : `resend_network_${error instanceof Error ? error.name : "unknown"}`;
-    await markFailed(admin, typedInvite.id, reason);
+    await markInviteFailed(typedInvite.id, reason);
     return json({ code: "EMAIL_SEND_FAILED", message: "Email yuborilmadi. Havolani qo‘lda yuborish mumkin." }, controller.signal.aborted ? 504 : 502);
   } finally {
     clearTimeout(timeout);
@@ -296,7 +296,7 @@ export async function POST(request: NextRequest) {
   const providerId = typeof providerData.id === "string" ? providerData.id : "";
   if (!providerResponse.ok || !providerId) {
     const providerCode = typeof providerData.name === "string" ? providerData.name : "provider_error";
-    await markFailed(admin, typedInvite.id, `resend_${providerResponse.status}_${providerCode}`);
+    await markInviteFailed(typedInvite.id, `resend_${providerResponse.status}_${providerCode}`);
     return json({ code: "EMAIL_SEND_FAILED", message: "Email yuborilmadi. Havolani qo‘lda yuborish mumkin." }, 502);
   }
 
