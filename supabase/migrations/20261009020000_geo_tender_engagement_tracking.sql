@@ -128,3 +128,15 @@ drop trigger if exists trg_offers_mark_request_target_responded on public.offers
 create trigger trg_offers_mark_request_target_responded
 after insert on public.offers
 for each row execute function app_private.mark_request_target_responded();
+
+-- Historical offers are already genuine responses. Preserve that truth when the
+-- engagement layer is introduced after targeting has been backfilled.
+update public.request_targets rt
+set status = 'responded', updated_at = now()
+where rt.status in ('matched', 'notified', 'viewed')
+  and exists (
+    select 1
+    from public.offers o
+    where o.request_id = rt.request_id
+      and o.agent_id = rt.profile_id
+  );
