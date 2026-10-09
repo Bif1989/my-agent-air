@@ -35,3 +35,33 @@ test('request push notifications use matched targets instead of broadcasting tar
   assert.match(source, /Yangi mos so‘rov/);
   assert.match(source, /status: "notified"/);
 });
+
+test('matched suppliers can only record their own request view through the engagement RPC', () => {
+  const source = read('supabase/migrations/20261009020000_geo_tender_engagement_tracking.sql');
+  assert.match(source, /create or replace function public\.mark_request_target_viewed\(p_request_id uuid\)/);
+  assert.match(source, /v_uid uuid := auth\.uid\(\)/);
+  assert.match(source, /profile_id = v_uid/);
+  assert.match(source, /status in \('matched', 'notified'\)/);
+  assert.match(source, /revoke insert, update, delete, truncate, references, trigger on table public\.request_targets from authenticated/);
+  assert.match(source, /grant select on table public\.request_targets to authenticated/);
+  assert.match(source, /grant execute on function public\.mark_request_target_viewed\(uuid\) to authenticated/);
+});
+
+test('creating an offer marks the matching request target as responded on the database', () => {
+  const source = read('supabase/migrations/20261009020000_geo_tender_engagement_tracking.sql');
+  assert.match(source, /create or replace function app_private\.mark_request_target_responded\(\)/);
+  assert.match(source, /profile_id = new\.agent_id/);
+  assert.match(source, /status = 'responded'/);
+  assert.match(source, /status in \('matched', 'notified', 'viewed'\)/);
+  assert.match(source, /create trigger trg_offers_mark_request_target_responded/);
+  assert.match(source, /after insert on public\.offers/);
+});
+
+test('request targeting client records a view before loading the supplier match summary', () => {
+  const api = read('app/requests/request-targeting-api.ts');
+  const summary = read('app/requests/request-targeting-summary.tsx');
+  assert.match(api, /rpc\/mark_request_target_viewed/);
+  assert.match(api, /p_request_id: requestId/);
+  assert.match(summary, /markOwnRequestTargetViewed\(requestId\)/);
+  assert.match(summary, /then\(\(\) => getOwnRequestTarget\(requestId\)\)/);
+});
