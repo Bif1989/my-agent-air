@@ -34,6 +34,15 @@ export async function listRequestTargets(requestId: string) {
   return response.json() as Promise<RequestTargetRecord[]>;
 }
 
+export async function markOwnRequestTargetViewed(requestId: string) {
+  const response = await authenticatedSupabaseFetch("rpc/mark_request_target_viewed", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ p_request_id: requestId }),
+  });
+  return response.json() as Promise<boolean>;
+}
+
 export async function getOwnRequestTarget(requestId: string) {
   const session = getStoredSession();
   if (!session) throw new Error("AUTH_SESSION_MISSING");
