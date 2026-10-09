@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { disablePushNotifications, enablePushNotifications, getExistingPushSubscription, getNotificationPermission, isPushSupported } from "@/lib/push-notifications";
 import { DEFAULT_NOTIFICATION_PREFERENCES, getNotificationPreferences, updateNotificationPreferences, type NotificationPreferences } from "@/app/profile/notification-preferences-api";
-import SupplierCapabilities from "@/app/profile/supplier-capabilities";
 
 const toggleItems: { key: keyof NotificationPreferences; label: string }[] = [
   { key: "chat_messages", label: "Chat xabarlari" },
@@ -67,8 +66,7 @@ export default function NotificationSettings() {
     try { await updateNotificationPreferences(next); } catch { setError("Sozlamani saqlab bo‘lmadi."); setPreferences(previous); }
   }
 
-  return <>
-    <SupplierCapabilities defaultCity="" />
+  return (
     <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
       <h2 className="text-lg font-semibold text-[#0b1f3a]">Bildirishnomalar</h2>
       <p className="mt-2 text-sm text-slate-500">My Agent Air tabida bo‘lmasangiz ham, muhim hodisalar uchun brauzer/OS bildirishnomasi oling.</p>
@@ -90,5 +88,5 @@ export default function NotificationSettings() {
         ))}
       </div>
     </section>
-  </>;
+  );
 }
