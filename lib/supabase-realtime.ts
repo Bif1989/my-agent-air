@@ -9,6 +9,7 @@ let listening = false;
 let channelSequence = 0;
 export type RealtimeMessagePayload = { new: Record<string, unknown>; old: Record<string, unknown> };
 type Listener = (payload: RealtimeMessagePayload) => void;
+type RealtimeTable = "messages" | "chat_messages" | "request_targets";
 const shared = new Map<string, { channel: RealtimeChannel; listeners: Set<Listener> }>();
 
 function syncSession() {
@@ -50,20 +51,21 @@ export function getSupabaseRealtimeClient() {
   return realtimeClient;
 }
 
-function subscribe(table: "messages" | "chat_messages", onChange: Listener, filter?: string) {
+function subscribe(table: RealtimeTable, onChange: Listener, filter?: string) {
   const client = getSupabaseRealtimeClient();
   if (!client) return null;
   const key = `${userId}:${table}:${filter || "all"}`;
   let entry = shared.get(key);
   if (!entry) {
     const listeners = new Set<Listener>();
-    const channel = client.channel(`my-agent-air:${++channelSequence}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table, ...(filter ? { filter } : {}) }, (payload) => {
-        for (const listener of listeners) listener(payload as RealtimeMessagePayload);
-      });
-    if (table === "messages") channel.on("postgres_changes", { event: "UPDATE", schema: "public", table, ...(filter ? { filter } : {}) }, (payload) => {
+    const notify = (payload: unknown) => {
       for (const listener of listeners) listener(payload as RealtimeMessagePayload);
-    });
+    };
+    const channel = client.channel(`my-agent-air:${++channelSequence}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table, ...(filter ? { filter } : {}) }, notify);
+    if (table === "messages" || table === "request_targets") {
+      channel.on("postgres_changes", { event: "UPDATE", schema: "public", table, ...(filter ? { filter } : {}) }, notify);
+    }
     entry = { channel: channel.subscribe(), listeners };
     shared.set(key, entry);
   }
@@ -92,4 +94,7 @@ export function subscribeToMessengerRoom(roomId: string, onChange: Listener) {
 }
 export function subscribeToMessengerMessages(onChange: Listener) {
   return subscribe("chat_messages", onChange);
+}
+export function subscribeToRequestTargets(requestId: string, onChange: Listener) {
+  return subscribe("request_targets", onChange, `request_id=eq.${requestId}`);
 }
