@@ -73,6 +73,15 @@ test('creating an offer marks the matching request target as responded on the da
   assert.match(source, /after insert on public\.offers/);
 });
 
+test('existing offers are backfilled as real Geo Tender responses', () => {
+  const source = read('supabase/migrations/20261009020000_geo_tender_engagement_tracking.sql');
+  assert.match(source, /update public\.request_targets rt/);
+  assert.match(source, /set status = 'responded'/);
+  assert.match(source, /from public\.offers o/);
+  assert.match(source, /o\.request_id = rt\.request_id/);
+  assert.match(source, /o\.agent_id = rt\.profile_id/);
+});
+
 test('request targeting client records a view before loading the supplier match summary', () => {
   const api = read('app/requests/request-targeting-api.ts');
   const summary = read('app/requests/request-targeting-summary.tsx');
