@@ -1,4 +1,4 @@
-import { authenticatedSupabaseFetch } from "@/lib/supabase-auth";
+import { authenticatedSupabaseFetch, getStoredSession } from "@/lib/supabase-auth";
 
 export type SupplierType = "hotel" | "guide" | "transport" | "restaurant";
 
@@ -53,6 +53,15 @@ export type SupplierInviteRow = {
   response: SupplierInviteResponse;
 };
 
+export type SupplierDeliveryResult = {
+  sent: boolean;
+  configured: boolean;
+  status: string;
+  channel: string;
+  code?: string;
+  message?: string;
+};
+
 function rpc<T>(name: string, body: Record<string, unknown>) {
   return authenticatedSupabaseFetch(`rpc/${name}`, {
     method: "POST",
@@ -79,4 +88,28 @@ export function createSupplierInvite(requestId: string, supplierId: string, chan
 
 export function listSupplierInvites(requestId: string) {
   return rpc<SupplierInviteRow[]>("list_request_supplier_invites", { p_request_id: requestId });
+}
+
+export async function deliverSupplierInviteEmail(inviteId: string, token: string) {
+  const session = getStoredSession();
+  if (!session?.access_token) throw new Error("AUTH_SESSION_MISSING");
+
+  const response = await fetch("/api/supplier-outreach/send", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${session.access_token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ invite_id: inviteId, token }),
+    cache: "no-store",
+    referrerPolicy: "no-referrer",
+  });
+
+  const data = await response.json().catch(() => ({})) as SupplierDeliveryResult;
+  if (!response.ok) {
+    const error = new Error(data.code || "SUPPLIER_DELIVERY_FAILED");
+    Object.assign(error, { delivery: data });
+    throw error;
+  }
+  return data;
 }
