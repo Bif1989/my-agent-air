@@ -1,12 +1,14 @@
 -- Geo Tender engagement tracking.
--- A matched supplier can only mark their own target as viewed through a narrow RPC.
--- Offer creation marks the corresponding target as responded server-side.
+-- A matched supplier can only mark their own target as viewed through a narrow public wrapper.
+-- Privileged writes stay in app_private; offer creation marks the corresponding target as responded server-side.
 
 revoke all on table public.request_targets from anon;
 revoke insert, update, delete, truncate, references, trigger on table public.request_targets from authenticated;
 grant select on table public.request_targets to authenticated;
 
-create or replace function public.mark_request_target_viewed(p_request_id uuid)
+grant usage on schema app_private to authenticated;
+
+create or replace function app_private.mark_request_target_viewed_internal(p_request_id uuid)
 returns boolean
 language plpgsql
 security definer
@@ -45,8 +47,20 @@ begin
 end;
 $$;
 
+revoke all on function app_private.mark_request_target_viewed_internal(uuid) from public, anon;
+grant execute on function app_private.mark_request_target_viewed_internal(uuid) to authenticated;
+
+create or replace function public.mark_request_target_viewed(p_request_id uuid)
+returns boolean
+language sql
+security invoker
+set search_path=''
+as $$
+  select app_private.mark_request_target_viewed_internal(p_request_id);
+$$;
+
 revoke all on function public.mark_request_target_viewed(uuid) from public, anon;
-grant execute on function public.mark_request_target_viewed(uuid) to authenticated, service_role;
+grant execute on function public.mark_request_target_viewed(uuid) to authenticated;
 
 create or replace function app_private.mark_request_target_responded()
 returns trigger
