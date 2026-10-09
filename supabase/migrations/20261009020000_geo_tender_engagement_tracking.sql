@@ -1,5 +1,5 @@
 -- Geo Tender engagement tracking.
--- A matched supplier can only mark their own target as viewed through a narrow public wrapper.
+-- Matched suppliers can record views/declines through narrow public wrappers.
 -- Privileged writes stay in app_private; offer creation marks the corresponding target as responded server-side.
 
 revoke all on table public.request_targets from anon;
@@ -62,6 +62,48 @@ $$;
 
 revoke all on function public.mark_request_target_viewed(uuid) from public, anon;
 grant execute on function public.mark_request_target_viewed(uuid) to authenticated;
+
+create or replace function app_private.decline_request_target_internal(p_request_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path=''
+as $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then
+    raise exception 'not_authenticated' using errcode='42501';
+  end if;
+
+  if not app_private.account_is_active(v_uid) then
+    raise exception 'account_inactive_or_incomplete' using errcode='42501';
+  end if;
+
+  update public.request_targets
+  set status = 'declined', updated_at = now()
+  where request_id = p_request_id
+    and profile_id = v_uid
+    and status in ('matched', 'notified', 'viewed');
+
+  return found;
+end;
+$$;
+
+revoke all on function app_private.decline_request_target_internal(uuid) from public, anon;
+grant execute on function app_private.decline_request_target_internal(uuid) to authenticated;
+
+create or replace function public.decline_request_target(p_request_id uuid)
+returns boolean
+language sql
+security invoker
+set search_path=''
+as $$
+  select app_private.decline_request_target_internal(p_request_id);
+$$;
+
+revoke all on function public.decline_request_target(uuid) from public, anon;
+grant execute on function public.decline_request_target(uuid) to authenticated;
 
 create or replace function app_private.mark_request_target_responded()
 returns trigger
