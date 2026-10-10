@@ -1,7 +1,7 @@
 import RecoveryRedirect from "@/app/components/recovery-redirect";
 import PwaInstall from "@/app/components/pwa-install";
 import PwaSplash from "@/app/components/pwa-splash";
-import AiVoiceInput from "@/app/components/ai-voice-input";
+import AiVoiceLoader from "@/app/components/ai-voice-loader";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { UiSettingsProvider } from "@/lib/ui-settings";
@@ -60,7 +60,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <UiSettingsProvider>
           <PwaSplash />
           <RecoveryRedirect />{children}
-          <AiVoiceInput />
+          <AiVoiceLoader />
           <PwaInstall />
         </UiSettingsProvider>
       </body>
