@@ -24,6 +24,10 @@ async function checkProfile(browser, label, contextOptions) {
   }
   assert((await page.locator('[name="password"]').getAttribute('minlength')) === '10', `${label}: password minlength must be 10`);
 
+  response = await page.goto(`${baseURL}/agents/static-shell-smoke`, { waitUntil: 'domcontentloaded' });
+  assert(response && response.status() < 400, `${label}: static agent rewrite did not load`);
+  await page.waitForURL('**/login', { timeout: 10000 });
+
   const manifest = await context.request.get(`${baseURL}/manifest.webmanifest`);
   assert(manifest.ok(), `${label}: manifest unavailable`);
   const manifestJson = await manifest.json();
