@@ -34,10 +34,10 @@ begin
     else array[]::text[]
   end;
 
-  -- Preserve terminal engagement history so a supplier who declined a tender is
-  -- not immediately re-matched by a manual/automatic refresh.
+  -- Recalculate only untouched matches. Once a supplier has been notified, viewed,
+  -- responded or declined, that engagement history is durable across rescoring.
   delete from public.request_targets
-  where request_id=p_request_id and status not in ('responded','declined');
+  where request_id=p_request_id and status='matched';
 
   with candidates as (
     select
@@ -273,11 +273,11 @@ begin
 end;
 $$;
 
-revoke all on function public.list_agents_with_trust(text,text,text,text,boolean,text,integer,integer) from public, anon;
-grant execute on function public.list_agents_with_trust(text,text,text,text,boolean,text,integer,integer) to authenticated, service_role;
+revoke all on function public.list_agents_with_trust(text,text,text,text,boolean,text,integer,integer) from public, anon, service_role;
+grant execute on function public.list_agents_with_trust(text,text,text,text,boolean,text,integer,integer) to authenticated;
 
--- Re-score currently open targeted tenders once so existing matches benefit from P6
--- immediately. Terminal responded/declined rows remain untouched by the function.
+-- Re-score currently open targeted tenders once so existing untouched matches benefit
+-- from P6 immediately while notified/viewed/responded/declined history is preserved.
 do $$
 declare
   r record;
