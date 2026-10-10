@@ -26,7 +26,7 @@ async function checkProfile(browser, label, contextOptions) {
 
   response = await page.goto(`${baseURL}/agents/static-shell-smoke`, { waitUntil: 'domcontentloaded' });
   assert(response && response.status() < 400, `${label}: static agent rewrite did not load`);
-  await page.waitForURL('**/login', { timeout: 10000 });
+  await page.waitForURL((url) => url.pathname === '/login' && url.searchParams.get('next') === '/agents/static-shell-smoke', { timeout: 10000 });
 
   const manifest = await context.request.get(`${baseURL}/manifest.webmanifest`);
   assert(manifest.ok(), `${label}: manifest unavailable`);
