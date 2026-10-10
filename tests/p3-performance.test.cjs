@@ -76,4 +76,5 @@ test('P3 stays deploy-free until the combined batch is promoted', () => {
   const vercel = JSON.parse(read('vercel.json'));
   assert.equal(vercel.git.deploymentEnabled.main, true);
   assert.equal(vercel.git.deploymentEnabled['**'], false);
+  assert.ok(vercel.ignoreCommand.includes('git diff --quiet'));
 });
