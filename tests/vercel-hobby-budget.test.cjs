@@ -57,6 +57,11 @@ test('redirect-only dynamic pages stay out of Vercel SSR functions', () => {
 
 test('client-only detail pages stay off Vercel SSR functions', () => {
   const config = read('next.config.ts');
+  assert.match(config, /source: "\/admin\/agents\/:id"/);
+  assert.match(config, /destination: "\/admin-agent-detail"/);
+  assert.equal(exists('app/admin/agents/[id]/page.tsx'), false);
+  assert.equal(exists('app/admin-agent-detail/page.tsx'), true);
+
   assert.match(config, /source: "\/agents\/:id"/);
   assert.match(config, /destination: "\/agent-detail"/);
   assert.equal(exists('app/agents/[id]/page.tsx'), false);
