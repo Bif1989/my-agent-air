@@ -62,6 +62,11 @@ test('client-only detail pages stay off Vercel SSR functions', () => {
   assert.equal(exists('app/agents/[id]/page.tsx'), false);
   assert.equal(exists('app/agent-detail/page.tsx'), true);
 
+  assert.match(config, /source: "\/deals\/:id"/);
+  assert.match(config, /destination: "\/deal-detail"/);
+  assert.equal(exists('app/deals/[id]/page.tsx'), false);
+  assert.equal(exists('app/deal-detail/page.tsx'), true);
+
   assert.match(config, /source: "\/supplier-request\/:token"/);
   assert.match(config, /destination: "\/supplier-invite"/);
   assert.equal(exists('app/supplier-request/[token]/page.tsx'), false);
