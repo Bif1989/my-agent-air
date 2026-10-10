@@ -48,6 +48,11 @@ function Avatar({ agent, size = "h-14 w-14", isRu }: { agent: AgentRecord; size?
 }
 
 function AgentCard({ agent, currentUserId, isRu }: { agent: AgentRecord; currentUserId: string; isRu: boolean }) {
+  const trustScore = agent.trust_score ?? (agent.is_verified ? 45 : 30);
+  const rating = agent.rating_average == null ? null : Number(agent.rating_average);
+  const reviewCount = agent.review_count ?? 0;
+  const completedDeals = agent.completed_deals ?? 0;
+
   return (
     <Link href={`/agents/${agent.id}`} className="flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-100">
       <div className="flex items-start gap-4">
@@ -57,10 +62,17 @@ function AgentCard({ agent, currentUserId, isRu }: { agent: AgentRecord; current
             <h2 className="truncate font-semibold text-[#0b1f3a]">{agent.full_name || tr(isRu, "Ism ko‘rsatilmagan", "Имя не указано")}</h2>
             {agent.id === currentUserId && <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700">{tr(isRu, "Siz", "Вы")}</span>}
             {agent.is_verified && <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700">{tr(isRu, "Tasdiqlangan", "Проверен")}</span>}
+            <span className="rounded-full bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-700">Trust {trustScore}/100</span>
           </div>
           <p className="mt-1 truncate text-sm text-slate-500">{agent.company_name || tr(isRu, "Kompaniya ko‘rsatilmagan", "Компания не указана")}</p>
           <p className="mt-1 truncate text-xs text-slate-400">{agent.city || tr(isRu, "Shahar ko‘rsatilmagan", "Город не указан")}</p>
         </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-slate-50 p-3 text-center">
+        <div><p className="font-bold text-amber-600">{rating == null ? "—" : rating.toFixed(1)}</p><p className="mt-0.5 text-[10px] font-semibold text-slate-400">★ {tr(isRu, "Reyting", "Рейтинг")}</p></div>
+        <div><p className="font-bold text-blue-700">{completedDeals}</p><p className="mt-0.5 text-[10px] font-semibold text-slate-400">{tr(isRu, "Bitim", "Сделок")}</p></div>
+        <div><p className="font-bold text-emerald-700">{reviewCount}</p><p className="mt-0.5 text-[10px] font-semibold text-slate-400">{tr(isRu, "Baho", "Отзывов")}</p></div>
       </div>
 
       <dl className="mt-5 space-y-2 border-t border-slate-100 pt-4 text-sm">
@@ -104,7 +116,7 @@ export default function AgentsPage() {
   const [city, setCity] = useState("");
   const [service, setService] = useState("");
   const [verifiedOnly, setVerifiedOnly] = useState(false);
-  const [sort, setSort] = useState<AgentSort>("newest");
+  const [sort, setSort] = useState<AgentSort>("trust_desc");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -171,7 +183,7 @@ export default function AgentsPage() {
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-600">{tr(isRu, "Hamkorlar tarmog‘i", "СЕТЬ ПАРТНЁРОВ")}</p>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#0b1f3a] sm:text-4xl">{tr(isRu, "Agentlar", "Агенты")}</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{tr(isRu, "Faol va tasdiqlangan hamkorlarni toping, xizmatlarini solishtiring.", "Находите активных и проверенных партнёров и сравнивайте их услуги.")}</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{tr(isRu, "Hamkorlarni Trust Score, real bitimlar va baholar bo‘yicha solishtiring.", "Сравнивайте партнёров по Trust Score, реальным сделкам и отзывам.")}</p>
           </div>
           <p className="text-sm font-semibold text-slate-500">{isLoading ? tr(isRu, "Yuklanmoqda...", "Загрузка...") : isRu ? `${visibleAgents.length} агентов` : `${visibleAgents.length} ta agent`}</p>
         </header>
@@ -210,6 +222,7 @@ export default function AgentsPage() {
             <label className="block text-sm font-semibold text-[#0b1f3a]">
               {tr(isRu, "Tartiblash", "Сортировка")}
               <select value={sort} onChange={(event) => { setSort(event.target.value as AgentSort); setPage(0); }} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-normal outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100">
+                <option value="trust_desc">{tr(isRu, "Eng ishonchli hamkorlar", "Сначала самые надёжные")}</option>
                 <option value="newest">{tr(isRu, "Eng yangi ro‘yxatdan o‘tganlar", "Сначала новые")}</option>
                 <option value="oldest">{tr(isRu, "Eng oldin ro‘yxatdan o‘tganlar", "Сначала старые")}</option>
                 <option value="name_asc">{tr(isRu, "Alifbo bo‘yicha A–Z", "По алфавиту А–Я")}</option>
