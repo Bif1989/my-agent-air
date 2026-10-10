@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { track } from "@vercel/analytics";
 import BrandMark from "@/app/components/brand-mark";
 import TurnstileChallenge, { TURNSTILE_SITE_KEY } from "@/app/components/turnstile-challenge";
 import { UiControls, useUiSettings } from "@/lib/ui-settings";
@@ -34,7 +33,6 @@ export default function RegisterPage() {
   const { isRu } = useUiSettings();
   const captchaRequired = Boolean(TURNSTILE_SITE_KEY);
 
-  useEffect(() => { track("signup_started"); }, []);
   useEffect(() => {
     if (resendCooldown <= 0) return;
     const timer = window.setInterval(() => setResendCooldown((previous) => previous <= 1 ? 0 : previous - 1), 1000);
@@ -72,7 +70,6 @@ export default function RegisterPage() {
         captcha_token: captchaToken,
       });
       if (response.access_token && response.refresh_token && response.user?.id) {
-        track("signup_completed");
         saveSession(response);
         router.push("/profile?complete=1");
         return;
@@ -98,7 +95,6 @@ export default function RegisterPage() {
     setIsVerifying(true);
     try {
       const response = await verifySignupOtpProtected(pendingEmail, otpCode);
-      track("signup_completed");
       saveSession(response);
       router.push("/profile?complete=1");
     } catch (requestError) {
