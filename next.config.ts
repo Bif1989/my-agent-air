@@ -21,6 +21,20 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      {
+        source: "/messages/:dealId",
+        destination: "/deals/:dealId#chat",
+        permanent: false,
+      },
+      {
+        source: "/s/:token",
+        destination: "/supplier-request/:token",
+        permanent: false,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
