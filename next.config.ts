@@ -50,6 +50,14 @@ const nextConfig: NextConfig = {
         destination: "/deal-detail",
       },
       {
+        source: "/feed/:postId/edit",
+        destination: "/feed-post-edit",
+      },
+      {
+        source: "/feed/:postId",
+        destination: "/feed-post",
+      },
+      {
         source: "/requests/:id/edit",
         destination: "/request-edit",
       },
