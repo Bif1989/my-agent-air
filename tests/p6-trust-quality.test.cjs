@@ -61,7 +61,7 @@ test('P6 UI only asks for a review after completion and agent profile shows veri
   assert.match(panel, /submitDealReview/);
   assert.match(panel, /Bir bitim uchun bir marta baho beriladi/);
   assert.match(detail, /completed=\{deal\.status === "completed"\}/);
-  assert.match(agent, /P6 · Trust Score/);
+  assert.match(agent, /Trust Score/);
   assert.match(agent, /Tasdiqlangan bitim baholari/);
   assert.match(agent, /Yakunlangan bitim asosida/);
 });

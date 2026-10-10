@@ -130,7 +130,7 @@ export default function AdminBillingSubscriptionsPage() {
   return <AppShell session={session} activePath="/admin">
     <div className="mx-auto max-w-7xl">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <header><p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-600">P5 · Unlimited</p><h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#0b1f3a] sm:text-4xl">Oylik abonent tarifi</h1><p className="mt-2 max-w-2xl text-sm text-slate-500">Unlimited tarif narxi va muddatini boshqaring, foydalanuvchilarga abonent davrini faollashtiring.</p></header>
+        <header><p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-600">Unlimited</p><h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#0b1f3a] sm:text-4xl">Oylik abonent tarifi</h1><p className="mt-2 max-w-2xl text-sm text-slate-500">Unlimited tarif narxi va muddatini boshqaring, foydalanuvchilarga abonent davrini faollashtiring.</p></header>
         <div className="flex flex-wrap gap-2"><Link href="/admin/billing" className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700">Per-deal to‘lovlar</Link><Link href="/admin" className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700">← Admin panel</Link></div>
       </div>
 

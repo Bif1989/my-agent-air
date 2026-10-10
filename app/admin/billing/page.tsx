@@ -101,7 +101,7 @@ export default function AdminBillingPage() {
   return <AppShell session={session} activePath="/admin">
     <div className="mx-auto max-w-7xl">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <header><p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-600">P5 · Billing</p><h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#0b1f3a] sm:text-4xl">To‘lovlar boshqaruvi</h1><p className="mt-2 max-w-2xl text-sm text-slate-500">Qarzdorliklarni ko‘ring, to‘lovni yoki waiver holatini admin tomonidan qayd eting.</p></header>
+        <header><p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-600">To‘lovlar</p><h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#0b1f3a] sm:text-4xl">To‘lovlar boshqaruvi</h1><p className="mt-2 max-w-2xl text-sm text-slate-500">Qarzdorliklarni ko‘ring, to‘lovni yoki waiver holatini admin tomonidan qayd eting.</p></header>
         <Link href="/admin" className="w-fit rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700">← Admin panel</Link>
       </div>
 

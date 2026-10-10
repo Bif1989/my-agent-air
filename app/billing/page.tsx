@@ -118,7 +118,7 @@ export default function BillingPage() {
     <div className="mx-auto max-w-6xl">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-600">P5 · Monetizatsiya</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-600">To‘lovlar</p>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#0b1f3a] sm:text-4xl">{t("Hisob va tarif", "Оплата и тариф")}</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{t("Per-deal tarifda har oy dastlabki 5 ta muvaffaqiyatli bitim bepul. Istasangiz Oylik Unlimited abonent tarifidan ham foydalanishingiz mumkin.", "На тарифе за сделку первые 5 успешных сделок каждого месяца бесплатны. Также доступен абонентский тариф Monthly Unlimited.")}</p>
         </div>

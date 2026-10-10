@@ -4,6 +4,8 @@ import { isRequestCurrent } from "@/lib/request-freshness";
 import Link from "next/link";
 import RequestServiceDetails from "@/app/requests/request-service-details";
 import RequestTargetingSummary from "@/app/requests/request-targeting-summary";
+import RequestOfferPanel from "@/app/requests/request-offer-panel";
+import { getDealForRequest } from "@/app/deals/deals-api";
 import SupplierMatching from "@/app/requests/supplier-matching";
 import { hasAirTravel, requestTitle } from "@/lib/service-request";
 import { useEffect, useState } from "react";
@@ -71,6 +73,7 @@ export default function RequestDetailPage() {
   const [id, setId] = useState("");
   const [session, setSession] = useState<AuthSession | null>(null);
   const [request, setRequest] = useState<RequestRecord | null>(null);
+  const [dealId, setDealId] = useState<string | null>(null);
   const [offers, setOffers] = useState<OfferRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isOffersLoading, setIsOffersLoading] = useState(false);
@@ -93,6 +96,10 @@ export default function RequestDetailPage() {
       setSession(storedSession);
       getRequest(requestId).then((loadedRequest) => {
         setRequest(loadedRequest);
+        if (!loadedRequest) throw new Error("REQUEST_NOT_FOUND");
+        if (loadedRequest.status === "accepted") {
+          void getDealForRequest(requestId).then((deal) => setDealId(deal?.id || null)).catch(() => undefined);
+        }
         if (loadedRequest?.created_by === storedSession.user.id) {
           setIsOffersLoading(true);
           return getOffersForRequest(requestId).then(setOffers).finally(() => setIsOffersLoading(false));
@@ -100,7 +107,7 @@ export default function RequestDetailPage() {
         return undefined;
       }).catch((requestError: unknown) => {
         if (requestError instanceof Error && (requestError.message === "AUTH_SESSION_EXPIRED" || requestError.message === "AUTH_SESSION_MISSING")) { window.location.replace("/login"); return; }
-        setError("So‘rovni yuklashda xatolik yuz berdi.");
+        setError(requestError instanceof Error && requestError.message === "REQUEST_NOT_FOUND" ? "So‘rov topilmadi yoki unga kirish huquqingiz yo‘q." : "So‘rovni yuklashda xatolik yuz berdi.");
       }).finally(() => setIsLoading(false));
     }, 0);
     return () => window.clearTimeout(timeoutId);
@@ -124,7 +131,7 @@ export default function RequestDetailPage() {
   }
 
   async function handleAcceptOffer(offerId: string) {
-    if (!request || request.status !== "open" || !isRequestCurrent(request) || isAccepting || !window.confirm("Ushbu taklifni qabul qilasizmi?")) return;
+    if (!request || request.status !== "open" || !isRequestCurrent(request) || isAccepting || !window.confirm("Ushbu taklifni qabul qilasizmi? Bitim yaratiladi va qolgan kutilayotgan takliflar rad etiladi.")) return;
     setIsAccepting(true); setError(""); setMessage("");
     try {
       const result = await acceptOffer(offerId);
@@ -132,6 +139,7 @@ export default function RequestDetailPage() {
       if (!dealId) throw new Error("DEAL_ID_MISSING");
       setRequest({ ...request, status: "accepted" });
       setOffers((current) => current.map((offer) => offer.id === offerId ? { ...offer, status: "accepted" } : { ...offer, status: offer.status === "pending" ? "rejected" : offer.status }));
+      setDealId(dealId);
       setMessage("Taklif qabul qilindi. Bitim yaratildi.");
       window.setTimeout(() => router.push(`/deals/${dealId}`), 700);
     } catch { setError("Taklifni qabul qilib bo‘lmadi. Qayta urinib ko‘ring."); } finally { setIsAccepting(false); }
@@ -172,6 +180,7 @@ export default function RequestDetailPage() {
       {message && <p role="status" className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</p>}
       {error && <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
+      {request.status === "accepted" && <section className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5"><h2 className="font-semibold text-emerald-900">Taklif tanlangan — ishni bitimda davom ettiring</h2><p className="mt-2 text-sm text-slate-600">Kelishilgan shartlar, hamkor bilan suhbat va yakuniy baholash bitim sahifasida.</p><Link href={dealId ? `/deals/${dealId}` : "/deals"} className="mt-3 inline-block rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white">{dealId ? "Bitimni ochish →" : "Bitimlarimni ochish →"}</Link></section>}
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.45fr_0.75fr]">
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           <div className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-700">1</span><div><h2 className="text-lg font-semibold text-[#0b1f3a]">Nima kerak?</h2><p className="text-xs text-slate-500">Safar va xizmatning to‘liq tafsilotlari</p></div></div>
@@ -192,11 +201,12 @@ export default function RequestDetailPage() {
             <p className="text-sm font-semibold text-[#0b1f3a]">Amallar</p>
             {isOwner && isOpen && <div className="mt-4 space-y-3"><Link href={`/requests/${request.id}/edit`} className="block rounded-xl bg-blue-600 px-4 py-3 text-center text-sm font-semibold text-white hover:bg-blue-700">So‘rovni tahrirlash</Link><button type="button" disabled={isWorking} onClick={() => changeStatus("closed")} className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:border-blue-300 disabled:opacity-50">So‘rovni yopish</button><button type="button" disabled={isWorking} onClick={() => changeStatus("cancelled")} className="w-full rounded-xl border border-amber-200 px-4 py-3 text-sm font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-50">Bekor qilish</button></div>}
             {canDelete && <button type="button" disabled={isWorking} onClick={handleDelete} className="mt-4 w-full rounded-xl border border-red-200 px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50">Tarixdan o‘chirish</button>}
-            {!isOwner && (isOpen ? <Link href={`/requests?tab=market&request_id=${request.id}`} className="mt-4 block rounded-xl bg-blue-600 px-4 py-3 text-center text-sm font-semibold text-white hover:bg-blue-700">Taklif berish</Link> : <button type="button" disabled className="mt-4 w-full rounded-xl bg-slate-200 px-4 py-3 text-sm font-semibold text-slate-500">Taklif berish yopilgan</button>)}
+            {!isOwner && (isOpen ? <a href="#offer" className="mt-4 block rounded-xl bg-blue-600 px-4 py-3 text-center text-sm font-semibold text-white hover:bg-blue-700">Taklif berish</a> : <button type="button" disabled className="mt-4 w-full rounded-xl bg-slate-200 px-4 py-3 text-sm font-semibold text-slate-500">Taklif berish yopilgan</button>)}
           </section>
         </aside>
       </div>
 
+      {!isOwner && <RequestOfferPanel key={request.id} request={request} />}
       {!isOwner && id && <RequestTargetingSummary requestId={id} isOwner={false} distributionMode={request.distribution_mode || "targeted"} />}
       {isOwner && isOpen && <SupplierMatching request={request} />}
 
