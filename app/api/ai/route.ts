@@ -14,7 +14,7 @@ const ACTIONS = ["create_request", "open_requests", "open_agents", "open_deals",
 const REQUEST_CATEGORIES = ["Aviachipta", "Tur paket", "Mehmonxona", "Transfer", "Gid", "Viza", "Boshqa"] as const;
 const CURRENCIES = ["USD", "UZS", "EUR", "RUB"] as const;
 const HISTORY_MAX_ITEMS = 12;
-const HISTORY_MAX_CHARS = 32000;
+const HISTORY_MAX_CHARS = 24000;
 const REQUEST_BODY_MAX_BYTES = 128000;
 
 type AiAction = (typeof ACTIONS)[number];
@@ -297,7 +297,7 @@ async function handlePost(request: NextRequest, signal: AbortSignal) {
           },
         },
       },
-      max_output_tokens: 6000,
+      max_output_tokens: 3500,
     }),
     cache: "no-store", signal,
   });
