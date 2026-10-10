@@ -13,8 +13,8 @@ test('P8 messenger hot path batches latest-message and unread aggregation once p
   const sql = read(sqlPath);
   assert.match(sql, /create or replace function public\.list_messenger_conversations\(\)/);
   assert.match(sql, /accessible as materialized/);
-  assert.match(sql, /latest as \(/[\s\S]*distinct on \(cm\.room_id\)/);
-  assert.match(sql, /unread as \(/[\s\S]*group by cm\.room_id/);
+  assert.match(sql, /latest as \([\s\S]*distinct on \(cm\.room_id\)/);
+  assert.match(sql, /unread as \([\s\S]*group by cm\.room_id/);
   assert.match(sql, /left join latest lm on lm\.room_id=a\.id/);
   assert.match(sql, /left join unread u on u\.room_id=a\.id/);
   assert.match(sql, /security definer/);
@@ -26,8 +26,8 @@ test('P8 feed hot path limits the page before comment and reaction aggregates', 
   assert.match(sql, /create or replace function public\.list_feed_posts/);
   assert.match(sql, /base as materialized/);
   assert.match(sql, /limit greatest\(1,least\(coalesce\(p_limit,20\),50\)\)/);
-  assert.match(sql, /comments as \(/[\s\S]*group by c\.post_id/);
-  assert.match(sql, /reactions as \(/[\s\S]*filter \(where r\.reaction='like'\)/);
+  assert.match(sql, /comments as \([\s\S]*group by c\.post_id/);
+  assert.match(sql, /reactions as \([\s\S]*filter \(where r\.reaction='like'\)/);
   assert.match(sql, /max\(r\.reaction\) filter \(where r\.user_id=\(select auth\.uid\(\)\)\)/);
   assert.match(sql, /security invoker/);
 });
