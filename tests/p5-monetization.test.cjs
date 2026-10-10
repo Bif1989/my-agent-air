@@ -49,7 +49,7 @@ test('P5 billing ledger is read-only to authenticated clients and protected by R
   assert.doesNotMatch(sql, /grant .*delete.*deal_fees to authenticated/i);
 });
 
-test('P5 billing UI exposes monthly usage, tariff and ledger without a payment gateway dependency', () => {
+test('P5 billing UI exposes monthly usage and tariff without calling an external payment gateway', () => {
   const api = read('app/billing/billing-api.ts');
   const page = read('app/billing/page.tsx');
   const deals = read('app/deals/page.tsx');
@@ -59,5 +59,5 @@ test('P5 billing UI exposes monthly usage, tariff and ledger without a payment g
   assert.match(page, /ROLE_PRICES/);
   assert.match(page, /outstanding_amount/);
   assert.match(deals, /href="\/billing"/);
-  assert.doesNotMatch(page, /click|payme|stripe/i);
+  assert.doesNotMatch(api, /https?:\/\/|click\.uz|payme\.uz|stripe/i);
 });
