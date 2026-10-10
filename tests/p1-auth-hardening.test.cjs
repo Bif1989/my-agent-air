@@ -44,8 +44,8 @@ test('signup and recovery UI enforce the new password path and expose optional T
   const login = read('app/login/page.tsx');
   const forgot = read('app/forgot-password/page.tsx');
   const reset = read('app/reset-password/page.tsx');
-  const signupRoute = read('app/api/auth/signup/route.ts');
-  const recoveryRoute = read('app/api/auth/update-password/route.ts');
+  const signupRoute = read('lib/server/auth-actions/signup.ts');
+  const recoveryRoute = read('lib/server/auth-actions/update-password.ts');
 
   assert.match(register, /MIN_PASSWORD_LENGTH = 10/);
   assert.match(reset, /MIN_PASSWORD_LENGTH = 10/);
@@ -60,7 +60,7 @@ test('signup and recovery UI enforce the new password path and expose optional T
   assert.match(register, /TurnstileChallenge action="signup"/);
   assert.match(login, /TurnstileChallenge action="login"/);
   assert.match(forgot, /TurnstileChallenge action="recover"/);
-  for (const route of ['app/api/auth/signup/route.ts', 'app/api/auth/password/route.ts', 'app/api/auth/recover/route.ts']) {
+  for (const route of ['lib/server/auth-actions/signup.ts', 'lib/server/auth-actions/password.ts', 'lib/server/auth-actions/recover.ts']) {
     assert.match(read(route), /verifyTurnstile/);
   }
 });
@@ -108,7 +108,7 @@ test('Turnstile is dormant without keys, fails closed on partial config, and val
 
 test('recovery rejects oversized chunked bodies before any upstream request', async () => {
   const { NextRequest } = require('next/server');
-  const { POST } = require('../app/api/auth/update-password/route.ts');
+  const { POST } = require('../lib/server/auth-actions/update-password.ts');
   const originalFetch = global.fetch;
   let calls = 0;
   global.fetch = async () => { calls++; throw new Error('Must not contact upstream'); };
