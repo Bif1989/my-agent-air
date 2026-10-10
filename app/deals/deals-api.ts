@@ -1,4 +1,5 @@
 import type { RequestRecord } from "@/app/requests/requests-api";
+import { dedupeInFlight } from "@/lib/inflight-dedupe";
 import { authenticatedSupabaseFetch, getStoredSession } from "@/lib/supabase-auth";
 
 export const DEAL_STATUSES = ["accepted", "processing", "issued", "completed", "cancelled"] as const;
@@ -72,15 +73,21 @@ function currentUserId() {
   return session.user.id;
 }
 
-async function listByRole(role: "buyer_id" | "seller_id") {
-  const response = await authenticatedSupabaseFetch(`deals?select=${encode(DEAL_FIELDS)}&${role}=eq.${encode(currentUserId())}&order=created_at.desc`);
-  return readJson<DealRecord[]>(response);
+function listByRole(role: "buyer_id" | "seller_id") {
+  const userId = currentUserId();
+  return dedupeInFlight("deals:list-role", `${userId}:${role}`, async () => {
+    const response = await authenticatedSupabaseFetch(`deals?select=${encode(DEAL_FIELDS)}&${role}=eq.${encode(userId)}&order=created_at.desc`);
+    return readJson<DealRecord[]>(response);
+  });
 }
 
 export function listDeals() {
-  const userId = encode(currentUserId());
-  return authenticatedSupabaseFetch(`deals?select=${encode(DEAL_FIELDS)}&or=(buyer_id.eq.${userId},seller_id.eq.${userId})&order=created_at.desc`)
-    .then((response) => readJson<DealRecord[]>(response));
+  const userId = currentUserId();
+  return dedupeInFlight("deals:list", userId, async () => {
+    const encodedUserId = encode(userId);
+    const response = await authenticatedSupabaseFetch(`deals?select=${encode(DEAL_FIELDS)}&or=(buyer_id.eq.${encodedUserId},seller_id.eq.${encodedUserId})&order=created_at.desc`);
+    return readJson<DealRecord[]>(response);
+  });
 }
 
 export function listBuyerDeals() {
@@ -91,16 +98,22 @@ export function listSellerDeals() {
   return listByRole("seller_id");
 }
 
-export async function getDeal(id: string) {
-  const response = await authenticatedSupabaseFetch(`deals?select=${encode(DEAL_FIELDS)}&id=eq.${encode(id)}&limit=1`);
-  const rows = await readJson<DealRecord[]>(response);
-  return rows[0] || null;
+export function getDeal(id: string) {
+  const userId = currentUserId();
+  return dedupeInFlight("deals:get", `${userId}:${id}`, async () => {
+    const response = await authenticatedSupabaseFetch(`deals?select=${encode(DEAL_FIELDS)}&id=eq.${encode(id)}&limit=1`);
+    const rows = await readJson<DealRecord[]>(response);
+    return rows[0] || null;
+  });
 }
 
-export async function listDealActivity(dealId: string) {
-  const activityFields = "id,event_type,created_at,actor_id,event_data,actor:profiles!activity_log_actor_id_fkey(" + PROFILE_FIELDS + ")";
-  const response = await authenticatedSupabaseFetch(`activity_log?select=${encode(activityFields)}&deal_id=eq.${encode(dealId)}&order=created_at.desc`);
-  return readJson<DealActivity[]>(response);
+export function listDealActivity(dealId: string) {
+  const userId = currentUserId();
+  return dedupeInFlight("deals:activity", `${userId}:${dealId}`, async () => {
+    const activityFields = "id,event_type,created_at,actor_id,event_data,actor:profiles!activity_log_actor_id_fkey(" + PROFILE_FIELDS + ")";
+    const response = await authenticatedSupabaseFetch(`activity_log?select=${encode(activityFields)}&deal_id=eq.${encode(dealId)}&order=created_at.desc`);
+    return readJson<DealActivity[]>(response);
+  });
 }
 
 export async function updateDealStatus(id: string, status: DealStatus) {
