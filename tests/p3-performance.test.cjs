@@ -71,3 +71,9 @@ test('P3 shares concurrent reads for the same agent profile', () => {
   assert.match(api, /agentReadsInFlight\.set\(id, task\)/);
   assert.match(api, /agentReadsInFlight\.delete\(id\)/);
 });
+
+test('P3 stays deploy-free until the combined batch is promoted', () => {
+  const vercel = JSON.parse(read('vercel.json'));
+  assert.equal(vercel.git.deploymentEnabled.main, true);
+  assert.equal(vercel.git.deploymentEnabled['**'], false);
+});
