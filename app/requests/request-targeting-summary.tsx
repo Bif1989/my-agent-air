@@ -52,6 +52,13 @@ function reasonText(target: RequestTargetRecord, isRu: boolean) {
   if (reason.city) parts.push(reason.city);
   if (reason.verified) parts.push(tr(isRu, "tasdiqlangan profil", "проверенный профиль"));
   if (reason.capacity != null && reason.pax != null && Number(reason.capacity) >= Number(reason.pax)) parts.push(tr(isRu, "sig‘im mos", "вместимость подходит"));
+  if (reason.trust_score != null) {
+    const bonus = Number(reason.trust_bonus || 0);
+    parts.push(`Trust ${reason.trust_score}/100${bonus > 0 ? ` (+${bonus})` : ""}`);
+  }
+  if (reason.rating_average != null && Number(reason.review_count || 0) > 0) {
+    parts.push(`★ ${Number(reason.rating_average).toFixed(1)} · ${reason.review_count} ${tr(isRu, "baho", "отзывов")}`);
+  }
   if (target.distance_km != null) parts.push(`${Number(target.distance_km).toLocaleString(isRu ? "ru-RU" : "uz-UZ", { maximumFractionDigits: 1 })} km`);
   return parts.length ? parts.join(" · ") : tr(isRu, "Xizmat turi va so‘rov parametrlariga mos", "Соответствует типу услуги и параметрам запроса");
 }
@@ -232,7 +239,7 @@ export default function RequestTargetingSummary({ requestId, isOwner, distributi
         return <article key={target.profile_id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold text-[#0b1f3a]">{profile?.full_name || profile?.company_name || tr(isRu, "Hamkor profili", "Профиль партнёра")}</p><p className="mt-1 truncate text-sm text-slate-500">{profile?.company_name || agentTypeLabel(profile?.agent_type || target.match_reason?.capability_type || null, isRu)}{profile?.city ? ` · ${profile.city}` : target.match_reason?.city ? ` · ${target.match_reason.city}` : ""}</p></div><span className="shrink-0 rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-bold text-cyan-800">{target.match_score}</span></div>
           <p className="mt-3 text-xs leading-5 text-slate-500">{reasonText(target, isRu)}</p>
-          <div className="mt-3 flex flex-wrap gap-2"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">{statusLabel(target.status, isRu)}</span>{profile?.is_verified && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">{tr(isRu, "Tasdiqlangan", "Проверен")}</span>}{profile?.services?.slice(0, 2).map((service) => <span key={service} className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">{service}</span>)}</div>
+          <div className="mt-3 flex flex-wrap gap-2"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">{statusLabel(target.status, isRu)}</span>{target.match_reason?.trust_score != null && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">Trust {target.match_reason.trust_score}/100</span>}{profile?.is_verified && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">{tr(isRu, "Tasdiqlangan", "Проверен")}</span>}{profile?.services?.slice(0, 2).map((service) => <span key={service} className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">{service}</span>)}</div>
         </article>;
       })}</div>}
       {!visibleStageTargets.length && <p className="mt-4 rounded-xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">{tr(isRu, "Bu bosqichda hali hamkor yo‘q.", "На этом этапе пока нет партнёров.")}</p>}
