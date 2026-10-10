@@ -52,6 +52,9 @@ test('P7 consolidated outreach route serializes email and SMS without adding a V
 
 test('P7 delivery claim fails closed when the database guard is unavailable', () => {
   const route = read('app/api/supplier-outreach/[action]/route.ts');
-  assert.match(route, /if \(error\) \{[\s\S]*"OUTREACH_UNAVAILABLE"[\s\S]*503/);
-  assert.doesNotMatch(route, /if \(error\)[\s\S]*return handler\(request\)/);
+  const errorBlock = route.match(/if \(error\) \{([\s\S]*?)\n  \}/)?.[1] || '';
+  assert.match(errorBlock, /Supplier delivery claim failed/);
+  assert.match(errorBlock, /"OUTREACH_UNAVAILABLE"/);
+  assert.match(errorBlock, /503/);
+  assert.doesNotMatch(errorBlock, /return handler\(request\)/);
 });
