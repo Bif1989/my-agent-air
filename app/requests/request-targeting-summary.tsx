@@ -104,7 +104,9 @@ export default function RequestTargetingSummary({ requestId, isOwner, distributi
     const onVisibility = () => { if (document.visibilityState === "visible") scheduleRefresh(); };
     window.addEventListener("online", onOnline);
     document.addEventListener("visibilitychange", onVisibility);
-    const fallbackInterval = window.setInterval(scheduleRefresh, 60_000);
+    const fallbackInterval = window.setInterval(() => {
+      if (document.visibilityState === "visible" && navigator.onLine) scheduleRefresh();
+    }, 180_000);
     return () => {
       if (debounceTimer) window.clearTimeout(debounceTimer);
       window.clearInterval(fallbackInterval);

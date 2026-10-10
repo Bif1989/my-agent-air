@@ -100,7 +100,7 @@ test('request targeting client can decline an unsuitable match and leave the req
   assert.match(summary, /router\.replace\("\/requests\?tab=market"\)/);
 });
 
-test('request owner funnel receives realtime target changes with resilient refresh fallbacks', () => {
+test('request owner funnel receives realtime target changes with low-cost resilient refresh fallbacks', () => {
   const migration = read('supabase/migrations/20261009143000_geo_tender_realtime_funnel.sql');
   const realtime = read('lib/supabase-realtime.ts');
   const summary = read('app/requests/request-targeting-summary.tsx');
@@ -109,7 +109,8 @@ test('request owner funnel receives realtime target changes with resilient refre
   assert.match(realtime, /table === "messages" \|\| table === "request_targets"/);
   assert.match(summary, /subscribeToRequestTargets\(requestId, scheduleRefresh\)/);
   assert.match(summary, /visibilitychange/);
-  assert.match(summary, /60_000/);
+  assert.match(summary, /180_000/);
+  assert.match(summary, /document\.visibilityState === "visible" && navigator\.onLine/);
   assert.match(summary, /removeChannel\(subscription\.channel\)/);
   assert.match(summary, /Avtomatik yangilanadi/);
 });

@@ -13,6 +13,9 @@ const OPENAI_API_URL = "https://api.openai.com/v1/responses";
 const ACTIONS = ["create_request", "open_requests", "open_agents", "open_deals", "open_chat", "open_profile", "open_feed", "none"] as const;
 const REQUEST_CATEGORIES = ["Aviachipta", "Tur paket", "Mehmonxona", "Transfer", "Gid", "Viza", "Boshqa"] as const;
 const CURRENCIES = ["USD", "UZS", "EUR", "RUB"] as const;
+const HISTORY_MAX_ITEMS = 12;
+const HISTORY_MAX_CHARS = 32000;
+const REQUEST_BODY_MAX_BYTES = 128000;
 
 type AiAction = (typeof ACTIONS)[number];
 type RequestCategory = (typeof REQUEST_CATEGORIES)[number];
@@ -62,14 +65,23 @@ function sanitizeHistory(history: HistoryItem[] | undefined) {
   if (!Array.isArray(history)) return [];
   let length = 0;
   const kept: { role: "user" | "assistant"; content: string }[] = [];
-  for (const item of history.slice(-18).reverse()) {
+  for (const item of history.slice(-HISTORY_MAX_ITEMS).reverse()) {
     if (!item || !["user", "assistant"].includes(item.role || "") || typeof item.content !== "string") continue;
     const content = item.content.trim();
-    if (!content || content.length > 80000 || length + content.length > 80000) break;
+    if (!content || content.length > HISTORY_MAX_CHARS || length + content.length > HISTORY_MAX_CHARS) break;
     length += content.length;
     kept.unshift({ role: item.role as "user" | "assistant", content });
   }
   return kept;
+}
+
+function sanitizeStats(stats: Record<string, number> | undefined) {
+  if (!stats || typeof stats !== "object" || Array.isArray(stats)) return {};
+  return Object.fromEntries(
+    Object.entries(stats)
+      .filter(([key, value]) => key.length <= 64 && Number.isFinite(value))
+      .slice(0, 20),
+  );
 }
 
 function sanitizeList(value: unknown, maxItems = 8) {
@@ -128,7 +140,7 @@ async function readBody(request: NextRequest): Promise<RequestBody> {
     const { done, value } = await reader.read();
     if (done) break;
     size += value.byteLength;
-    if (size > 512000) { await reader.cancel(); throw new AiRouteError("INPUT_TOO_LARGE", 413); }
+    if (size > REQUEST_BODY_MAX_BYTES) { await reader.cancel(); throw new AiRouteError("INPUT_TOO_LARGE", 413); }
     chunks.push(value);
   }
   try {
@@ -172,10 +184,11 @@ async function handlePost(request: NextRequest, signal: AbortSignal) {
   }
 
   const model = process.env.OPENAI_AI_MODEL || "gpt-6-luna";
-  const stats = body.context?.stats || {};
+  const stats = sanitizeStats(body.context?.stats);
   const today = tashkentDate();
   const locale = body.context?.locale === "ru" ? "ru" : "uz";
   const conversationTitle = typeof body.context?.conversationTitle === "string" ? body.context.conversationTitle.slice(0, 120) : "";
+  const currentPath = typeof body.context?.path === "string" ? body.context.path.slice(0, 200) : "/dashboard";
   const history = sanitizeHistory(body.history);
   const formDraft = body.context?.formDraft ? readRequestDraft(JSON.stringify(body.context.formDraft)) : undefined;
 
@@ -224,7 +237,7 @@ async function handlePost(request: NextRequest, signal: AbortSignal) {
     "For mutations such as publishing a request, accepting an offer, changing a deal, sending a message, editing profile data or deleting anything, only prepare or guide; do not claim the mutation happened.",
     "Choose at most one navigation action from the allowed action list. When request drafts are returned, action should normally be none because the UI will render a button for every draft.",
     `Current dashboard stats: ${JSON.stringify(stats)}.`,
-    `Current path: ${body.context?.path || "/dashboard"}.`,
+    `Current path: ${currentPath}.`,
   ].filter(Boolean).join("\n");
 
   const response = await fetch(OPENAI_API_URL, {

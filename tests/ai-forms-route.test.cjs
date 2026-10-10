@@ -78,9 +78,25 @@ test('a large multi-draft history entry is kept whole rather than truncated mid-
   assert.equal((await POST(request({ message: 'Nonushta qo‘shing', history: [{ role: 'assistant', content: history }] }))).status, 200);
   assert.ok(JSON.parse(calls.at(-1).options.body).input.some(item => item.content === history));
 });
+test('AI input budgets old history and noisy dashboard context before the paid call', async () => {
+  const calls = mockProvider(completed());
+  const history = Array.from({ length: 14 }, (_, index) => ({ role: index % 2 ? 'assistant' : 'user', content: `history-${index}-` + 'x'.repeat(2990) }));
+  const stats = Object.fromEntries(Array.from({ length: 40 }, (_, index) => [`metric${index}`, index]));
+  const res = await POST(request({ message: 'Davom et', history, context: { stats, path: '/' + 'a'.repeat(500) } }));
+  assert.equal(res.status, 200);
+  const upstream = JSON.parse(calls.at(-1).options.body);
+  const keptHistory = upstream.input.filter(item => typeof item.content === 'string' && item.content.startsWith('history-'));
+  assert.equal(keptHistory.length, 10);
+  assert.ok(keptHistory.reduce((sum, item) => sum + item.content.length, 0) <= 32000);
+  assert.ok(keptHistory[0].content.startsWith('history-4-'));
+  const system = upstream.input.find(item => item.role === 'system').content;
+  assert.match(system, /"metric19":19/);
+  assert.doesNotMatch(system, /"metric20":20/);
+  assert.ok(system.match(/Current path: ([^.]+)\./)[1].length <= 200);
+});
 test('malformed and oversized bodies cannot trigger paid calls', async () => {
   const calls = mockProvider(completed());
   assert.equal((await POST(request(null))).status, 400);
-  assert.equal((await POST(request({ message: 'x'.repeat(512001) }))).status, 413);
+  assert.equal((await POST(request({ message: 'x'.repeat(128001) }))).status, 413);
   assert.ok(!calls.some(call => call.url.startsWith('https://api.openai.com')));
 });
