@@ -57,35 +57,24 @@ test('redirect-only dynamic pages stay out of Vercel SSR functions', () => {
 
 test('client-only detail pages stay off Vercel SSR functions', () => {
   const config = read('next.config.ts');
-  assert.match(config, /source: "\/admin\/agents\/:id"/);
-  assert.match(config, /destination: "\/admin-agent-detail"/);
-  assert.equal(exists('app/admin/agents/[id]/page.tsx'), false);
-  assert.equal(exists('app/admin-agent-detail/page.tsx'), true);
-
-  assert.match(config, /source: "\/agents\/:id"/);
-  assert.match(config, /destination: "\/agent-detail"/);
-  assert.equal(exists('app/agents/[id]/page.tsx'), false);
-  assert.equal(exists('app/agent-detail/page.tsx'), true);
-
-  assert.match(config, /source: "\/deals\/:id"/);
-  assert.match(config, /destination: "\/deal-detail"/);
-  assert.equal(exists('app/deals/[id]/page.tsx'), false);
-  assert.equal(exists('app/deal-detail/page.tsx'), true);
-
-  assert.match(config, /source: "\/requests\/:id\/edit"/);
-  assert.match(config, /destination: "\/request-edit"/);
-  assert.equal(exists('app/requests/[id]/edit/page.tsx'), false);
-  assert.equal(exists('app/request-edit/page.tsx'), true);
-
-  assert.match(config, /source: "\/requests\/:id"/);
-  assert.match(config, /destination: "\/request-detail"/);
-  assert.equal(exists('app/requests/[id]/page.tsx'), false);
-  assert.equal(exists('app/request-detail/page.tsx'), true);
-
-  assert.match(config, /source: "\/supplier-request\/:token"/);
-  assert.match(config, /destination: "\/supplier-invite"/);
-  assert.equal(exists('app/supplier-request/[token]/page.tsx'), false);
-  assert.equal(exists('app/supplier-invite/page.tsx'), true);
+  const staticShells = [
+    ['/admin/agents/:id', '/admin-agent-detail', 'app/admin/agents/[id]/page.tsx', 'app/admin-agent-detail/page.tsx'],
+    ['/agents/:id', '/agent-detail', 'app/agents/[id]/page.tsx', 'app/agent-detail/page.tsx'],
+    ['/deals/:id', '/deal-detail', 'app/deals/[id]/page.tsx', 'app/deal-detail/page.tsx'],
+    ['/feed/:postId/edit', '/feed-post-edit', 'app/feed/[postId]/edit/page.tsx', 'app/feed-post-edit/page.tsx'],
+    ['/feed/:postId', '/feed-post', 'app/feed/[postId]/page.tsx', 'app/feed-post/page.tsx'],
+    ['/messenger/:roomId/settings', '/messenger-room-settings', 'app/messenger/[roomId]/settings/page.tsx', 'app/messenger-room-settings/page.tsx'],
+    ['/messenger/:roomId', '/messenger-room', 'app/messenger/[roomId]/page.tsx', 'app/messenger-room/page.tsx'],
+    ['/requests/:id/edit', '/request-edit', 'app/requests/[id]/edit/page.tsx', 'app/request-edit/page.tsx'],
+    ['/requests/:id', '/request-detail', 'app/requests/[id]/page.tsx', 'app/request-detail/page.tsx'],
+    ['/supplier-request/:token', '/supplier-invite', 'app/supplier-request/[token]/page.tsx', 'app/supplier-invite/page.tsx'],
+  ];
+  for (const [source, destination, dynamicPage, staticPage] of staticShells) {
+    assert.ok(config.includes(`source: "${source}"`), `${source} rewrite missing`);
+    assert.ok(config.includes(`destination: "${destination}"`), `${destination} rewrite missing`);
+    assert.equal(exists(dynamicPage), false, `${dynamicPage} would create another Vercel SSR Function`);
+    assert.equal(exists(staticPage), true, `${staticPage} static shell missing`);
+  }
 });
 
 test('Vercel Web Analytics and custom events stay disabled on Hobby', () => {
