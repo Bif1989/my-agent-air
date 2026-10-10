@@ -16,6 +16,12 @@ function routeFiles(dir) {
   });
 }
 
+function maxDuration(relativePath) {
+  const match = read(relativePath).match(/export const maxDuration\s*=\s*(\d+)/);
+  assert.ok(match, `${relativePath} must declare maxDuration`);
+  return Number(match[1]);
+}
+
 test('Vercel Node API surface stays consolidated', () => {
   const routes = routeFiles(path.join(root, 'app/api')).sort();
   assert.deepEqual(routes, [
@@ -51,6 +57,18 @@ test('only main deploys and documentation-only changes can skip Vercel builds', 
   assert.match(config, /"main"\s*:\s*true/);
   assert.match(config, /VERCEL_GIT_PREVIOUS_SHA/);
   assert.match(config, /git diff --quiet/);
+});
+
+test('Hobby uses one Tokyo function region close to the Supabase database', () => {
+  const config = read('vercel.json');
+  assert.match(config, /"regions"\s*:\s*\[\s*"hnd1"\s*\]/);
+});
+
+test('server functions keep bounded execution windows', () => {
+  assert.ok(maxDuration('app/api/auth/[action]/route.ts') <= 20);
+  assert.ok(maxDuration('app/api/supplier-outreach/[action]/route.ts') <= 15);
+  assert.ok(maxDuration('app/api/ai/transcribe/route.ts') <= 30);
+  assert.ok(maxDuration('app/api/ai/route.ts') <= 60);
 });
 
 test('production smoke has no hourly cron schedule', () => {
