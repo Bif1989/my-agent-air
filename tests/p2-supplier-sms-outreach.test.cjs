@@ -8,7 +8,7 @@ function read(relativePath) {
 }
 
 test('supplier SMS route authenticates the actor and validates the invite token', () => {
-  const route = read('app/api/supplier-outreach/send-sms/route.ts');
+  const route = read('lib/server/supplier-outreach-actions/send-sms.ts');
   assert.match(route, /auth\.getUser\(accessToken\)/);
   assert.match(route, /createHash\("sha256"\)\.update\(token\)/);
   assert.match(route, /timingSafeEqual/);
@@ -17,7 +17,7 @@ test('supplier SMS route authenticates the actor and validates the invite token'
 });
 
 test('supplier SMS route uses Eskiz server-side credentials and multipart API calls', () => {
-  const route = read('app/api/supplier-outreach/send-sms/route.ts');
+  const route = read('lib/server/supplier-outreach-actions/send-sms.ts');
   assert.match(route, /process\.env\.ESKIZ_EMAIL/);
   assert.match(route, /process\.env\.ESKIZ_PASSWORD/);
   assert.match(route, /process\.env\.ESKIZ_FROM/);
@@ -29,7 +29,7 @@ test('supplier SMS route uses Eskiz server-side credentials and multipart API ca
 });
 
 test('supplier SMS route normalizes Uzbekistan numbers and records provider state', () => {
-  const route = read('app/api/supplier-outreach/send-sms/route.ts');
+  const route = read('lib/server/supplier-outreach-actions/send-sms.ts');
   assert.match(route, /\^998\\d\{9\}\$/);
   assert.match(route, /return `998\$\{digits\}`/);
   assert.match(route, /status: "sent"/);
@@ -39,7 +39,7 @@ test('supplier SMS route normalizes Uzbekistan numbers and records provider stat
 });
 
 test('supplier SMS uses the short branded public link and support phone', () => {
-  const route = read('app/api/supplier-outreach/send-sms/route.ts');
+  const route = read('lib/server/supplier-outreach-actions/send-sms.ts');
   const shortRoute = read('app/s/[token]/page.tsx');
   assert.match(route, /new URL\(`\/s\/\$\{encodeURIComponent\(token\)\}`/);
   assert.match(route, /My Agent Air B2B turizm platformasi/);
