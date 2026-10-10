@@ -28,11 +28,13 @@ test('Geo Tender matching scores supplier service areas against request destinat
   assert.match(migration, /revoke all on function app_private\.refresh_request_targets_internal\(uuid,integer\) from public, anon, authenticated/);
 });
 
-test('legacy assistant and messages routes redirect to current product surfaces', () => {
+test('legacy assistant and messages routes redirect without a dynamic legacy function', () => {
   const assistant = read('app/assistant/page.tsx');
   const messages = read('app/messages/page.tsx');
-  const dealMessage = read('app/messages/[dealId]/page.tsx');
+  const config = read('next.config.ts');
   assert.match(assistant, /redirect\("\/dashboard"\)/);
   assert.match(messages, /redirect\("\/deals"\)/);
-  assert.match(dealMessage, /redirect\(`\/deals\/\$\{encodeURIComponent\(dealId\)\}#chat`\)/);
+  assert.match(config, /source: "\/messages\/:dealId"/);
+  assert.match(config, /destination: "\/deals\/:dealId#chat"/);
+  assert.equal(fs.existsSync(path.join(process.cwd(), 'app/messages/[dealId]/page.tsx')), false);
 });
