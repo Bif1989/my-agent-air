@@ -8,6 +8,7 @@ function read(relativePath) {
 }
 
 const migration = 'supabase/migrations/20261010202000_p6_deal_reviews_trust.sql';
+const denyMigration = 'supabase/migrations/20261010202200_p6_review_direct_access_deny.sql';
 
 test('P6 reviews require a completed real deal and the reviewer must be a participant', () => {
   const sql = read(migration);
@@ -20,6 +21,7 @@ test('P6 reviews require a completed real deal and the reviewer must be a partic
 
 test('P6 review and trust tables cannot be directly edited by authenticated clients', () => {
   const sql = read(migration);
+  const deny = read(denyMigration);
   assert.match(sql, /alter table public\.deal_reviews enable row level security/);
   assert.match(sql, /alter table public\.profile_trust_stats enable row level security/);
   assert.match(sql, /revoke all on table public\.deal_reviews from anon, authenticated/);
@@ -27,6 +29,9 @@ test('P6 review and trust tables cannot be directly edited by authenticated clie
   assert.match(sql, /grant select on table public\.profile_trust_stats to authenticated/);
   assert.doesNotMatch(sql, /grant .*insert.*deal_reviews to authenticated/i);
   assert.doesNotMatch(sql, /grant .*update.*profile_trust_stats to authenticated/i);
+  assert.match(deny, /create policy deal_reviews_no_direct_access/);
+  assert.match(deny, /using \(false\)/);
+  assert.match(deny, /with check \(false\)/);
 });
 
 test('P6 trust score is bounded and refreshed by completed deals, reviews and verification', () => {
