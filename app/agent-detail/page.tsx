@@ -121,7 +121,7 @@ export default function AgentDetailPage() {
         <section className="mt-8 rounded-2xl border border-amber-100 bg-gradient-to-r from-amber-50 to-blue-50 p-5">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">P6 · Trust Score</p>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Trust Score</p>
               <p className="mt-2 text-3xl font-bold text-[#0b1f3a]">{score}<span className="text-base font-semibold text-slate-400"> / 100</span></p>
               <p className="mt-1 text-sm font-semibold text-slate-600">{trustLabel(score)}</p>
             </div>

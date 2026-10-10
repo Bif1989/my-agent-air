@@ -78,7 +78,7 @@ export default function BillingSubscriptionPage() {
     <div className="mx-auto max-w-5xl">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-600">P5 · Unlimited</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-600">Unlimited</p>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#0b1f3a] sm:text-4xl">{t("Oylik abonent tarifi", "Месячный абонентский тариф")}</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{t("Abonent faol bo‘lgan davrda yakunlangan bitimlar sonidan qat’i nazar qo‘shimcha per-deal komissiya hisoblanmaydi.", "Пока абонентский тариф активен, дополнительная комиссия за каждую завершённую сделку не начисляется независимо от количества сделок.")}</p>
         </div>

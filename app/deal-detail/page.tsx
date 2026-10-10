@@ -5,7 +5,7 @@ import DealChat from "@/app/deals/deal-chat";
 import DealReviewPanel from "@/app/deals/deal-review-panel";
 import Link from "next/link";
 import RequestServiceDetails from "@/app/requests/request-service-details";
-import { hasAirTravel } from "@/lib/service-request";
+import { hasAirTravel, requestTitle } from "@/lib/service-request";
 import { useEffect, useState } from "react";
 import AppShell from "@/app/dashboard/components/app-shell";
 import { getStoredSession, type AuthSession } from "@/lib/supabase-auth";
@@ -106,11 +106,12 @@ function DealDetail({ id }: { id: string }) {
 
   return <AppShell session={session} activePath="/deals">
     {isLoading && <div className="flex min-h-[60vh] items-center justify-center text-sm text-slate-500">Bitim yuklanmoqda...</div>}
-    {!isLoading && error && <div role="alert" className="mx-auto max-w-4xl rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">{error}<Link href="/deals" className="ml-2 font-semibold underline">Bitimlarga qaytish</Link></div>}
+    {!isLoading && error && !deal && <div role="alert" className="mx-auto max-w-4xl rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">{error}<Link href="/deals" className="ml-2 font-semibold underline">Bitimlarga qaytish</Link></div>}
     {!isLoading && deal && <div className="mx-auto max-w-5xl">
       <Link href="/deals" className="text-sm font-semibold text-blue-600 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">← Bitimlarga qaytish</Link>
-      <header className="mt-7 flex flex-col justify-between gap-5 sm:flex-row sm:items-start"><div><p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-600">Bitim tafsilotlari</p><h1 className="mt-3 break-all text-2xl font-semibold tracking-tight text-[#0b1f3a] sm:text-3xl">{deal.id}</h1><p className="mt-2 text-sm text-slate-500">Yaratilgan: {formatDate(deal.created_at)}</p></div><span className={`w-fit rounded-full px-4 py-2 text-sm font-semibold ${statusClasses[deal.status]}`}>{statusLabels[deal.status]}</span></header>
+      <header className="mt-7 flex flex-col justify-between gap-5 sm:flex-row sm:items-start"><div><p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-600">Bitim tafsilotlari</p><h1 className="mt-3 break-all text-2xl font-semibold tracking-tight text-[#0b1f3a] sm:text-3xl">{deal.request ? requestTitle(deal.request) : "Hamkor bilan bitim"}</h1><p className="mt-2 text-sm text-slate-500">Yaratilgan: {formatDate(deal.created_at)}</p></div><span className={`w-fit rounded-full px-4 py-2 text-sm font-semibold ${statusClasses[deal.status]}`}>{statusLabels[deal.status]}</span></header>
       {message && <p role="status" className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</p>}{error && <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+      <nav aria-label="Bitim bo‘yicha keyingi qadam" className="mt-5 flex flex-wrap gap-3"><a href="#chat" className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white">Hamkor bilan yozishish</a>{deal.status === "completed" && <a href="#review" className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">Hamkorni baholash</a>}</nav>
       {actions.length > 0 && <section className="mt-6 rounded-2xl border border-blue-100 bg-blue-50/60 p-5"><h2 className="font-semibold text-[#0b1f3a]">Keyingi qadam</h2><div className="mt-4 flex flex-col gap-3 sm:flex-row">{actions.map((action) => <button key={action.status} type="button" disabled={isWorking} onClick={() => handleStatusChange(action.status, action.label)} className={`rounded-xl px-4 py-3 text-sm font-semibold transition focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-50 ${action.tone} ${action.tone.includes("border") ? "bg-white" : "text-white"}`}>{isWorking ? "Bajarilmoqda..." : action.label}</button>)}</div></section>}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.35fr_0.8fr]">
@@ -124,7 +125,7 @@ function DealDetail({ id }: { id: string }) {
         </aside>
       </div>
 
-      <DealReviewPanel dealId={deal.id} partnerName={partnerDisplayName} completed={deal.status === "completed"} />
+      <DealReviewPanel key={`${deal.id}:${deal.status}`} dealId={deal.id} partnerName={partnerDisplayName} completed={deal.status === "completed"} />
 
       <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><h2 className="text-lg font-semibold text-[#0b1f3a]">Faoliyat tarixi</h2>{activity.length ? <div className="mt-5 space-y-4">{activity.map((item) => <div key={item.id} className="border-l-2 border-blue-200 pl-4"><p className="font-semibold text-[#0b1f3a]">{eventLabels[item.event_type] || item.event_type}</p><p className="mt-1 text-xs text-slate-400">{formatDate(item.created_at)} · {profileName(item.actor)}</p>{activityValue(item) && <p className="mt-2 text-sm text-slate-600">{activityValue(item)}</p>}</div>)}</div> : <p className="mt-4 text-sm text-slate-500">Hozircha faoliyat yozuvlari yo‘q.</p>}</section>
       {session && <DealChat key={deal.id} deal={deal} userId={session.user.id} />}

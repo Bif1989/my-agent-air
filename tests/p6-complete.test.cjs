@@ -75,5 +75,5 @@ test('P6 review panel follows current Uzbek/Russian UI language', () => {
   assert.match(panel, /useUiSettings/);
   assert.match(panel, /Оцените партнёра/);
   assert.match(panel, /Hamkorni baholang/);
-  assert.match(panel, /P6 · Trust Score/);
+  assert.match(panel, /Hamkor reytingi/);
 });

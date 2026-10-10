@@ -8,6 +8,9 @@ const tr = (isRu: boolean, uz: string, ru: string) => isRu ? ru : uz;
 
 export default function DealReviewPanel({ dealId, partnerName, completed }: { dealId: string; partnerName: string; completed: boolean }) {
   const { isRu } = useUiSettings();
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const [saved, setSaved] = useState(false);
   const [review, setReview] = useState<DealReview | null>(null);
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
@@ -21,22 +24,21 @@ export default function DealReviewPanel({ dealId, partnerName, completed }: { de
     const timeoutId = window.setTimeout(() => {
       void getMyDealReview(dealId)
         .then((loaded) => { if (active) setReview(loaded); })
-        .catch(() => { if (active) setError(tr(isRu, "Baholash holatini yuklab bo‘lmadi.", "Не удалось загрузить состояние отзыва.")); })
+        .catch(() => { if (active) setLoadFailed(true); })
         .finally(() => { if (active) setLoading(false); });
     }, 0);
     return () => { active = false; window.clearTimeout(timeoutId); };
-  }, [completed, dealId, isRu]);
+  }, [completed, dealId, attempt]);
 
   if (!completed) return null;
 
   async function submit() {
-    if (rating < 1 || rating > 5 || submitting || review) return;
+    if (rating < 1 || rating > 5 || submitting || review || saved || loading || loadFailed) return;
     setSubmitting(true);
     setError("");
     try {
       await submitDealReview(dealId, rating, comment);
-      const loaded = await getMyDealReview(dealId);
-      setReview(loaded);
+      setSaved(true);
       setComment("");
     } catch (reason: unknown) {
       const message = reason instanceof Error ? reason.message : "";
@@ -48,10 +50,10 @@ export default function DealReviewPanel({ dealId, partnerName, completed }: { de
     }
   }
 
-  return <section className="mt-6 rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-6 shadow-sm">
+  return <section id="review" className="mt-6 rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-6 shadow-sm">
     <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">P6 · Trust Score</p>
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">{tr(isRu, "Hamkor reytingi", "Рейтинг партнёра")}</p>
         <h2 className="mt-2 text-lg font-semibold text-[#0b1f3a]">{tr(isRu, "Hamkorni baholang", "Оцените партнёра")}</h2>
         <p className="mt-1 text-sm text-slate-600">{tr(isRu, `${partnerName} bilan yakunlangan real bitim asosida baho bering.`, `Оцените ${partnerName} по итогам реальной завершённой сделки.`)}</p>
       </div>
@@ -59,6 +61,8 @@ export default function DealReviewPanel({ dealId, partnerName, completed }: { de
     </div>
 
     {loading && <div className="mt-5 h-24 animate-pulse rounded-xl bg-white" />}
+    {saved && <p role="status" className="mt-5 font-semibold text-emerald-700">{tr(isRu, "Rahmat! Bahoyingiz saqlandi.", "Спасибо! Ваш отзыв сохранён.")}</p>}
+    {!loading && loadFailed && <div role="alert" className="mt-5 text-sm text-red-700"><p>{tr(isRu, "Baholash holatini yuklab bo‘lmadi.", "Не удалось загрузить состояние отзыва.")}</p><button type="button" onClick={() => { setLoading(true); setLoadFailed(false); setAttempt((value) => value + 1); }} className="mt-2 rounded-lg px-3 py-2 font-semibold underline">{tr(isRu, "Qayta yuklash", "Повторить")}</button></div>}
     {!loading && review && <div className="mt-5 rounded-2xl border border-emerald-100 bg-white p-5">
       <p className="text-sm font-semibold text-emerald-700">{tr(isRu, "Bahoyingiz saqlandi", "Ваш отзыв сохранён")}</p>
       <p className="mt-2 text-2xl tracking-wider text-amber-500" aria-label={tr(isRu, `${review.rating} yulduz`, `${review.rating} звёзд`)}>{"★".repeat(review.rating)}<span className="text-slate-200">{"★".repeat(5 - review.rating)}</span></p>
@@ -66,7 +70,7 @@ export default function DealReviewPanel({ dealId, partnerName, completed }: { de
       <p className="mt-3 text-xs text-slate-400">{tr(isRu, "Bir bitim uchun bir marta baho beriladi. Bu reyting hamkorning Trust Score ko‘rsatkichiga kiradi.", "По одной сделке можно оставить один отзыв. Оценка учитывается в Trust Score партнёра.")}</p>
     </div>}
 
-    {!loading && !review && <div className="mt-5">
+    {!loading && !loadFailed && !review && !saved && <div className="mt-5">
       <div className="flex flex-wrap items-center gap-2" role="group" aria-label={tr(isRu, "Hamkor bahosi", "Оценка партнёра")}>
         {[1, 2, 3, 4, 5].map((value) => <button key={value} type="button" onClick={() => setRating(value)} aria-label={tr(isRu, `${value} yulduz`, `${value} звёзд`)} aria-pressed={rating === value} className={`rounded-xl px-2 py-1 text-3xl transition focus:outline-none focus:ring-4 focus:ring-amber-100 ${value <= rating ? "text-amber-500" : "text-slate-200 hover:text-amber-300"}`}>★</button>)}
         <span className="ml-2 text-sm font-semibold text-slate-600">{rating ? `${rating}/5` : tr(isRu, "Bahoni tanlang", "Выберите оценку")}</span>

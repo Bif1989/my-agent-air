@@ -91,7 +91,7 @@ export function getOffersForRequest(requestId: string) {
 export function getMyOfferForRequest(requestId: string) {
   const agentId = currentUserId();
   return dedupeInFlight("offers:request-mine", `${agentId}:${requestId}`, async () => {
-    const response = await authenticatedSupabaseFetch(`offers?select=${encode(OFFER_FIELDS)}&request_id=eq.${encode(requestId)}&agent_id=eq.${encode(agentId)}&limit=1`);
+    const response = await authenticatedSupabaseFetch(`offers?select=${encode(OFFER_FIELDS)}&request_id=eq.${encode(requestId)}&agent_id=eq.${encode(agentId)}&status=neq.withdrawn&order=created_at.desc&limit=1`);
     const rows = await readJson<OfferRecord[]>(response);
     return rows[0] || null;
   });

@@ -124,3 +124,20 @@ export async function updateDealStatus(id: string, status: DealStatus) {
   });
   return response.json() as Promise<DealRecord | DealRecord[]>;
 }
+
+// Keep the request-to-deal handoff scoped to the signed-in participant and RLS.
+export function getDealForRequest(requestId: string) {
+  const userId = currentUserId();
+  return dedupeInFlight("deals:request", `${userId}:${requestId}`, async () => {
+    const params = new URLSearchParams({
+      select: "id",
+      request_id: `eq.${requestId}`,
+      or: `(buyer_id.eq.${userId},seller_id.eq.${userId})`,
+      order: "created_at.desc",
+      limit: "1",
+    });
+    const response = await authenticatedSupabaseFetch(`deals?${params}`);
+    const rows = await readJson<{ id: string }[]>(response);
+    return rows[0] || null;
+  });
+}
