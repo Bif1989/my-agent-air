@@ -71,7 +71,7 @@ test('legacy VK auto-login surface is removed', () => {
 test('password login is routed through a persistent server-side brute-force limiter', () => {
   const login = read('app/login/page.tsx');
   const client = read('lib/password-auth.ts');
-  const route = read('app/api/auth/password/route.ts');
+  const route = read('lib/server/auth-actions/password.ts');
   const migration = read('supabase/migrations/20261008140500_p1_auth_login_rate_limit.sql');
 
   assert.match(login, /signInProtected/);
@@ -93,8 +93,8 @@ test('signup and password recovery are routed through persistent send quotas', (
   const register = read('app/register/page.tsx');
   const forgot = read('app/forgot-password/page.tsx');
   const client = read('lib/public-auth.ts');
-  const signup = read('app/api/auth/signup/route.ts');
-  const recover = read('app/api/auth/recover/route.ts');
+  const signup = read('lib/server/auth-actions/signup.ts');
+  const recover = read('lib/server/auth-actions/recover.ts');
   const migration = read('supabase/migrations/20261008152500_p1_auth_action_rate_limit.sql');
 
   assert.match(register, /signUpProtected/);
@@ -117,8 +117,8 @@ test('signup and password recovery are routed through persistent send quotas', (
 test('signup OTP verification and resend use protected server-side quotas', () => {
   const register = read('app/register/page.tsx');
   const client = read('lib/public-auth.ts');
-  const verify = read('app/api/auth/verify-signup/route.ts');
-  const resend = read('app/api/auth/resend-signup/route.ts');
+  const verify = read('lib/server/auth-actions/verify-signup.ts');
+  const resend = read('lib/server/auth-actions/resend-signup.ts');
 
   assert.match(register, /verifySignupOtpProtected/);
   assert.match(register, /resendSignupOtpProtected/);
