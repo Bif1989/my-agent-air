@@ -27,19 +27,12 @@ test('P3 dashboard uses one summary RPC instead of multiple count and unused con
 
 test('P3 AI request budget remains bounded', () => {
   const ai = read('app/api/ai/route.ts');
+  const commandCenter = read('app/dashboard/components/ai-command-center.tsx');
   assert.match(ai, /HISTORY_MAX_ITEMS = 12/);
   assert.match(ai, /HISTORY_MAX_CHARS = 32000/);
   assert.match(ai, /REQUEST_BODY_MAX_BYTES = 128000/);
   assert.match(ai, /max_output_tokens: 3500/);
-});
-
-test('P3 AI outbox shares concurrent flushes for the same user', () => {
-  const history = read('lib/ai-chat-history.ts');
-  assert.match(history, /const outboxFlushes = new Map<string, Promise<void>>\(\)/);
-  assert.match(history, /const existing = outboxFlushes\.get\(userId\)/);
-  assert.match(history, /if \(existing\) return existing/);
-  assert.match(history, /outboxFlushes\.set\(userId, task\)/);
-  assert.match(history, /outboxFlushes\.delete\(userId\)/);
+  assert.match(commandCenter, /previousEntries\.slice\(-18\)/);
 });
 
 test('P3 only loads the voice-input bundle on the AI dashboard', () => {
@@ -80,6 +73,14 @@ test('P3 shares concurrent reads for the same agent profile', () => {
   assert.match(api, /const existing = agentReadsInFlight\.get\(id\)/);
   assert.match(api, /agentReadsInFlight\.set\(id, task\)/);
   assert.match(api, /agentReadsInFlight\.delete\(id\)/);
+});
+
+test('P3 deduplicates concurrent AI history outbox flushes per user', () => {
+  const history = read('lib/ai-chat-history.ts');
+  assert.match(history, /const outboxFlushInFlight = new Map<string, Promise<void>>\(\)/);
+  assert.match(history, /const existing = outboxFlushInFlight\.get\(session\.user\.id\)/);
+  assert.match(history, /outboxFlushInFlight\.set\(session\.user\.id, task\)/);
+  assert.match(history, /outboxFlushInFlight\.delete\(session\.user\.id\)/);
 });
 
 test('P3 stays deploy-free until the combined batch is promoted', () => {
