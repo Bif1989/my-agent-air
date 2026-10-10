@@ -50,8 +50,14 @@ test('supplier SMS uses the short branded public link and a routing-layer redire
   assert.equal(fs.existsSync(path.join(process.cwd(), 'app/s/[token]/page.tsx')), false);
 });
 
-test('public supplier landing explains the platform in Uzbek and Russian and promotes registration', () => {
-  const page = read('app/supplier-request/[token]/page.tsx');
+test('public supplier landing is a static shell with the same public URL', () => {
+  const page = read('app/supplier-invite/page.tsx');
+  const config = read('next.config.ts');
+  assert.match(config, /source: "\/supplier-request\/:token"/);
+  assert.match(config, /destination: "\/supplier-invite"/);
+  assert.equal(fs.existsSync(path.join(process.cwd(), 'app/supplier-request/[token]/page.tsx')), false);
+  assert.match(page, /supplierTokenFromLocation/);
+  assert.match(page, /getPublicSupplierInvite\(pathToken\)/);
   assert.match(page, /Turizm biznesi uchun B2B platforma/);
   assert.match(page, /B2B-платформа для туристического бизнеса/);
   assert.match(page, /Bepul ro‘yxatdan o‘tish/);
