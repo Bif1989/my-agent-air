@@ -31,6 +31,7 @@ const REQUEST_ATTEMPTS = 3;
 const READ_ATTEMPTS = 2;
 const REQUEST_TIMEOUT_MS = 8_000;
 const OUTBOX_LIMIT = 100;
+const outboxFlushes = new Map<string, Promise<void>>();
 
 function headers(session: AuthSession) {
   return {
@@ -146,24 +147,35 @@ async function persistMessage(session: AuthSession, row: PendingAiMessage) {
   });
 }
 
-export async function flushAiChatOutbox(session: AuthSession) {
-  const pending = readOutbox(session.user.id);
-  for (const row of pending) {
-    try {
-      const response = await persistMessage(session, row);
-      if (response.ok) {
-        removeFromOutbox(session.user.id, row.id);
-        continue;
+export function flushAiChatOutbox(session: AuthSession) {
+  const userId = session.user.id;
+  const existing = outboxFlushes.get(userId);
+  if (existing) return existing;
+
+  const task = (async () => {
+    const pending = readOutbox(userId);
+    for (const row of pending) {
+      try {
+        const response = await persistMessage(session, row);
+        if (response.ok) {
+          removeFromOutbox(userId, row.id);
+          continue;
+        }
+        if (response.status >= 400 && response.status < 500 && ![401, 403, 429].includes(response.status)) {
+          removeFromOutbox(userId, row.id);
+          continue;
+        }
+        break;
+      } catch {
+        break;
       }
-      if (response.status >= 400 && response.status < 500 && ![401, 403, 429].includes(response.status)) {
-        removeFromOutbox(session.user.id, row.id);
-        continue;
-      }
-      break;
-    } catch {
-      break;
     }
-  }
+  })().finally(() => {
+    outboxFlushes.delete(userId);
+  });
+
+  outboxFlushes.set(userId, task);
+  return task;
 }
 
 export async function listAiConversations(session: AuthSession): Promise<AiConversation[]> {
