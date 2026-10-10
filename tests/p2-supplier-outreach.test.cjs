@@ -8,7 +8,7 @@ function read(relativePath) {
 }
 
 test('supplier outreach route authenticates the actor and validates the invite token before email delivery', () => {
-  const route = read('app/api/supplier-outreach/send/route.ts');
+  const route = read('lib/server/supplier-outreach-actions/send.ts');
   assert.match(route, /auth\.getUser\(accessToken\)/);
   assert.match(route, /createHash\("sha256"\)\.update\(token\)/);
   assert.match(route, /timingSafeEqual/);
@@ -17,7 +17,7 @@ test('supplier outreach route authenticates the actor and validates the invite t
 });
 
 test('supplier outreach uses Resend idempotently and records sent or failed state server-side', () => {
-  const route = read('app/api/supplier-outreach/send/route.ts');
+  const route = read('lib/server/supplier-outreach-actions/send.ts');
   assert.match(route, /process\.env\.RESEND_API_KEY/);
   assert.match(route, /https:\/\/api\.resend\.com\/emails/);
   assert.match(route, /"Idempotency-Key"/);
