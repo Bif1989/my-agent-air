@@ -45,6 +45,24 @@ test('legacy per-action function routes stay removed', () => {
   ]) assert.equal(exists(route), false, `${route} would create another Vercel Function`);
 });
 
+test('redirect-only dynamic pages stay out of Vercel SSR functions', () => {
+  const config = read('next.config.ts');
+  assert.match(config, /source: "\/messages\/:dealId"/);
+  assert.match(config, /destination: "\/deals\/:dealId#chat"/);
+  assert.match(config, /source: "\/s\/:token"/);
+  assert.match(config, /destination: "\/supplier-request\/:token"/);
+  assert.equal(exists('app/messages/[dealId]/page.tsx'), false);
+  assert.equal(exists('app/s/[token]/page.tsx'), false);
+});
+
+test('client-only agent detail stays off Vercel SSR functions', () => {
+  const config = read('next.config.ts');
+  assert.match(config, /source: "\/agents\/:id"/);
+  assert.match(config, /destination: "\/agent-detail"/);
+  assert.equal(exists('app/agents/[id]/page.tsx'), false);
+  assert.equal(exists('app/agent-detail/page.tsx'), true);
+});
+
 test('Vercel Web Analytics and custom events stay disabled on Hobby', () => {
   const layout = read('app/layout.tsx');
   const register = read('app/register/page.tsx');
