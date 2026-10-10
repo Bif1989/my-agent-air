@@ -53,3 +53,18 @@ test('P4 deduplicates high-frequency authenticated reads without caching mutatio
   assert.doesNotMatch(notificationPreferences, /dedupeInFlight\("profile:update-notification-preferences"/);
   assert.doesNotMatch(aiHistory, /dedupeInFlight\("ai-history:(save|rename|delete)/);
 });
+
+test('P4 memoizes validated session parsing while still observing cross-tab storage changes', () => {
+  const auth = read('lib/supabase-auth.ts');
+  assert.match(auth, /let cachedSessionRaw: string \| null \| undefined/);
+  assert.match(auth, /let cachedSession: AuthSession \| null = null/);
+  assert.match(auth, /const storedSession = localStorage\.getItem\(SESSION_STORAGE_KEY\)/);
+  assert.match(auth, /if \(storedSession === cachedSessionRaw\) return cachedSession/);
+  assert.match(auth, /cachedSessionRaw = storedSession/);
+  assert.match(auth, /cachedSession = validated/);
+  assert.match(auth, /cachedSessionRaw = raw/);
+  assert.match(auth, /cachedSession = session/);
+  assert.match(auth, /cachedSessionRaw = null/);
+  assert.match(auth, /cachedSession = null/);
+  assert.match(auth, /if \(token === cachedClaimsToken\) return cachedClaims/);
+});
