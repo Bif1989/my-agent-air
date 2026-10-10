@@ -44,6 +44,24 @@ export type DealFeeRecord = {
   } | null;
 };
 
+export type BillingSettlementRecord = {
+  id: string;
+  user_id: string;
+  kind: "payment" | "waiver";
+  amount: number;
+  currency: "UZS";
+  method: "cash" | "bank_transfer" | "click" | "payme" | "other" | "waiver";
+  reference: string | null;
+  note: string | null;
+  recorded_by: string;
+  created_at: string;
+  items: Array<{
+    id: string;
+    fee_id: string;
+    amount: number;
+  }> | null;
+};
+
 async function readJson<T>(response: Response) {
   return response.json() as Promise<T>;
 }
@@ -80,5 +98,21 @@ export function listMyDealFees(limit = 50) {
     });
     const response = await authenticatedSupabaseFetch(`deal_fees?${params}`);
     return readJson<DealFeeRecord[]>(response);
+  });
+}
+
+export function listMyBillingSettlements(limit = 50) {
+  const userId = currentUserId();
+  const safeLimit = Math.min(100, Math.max(1, limit));
+  return dedupeInFlight("billing:settlements", `${userId}:${safeLimit}`, async () => {
+    const select = "id,user_id,kind,amount,currency,method,reference,note,recorded_by,created_at,items:billing_settlement_items(id,fee_id,amount)";
+    const params = new URLSearchParams({
+      select,
+      user_id: `eq.${userId}`,
+      order: "created_at.desc,id.desc",
+      limit: String(safeLimit),
+    });
+    const response = await authenticatedSupabaseFetch(`billing_settlements?${params}`);
+    return readJson<BillingSettlementRecord[]>(response);
   });
 }

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import AppShell from "@/app/dashboard/components/app-shell";
 import { getStoredSession, type AuthSession } from "@/lib/supabase-auth";
 import { useUiSettings } from "@/lib/ui-settings";
-import { getBillingSummary, listMyDealFees, type BillingSummary, type DealFeeRecord } from "@/app/billing/billing-api";
+import { getBillingSummary, listMyBillingSettlements, listMyDealFees, type BillingSettlementRecord, type BillingSummary, type DealFeeRecord } from "@/app/billing/billing-api";
 
 const ROLE_PRICES = [
   ["Turagent / Aviakassa", 5000],
@@ -53,11 +53,25 @@ function routeTitle(fee: DealFeeRecord, isRu: boolean) {
   return route || request.category || (isRu ? "Сделка" : "Bitim");
 }
 
+function settlementMethod(settlement: BillingSettlementRecord, isRu: boolean) {
+  if (settlement.kind === "waiver") return isRu ? "Списание" : "Hisobdan chiqarish";
+  const labels: Record<string, [string, string]> = {
+    cash: ["Naqd", "Наличные"],
+    bank_transfer: ["Bank o‘tkazma", "Банковский перевод"],
+    click: ["Click", "Click"],
+    payme: ["Payme", "Payme"],
+    other: ["Boshqa", "Другое"],
+  };
+  const label = labels[settlement.method] || [settlement.method, settlement.method];
+  return isRu ? label[1] : label[0];
+}
+
 export default function BillingPage() {
   const { isRu } = useUiSettings();
   const [session, setSession] = useState<AuthSession | null>(null);
   const [summary, setSummary] = useState<BillingSummary | null>(null);
   const [fees, setFees] = useState<DealFeeRecord[]>([]);
+  const [settlements, setSettlements] = useState<BillingSettlementRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -74,11 +88,12 @@ export default function BillingPage() {
     const timeoutId = window.setTimeout(() => {
       setLoading(true);
       setError("");
-      Promise.all([getBillingSummary(), listMyDealFees()])
-        .then(([nextSummary, nextFees]) => {
+      Promise.all([getBillingSummary(), listMyDealFees(), listMyBillingSettlements()])
+        .then(([nextSummary, nextFees, nextSettlements]) => {
           if (!active) return;
           setSummary(nextSummary);
           setFees(nextFees);
+          setSettlements(nextSettlements);
         })
         .catch((loadError: unknown) => {
           if (loadError instanceof Error && (loadError.message === "AUTH_SESSION_EXPIRED" || loadError.message === "AUTH_SESSION_MISSING")) {
@@ -157,7 +172,7 @@ export default function BillingPage() {
           {fees.length === 0 ? <div className="mt-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">{t("Hozircha hisob yozuvlari yo‘q.", "Пока начислений нет.")}</div> : <div className="mt-5 space-y-3">{fees.map((fee) => {
             const free = fee.status === "free";
             const paid = fee.status === "paid";
-            const statusText = free ? t("Bepul", "Бесплатно") : paid ? t("To‘langan", "Оплачено") : fee.status === "waived" ? t("Bekor qilingan", "Списано") : t("To‘lanishi kerak", "К оплате");
+            const statusText = free ? t("Bepul", "Бесплатно") : paid ? t("To‘langan", "Оплачено") : fee.status === "waived" ? t("Hisobdan chiqarilgan", "Списано") : t("To‘lanishi kerak", "К оплате");
             const statusClass = free ? "bg-emerald-50 text-emerald-700" : paid ? "bg-blue-50 text-blue-700" : fee.status === "waived" ? "bg-slate-100 text-slate-600" : "bg-amber-50 text-amber-700";
             return <article key={fee.id} className="rounded-2xl border border-slate-200 p-4 sm:p-5">
               <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
@@ -166,6 +181,12 @@ export default function BillingPage() {
               </div>
             </article>;
           })}</div>}
+        </section>
+
+        <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.14em] text-blue-500">{t("Settlement tarixi", "История оплат")}</p><h2 className="mt-2 text-xl font-semibold text-[#0b1f3a]">{t("To‘lov va hisobdan chiqarishlar", "Оплаты и списания")}</h2></div><span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600">{settlements.length}</span></div>
+          {settlements.length === 0 ? <div className="mt-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">{t("Hozircha to‘lov qaydlari yo‘q.", "Пока нет записей об оплате.")}</div> : <div className="mt-5 space-y-3">{settlements.map((settlement) => <article key={settlement.id} className="rounded-2xl border border-slate-200 p-4 sm:p-5"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div><p className="font-semibold text-[#0b1f3a]">{settlement.kind === "payment" ? t("To‘lov", "Оплата") : t("Hisobdan chiqarish", "Списание")}</p><p className="mt-1 text-xs text-slate-500">{formatDate(settlement.created_at, isRu)} · {settlementMethod(settlement, isRu)} · {settlement.items?.length || 0} {t("ta bitim", "сделок")}</p>{settlement.reference && <p className="mt-2 text-xs text-slate-500">Ref: {settlement.reference}</p>}{settlement.note && <p className="mt-1 text-xs text-slate-500">{settlement.note}</p>}</div><div className="text-left sm:text-right"><span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${settlement.kind === "payment" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{settlement.kind === "payment" ? t("Tasdiqlangan", "Подтверждено") : t("Waiver", "Списание")}</span><p className="mt-2 font-bold text-[#0b1f3a]">{money(settlement.amount, settlement.currency)}</p></div></div></article>)}</div>}
+          <p className="mt-4 text-xs leading-5 text-slate-500">{t("Hozirgi bosqichda to‘lov admin tomonidan tasdiqlanadi. Qarzdorlik platformaga kirishni avtomatik bloklamaydi.", "На текущем этапе оплату подтверждает администратор. Задолженность автоматически не блокирует доступ к платформе.")}</p>
         </section>
       </>}
     </div>
