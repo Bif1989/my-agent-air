@@ -1,3 +1,4 @@
+import { dedupeInFlight } from "@/lib/inflight-dedupe";
 import { authenticatedSupabaseFetch, getStoredSession } from "@/lib/supabase-auth";
 
 export type PostType = "post" | "announcement";
@@ -104,30 +105,38 @@ function currentUserId() {
   return session.user.id;
 }
 
-export async function listFeedPosts(options: ListFeedOptions = {}) {
-  const response = await authenticatedSupabaseFetch("rpc/list_feed_posts", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      p_category: options.category || null,
-      p_post_type: options.postType || null,
-      p_search: options.search?.trim() || null,
-      p_limit: options.limit ?? 20,
-      p_offset: options.offset ?? 0,
-    }),
+export function listFeedPosts(options: ListFeedOptions = {}) {
+  const userId = currentUserId();
+  const body = JSON.stringify({
+    p_category: options.category || null,
+    p_post_type: options.postType || null,
+    p_search: options.search?.trim() || null,
+    p_limit: options.limit ?? 20,
+    p_offset: options.offset ?? 0,
   });
-  return readJson<FeedPost[]>(response);
+
+  return dedupeInFlight("feed:list", `${userId}:${body}`, async () => {
+    const response = await authenticatedSupabaseFetch("rpc/list_feed_posts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+    return readJson<FeedPost[]>(response);
+  });
 }
 
-export async function getFeedPost(postId: string) {
-  const response = await authenticatedSupabaseFetch("rpc/get_feed_post", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ p_post_id: postId }),
+export function getFeedPost(postId: string) {
+  const userId = currentUserId();
+  return dedupeInFlight("feed:get", `${userId}:${postId}`, async () => {
+    const response = await authenticatedSupabaseFetch("rpc/get_feed_post", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ p_post_id: postId }),
+    });
+    const data = await readJson<FeedPost[] | FeedPost | null>(response);
+    if (Array.isArray(data)) return data[0] || null;
+    return data;
   });
-  const data = await readJson<FeedPost[] | FeedPost | null>(response);
-  if (Array.isArray(data)) return data[0] || null;
-  return data;
 }
 
 export async function createPost(payload: PostPayload) {
@@ -170,9 +179,12 @@ export async function deletePostSoft(postId: string) {
   return rows[0] || null;
 }
 
-export async function listComments(postId: string) {
-  const response = await authenticatedSupabaseFetch(`post_comments?select=${encode(COMMENT_SELECT)}&post_id=eq.${encode(postId)}&deleted_at=is.null&order=created_at.asc`);
-  return readJson<FeedComment[]>(response);
+export function listComments(postId: string) {
+  const userId = currentUserId();
+  return dedupeInFlight("feed:comments", `${userId}:${postId}`, async () => {
+    const response = await authenticatedSupabaseFetch(`post_comments?select=${encode(COMMENT_SELECT)}&post_id=eq.${encode(postId)}&deleted_at=is.null&order=created_at.asc`);
+    return readJson<FeedComment[]>(response);
+  });
 }
 
 export async function createComment(postId: string, body: string) {
