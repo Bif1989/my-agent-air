@@ -46,6 +46,10 @@ const nextConfig: NextConfig = {
         destination: "/deal-detail",
       },
       {
+        source: "/requests/:id/edit",
+        destination: "/request-edit",
+      },
+      {
         source: "/requests/:id",
         destination: "/request-detail",
       },
