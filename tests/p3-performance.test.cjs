@@ -31,3 +31,28 @@ test('P3 AI request budget remains bounded', () => {
   assert.match(ai, /HISTORY_MAX_CHARS = 32000/);
   assert.match(ai, /REQUEST_BODY_MAX_BYTES = 128000/);
 });
+
+test('P3 only loads the voice-input bundle on the AI dashboard', () => {
+  const layout = read('app/layout.tsx');
+  const loader = read('app/components/ai-voice-loader.tsx');
+  assert.match(layout, /AiVoiceLoader/);
+  assert.doesNotMatch(layout, /from "@\/app\/components\/ai-voice-input"/);
+  assert.match(loader, /dynamic\(\(\) => import\("@\/app\/components\/ai-voice-input"\)/);
+  assert.match(loader, /ssr: false/);
+  assert.match(loader, /pathname !== "\/dashboard"/);
+});
+
+test('P3 realtime session upkeep avoids hidden or offline background work', () => {
+  const realtime = read('lib/supabase-realtime.ts');
+  assert.match(realtime, /document\.visibilityState !== "visible" \|\| !navigator\.onLine/);
+  assert.match(realtime, /setInterval\(refreshIfNeeded, 60_000\)/);
+  assert.doesNotMatch(realtime, /setInterval\(refreshIfNeeded, 30_000\)/);
+});
+
+test('P3 Geo Tender client fetches only fields used by the UI', () => {
+  const api = read('app/requests/request-targeting-api.ts');
+  assert.match(api, /const SELECT_FIELDS = "request_id,profile_id,match_score,distance_km,match_reason,status"/);
+  assert.doesNotMatch(api, /SELECT_FIELDS = .*capability_id/);
+  assert.doesNotMatch(api, /SELECT_FIELDS = .*created_at/);
+  assert.doesNotMatch(api, /SELECT_FIELDS = .*updated_at/);
+});
