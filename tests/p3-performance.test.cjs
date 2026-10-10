@@ -30,6 +30,7 @@ test('P3 AI request budget remains bounded', () => {
   assert.match(ai, /HISTORY_MAX_ITEMS = 12/);
   assert.match(ai, /HISTORY_MAX_CHARS = 32000/);
   assert.match(ai, /REQUEST_BODY_MAX_BYTES = 128000/);
+  assert.match(ai, /max_output_tokens: 3500/);
 });
 
 test('P3 only loads the voice-input bundle on the AI dashboard', () => {
