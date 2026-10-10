@@ -21,12 +21,13 @@ test('P6 Geo-Tender uses trust as a bounded quality signal', () => {
   assert.match(sql, /'completed_deals',completed_deals/);
 });
 
-test('P6 refresh preserves terminal declined/responded history', () => {
+test('P6 refresh preserves durable Geo-Tender engagement history', () => {
   const sql = read(migration);
-  const preserves = sql.match(/status not in \('responded','declined'\)/g) || [];
-  assert.ok(preserves.length >= 3, 'expected terminal-state guards in cleanup and upsert');
-  assert.doesNotMatch(sql, /status<>'responded'/);
-  assert.doesNotMatch(sql, /status <> 'responded'/);
+  assert.match(sql, /where request_id=p_request_id and status='matched'/);
+  assert.match(sql, /where request_id=p_request_id and status not in \('responded','declined'\)/);
+  assert.match(sql, /where public\.request_targets\.status not in \('responded','declined'\)/);
+  assert.doesNotMatch(sql, /delete from public\.request_targets\s+where request_id=p_request_id and status<>'responded'/);
+  assert.match(sql, /notified\/viewed\/responded\/declined history is preserved/);
 });
 
 test('P6 deduplicates multiple supplier capabilities before upsert', () => {
@@ -42,8 +43,8 @@ test('P6 agent ranking RPC is security invoker and trust-first', () => {
   assert.match(sql, /security invoker/);
   assert.match(sql, /p_sort text default 'trust_desc'/);
   assert.match(sql, /coalesce\(ts\.trust_score,30\).*desc nulls last/);
-  assert.match(sql, /revoke all on function public\.list_agents_with_trust[\s\S]*from public, anon/);
-  assert.match(sql, /grant execute on function public\.list_agents_with_trust[\s\S]*to authenticated, service_role/);
+  assert.match(sql, /revoke all on function public\.list_agents_with_trust[\s\S]*from public, anon, service_role/);
+  assert.match(sql, /grant execute on function public\.list_agents_with_trust[\s\S]*to authenticated/);
 });
 
 test('P6 agent directory uses one trust-aware RPC and defaults to reliable partners', () => {
