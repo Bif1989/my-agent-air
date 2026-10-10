@@ -38,6 +38,10 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
+        source: "/admin/agents/:id",
+        destination: "/admin-agent-detail",
+      },
+      {
         source: "/agents/:id",
         destination: "/agent-detail",
       },
