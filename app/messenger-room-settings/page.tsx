@@ -39,7 +39,7 @@ export default function GroupSettingsPage() {
     }
     const roomId = roomIdFromLocation();
     if (!roomId) {
-      setError("Guruh identifikatori topilmadi.");
+      router.replace("/messenger");
       return;
     }
 
