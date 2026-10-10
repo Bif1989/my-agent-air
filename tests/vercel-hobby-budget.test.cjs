@@ -55,12 +55,17 @@ test('redirect-only dynamic pages stay out of Vercel SSR functions', () => {
   assert.equal(exists('app/s/[token]/page.tsx'), false);
 });
 
-test('client-only agent detail stays off Vercel SSR functions', () => {
+test('client-only detail pages stay off Vercel SSR functions', () => {
   const config = read('next.config.ts');
   assert.match(config, /source: "\/agents\/:id"/);
   assert.match(config, /destination: "\/agent-detail"/);
   assert.equal(exists('app/agents/[id]/page.tsx'), false);
   assert.equal(exists('app/agent-detail/page.tsx'), true);
+
+  assert.match(config, /source: "\/supplier-request\/:token"/);
+  assert.match(config, /destination: "\/supplier-invite"/);
+  assert.equal(exists('app/supplier-request/[token]/page.tsx'), false);
+  assert.equal(exists('app/supplier-invite/page.tsx'), true);
 });
 
 test('Vercel Web Analytics and custom events stay disabled on Hobby', () => {
