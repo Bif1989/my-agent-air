@@ -33,6 +33,15 @@ test('P3 AI request budget remains bounded', () => {
   assert.match(ai, /max_output_tokens: 3500/);
 });
 
+test('P3 AI outbox shares concurrent flushes for the same user', () => {
+  const history = read('lib/ai-chat-history.ts');
+  assert.match(history, /const outboxFlushes = new Map<string, Promise<void>>\(\)/);
+  assert.match(history, /const existing = outboxFlushes\.get\(userId\)/);
+  assert.match(history, /if \(existing\) return existing/);
+  assert.match(history, /outboxFlushes\.set\(userId, task\)/);
+  assert.match(history, /outboxFlushes\.delete\(userId\)/);
+});
+
 test('P3 only loads the voice-input bundle on the AI dashboard', () => {
   const layout = read('app/layout.tsx');
   const loader = read('app/components/ai-voice-loader.tsx');
