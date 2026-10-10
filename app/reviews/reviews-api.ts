@@ -21,6 +21,15 @@ export type AgentReview = {
   reviewer_company: string | null;
 };
 
+export type AgentTrustStats = {
+  user_id: string;
+  review_count: number;
+  rating_average: number | null;
+  completed_deals: number;
+  trust_score: number;
+  updated_at: string;
+};
+
 function currentUserId() {
   const session = getStoredSession();
   if (!session) throw new Error("AUTH_SESSION_MISSING");
@@ -52,6 +61,20 @@ export async function submitDealReview(dealId: string, rating: number, comment: 
     body: JSON.stringify({ p_deal_id: dealId, p_rating: rating, p_comment: comment.trim() || null }),
   });
   return readJson<string>(response);
+}
+
+export async function getAgentTrustStats(userId: string) {
+  const viewerId = currentUserId();
+  return dedupeInFlight("reviews:trust", `${viewerId}:${userId}`, async () => {
+    const params = new URLSearchParams({
+      select: "user_id,review_count,rating_average,completed_deals,trust_score,updated_at",
+      user_id: `eq.${userId}`,
+      limit: "1",
+    });
+    const response = await authenticatedSupabaseFetch(`profile_trust_stats?${params}`);
+    const rows = await readJson<AgentTrustStats[]>(response);
+    return rows[0] || null;
+  });
 }
 
 export async function listAgentReviews(userId: string, limit = 10) {
