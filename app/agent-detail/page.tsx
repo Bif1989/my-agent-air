@@ -33,7 +33,6 @@ function agentIdFromLocation() {
 
 export default function AgentDetailPage() {
   const router = useRouter();
-  const [agentId, setAgentId] = useState("");
   const [session, setSession] = useState<AuthSession | null>(null);
   const [agent, setAgent] = useState<AgentRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -41,19 +40,15 @@ export default function AgentDetailPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setAgentId(agentIdFromLocation());
-  }, []);
-
-  useEffect(() => {
-    if (!agentId) {
-      if (typeof window !== "undefined" && window.location.pathname.startsWith("/agents/")) return;
-      setError("Agent identifikatori topilmadi.");
-      setIsLoading(false);
-      return;
-    }
-    const storedSession = getStoredSession();
-    if (!storedSession) { window.location.replace("/login"); return; }
     const timeoutId = window.setTimeout(() => {
+      const agentId = agentIdFromLocation();
+      if (!agentId) {
+        setError("Agent identifikatori topilmadi.");
+        setIsLoading(false);
+        return;
+      }
+      const storedSession = getStoredSession();
+      if (!storedSession) { window.location.replace("/login"); return; }
       setSession(storedSession);
       getAgent(agentId).then((loadedAgent) => {
         if (!loadedAgent) throw new Error("AGENT_NOT_FOUND");
@@ -64,7 +59,7 @@ export default function AgentDetailPage() {
       }).finally(() => setIsLoading(false));
     }, 0);
     return () => window.clearTimeout(timeoutId);
-  }, [agentId]);
+  }, []);
 
   const isCurrentUser = Boolean(agent && session && agent.id === session.user.id);
   async function openChat() {
