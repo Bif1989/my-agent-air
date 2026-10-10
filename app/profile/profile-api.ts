@@ -1,3 +1,4 @@
+import { dedupeInFlight } from "@/lib/inflight-dedupe";
 import { authenticatedSupabaseFetch, getStoredSession } from "@/lib/supabase-auth";
 
 export const PROFILE_FIELDS = "id,full_name,avatar_url,company_name,city,phone,agent_type,services,is_verified,is_active,registration_status,role,created_at,updated_at";
@@ -35,10 +36,13 @@ function currentUserId() {
   return session.user.id;
 }
 
-export async function getCurrentProfile() {
-  const response = await authenticatedSupabaseFetch(`profiles?select=${encodeURIComponent(PROFILE_FIELDS)}&id=eq.${encodeURIComponent(currentUserId())}&limit=1`);
-  const rows = await response.json() as ProfileRecord[];
-  return rows[0] || null;
+export function getCurrentProfile() {
+  const userId = currentUserId();
+  return dedupeInFlight("profile:current", userId, async () => {
+    const response = await authenticatedSupabaseFetch(`profiles?select=${encodeURIComponent(PROFILE_FIELDS)}&id=eq.${encodeURIComponent(userId)}&limit=1`);
+    const rows = await response.json() as ProfileRecord[];
+    return rows[0] || null;
+  });
 }
 
 export async function updateCurrentProfile(profile: EditableProfile) {
