@@ -24,6 +24,7 @@ test('P4 deduplicates high-frequency authenticated reads without caching mutatio
   const feed = read('app/feed/feed-api.ts');
   const offers = read('app/offers/offers-api.ts');
   const profile = read('app/profile/profile-api.ts');
+  const notificationPreferences = read('app/profile/notification-preferences-api.ts');
 
   assert.match(requests, /dedupeInFlight\("requests:list"/);
   assert.match(requests, /dedupeInFlight\("requests:get"/);
@@ -39,10 +40,12 @@ test('P4 deduplicates high-frequency authenticated reads without caching mutatio
   assert.match(offers, /dedupeInFlight\("offers:get"/);
   assert.match(offers, /dedupeInFlight\("offers:request"/);
   assert.match(profile, /dedupeInFlight\("profile:current"/);
+  assert.match(notificationPreferences, /dedupeInFlight\("profile:notification-preferences"/);
 
   assert.doesNotMatch(requests, /dedupeInFlight\("requests:(create|update|delete)/);
   assert.doesNotMatch(deals, /dedupeInFlight\("deals:update/);
   assert.doesNotMatch(feed, /dedupeInFlight\("feed:(create|update|delete|reaction)/);
   assert.doesNotMatch(offers, /dedupeInFlight\("offers:(create|update|withdraw|accept)/);
   assert.doesNotMatch(profile, /dedupeInFlight\("profile:update/);
+  assert.doesNotMatch(notificationPreferences, /dedupeInFlight\("profile:update-notification-preferences"/);
 });
