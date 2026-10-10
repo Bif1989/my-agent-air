@@ -5,7 +5,6 @@ export type RequestTargetStatus = "matched" | "notified" | "viewed" | "responded
 export type RequestTargetRecord = {
   request_id: string;
   profile_id: string;
-  capability_id: string | null;
   match_score: number;
   distance_km: number | null;
   match_reason: {
@@ -18,11 +17,9 @@ export type RequestTargetRecord = {
     city?: string | null;
   };
   status: RequestTargetStatus;
-  created_at: string;
-  updated_at: string;
 };
 
-const SELECT_FIELDS = "request_id,profile_id,capability_id,match_score,distance_km,match_reason,status,created_at,updated_at";
+const SELECT_FIELDS = "request_id,profile_id,match_score,distance_km,match_reason,status";
 
 export async function listRequestTargets(requestId: string) {
   const params = new URLSearchParams({

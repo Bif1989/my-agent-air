@@ -297,7 +297,7 @@ async function handlePost(request: NextRequest, signal: AbortSignal) {
           },
         },
       },
-      max_output_tokens: 6000,
+      max_output_tokens: 3500,
     }),
     cache: "no-store", signal,
   });

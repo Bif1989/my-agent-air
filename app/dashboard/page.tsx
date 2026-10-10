@@ -21,7 +21,7 @@ export default function DashboardPage() {
     if (!storedSession) { window.location.replace("/login"); return; }
     const timeoutId = window.setTimeout(() => {
       setSession(storedSession);
-      loadDashboardData(storedSession.user.id)
+      loadDashboardData()
         .then(setData)
         .catch((requestError: unknown) => {
           if (requestError instanceof Error && (requestError.message === "AUTH_SESSION_EXPIRED" || requestError.message === "AUTH_SESSION_MISSING")) {

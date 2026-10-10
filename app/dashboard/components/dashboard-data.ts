@@ -1,6 +1,4 @@
-import { requestFreshnessFilter } from "@/lib/request-freshness";
 import { authenticatedSupabaseFetch } from "@/lib/supabase-auth";
-import { listFeedPosts, type FeedPost } from "@/app/feed/feed-api";
 
 export type Profile = {
   full_name: string | null;
@@ -11,39 +9,32 @@ export type Profile = {
   is_verified: boolean | null;
 };
 
-export type RequestItem = {
-  id: string;
-  origin: string | null;
-  destination: string | null;
-  travel_date: string | null;
-  adults: number | null;
-  children: number | null;
-  infants: number | null;
-  category: string | null;
-  status: string | null;
-  created_at: string;
+type DashboardStats = {
+  openRequests: number;
+  offers: number;
+  deals: number;
+  agents: number;
 };
 
-async function readJson<T>(path: string) {
-  const response = await authenticatedSupabaseFetch(path);
-  return response.json() as Promise<T>;
-}
+type DashboardSummary = {
+  profile: Profile | null;
+  stats: DashboardStats;
+};
 
-async function countRows(path: string) {
-  const response = await authenticatedSupabaseFetch(path, { method: "HEAD", headers: { Prefer: "count=exact" } });
-  const contentRange = response.headers.get("content-range") || "*/0";
-  return Number(contentRange.split("/")[1]) || 0;
-}
-
-export async function loadDashboardData(userId: string) {
-  const [profileRows, requests, openRequests, offers, deals, agents, announcements] = await Promise.all([
-    readJson<Profile[]>(`profiles?select=full_name,company_name,city,phone,agent_type,is_verified&id=eq.${encodeURIComponent(userId)}&limit=1`),
-    readJson<RequestItem[]>(`requests?select=id,origin,destination,travel_date,adults,children,infants,category,status,created_at&status=eq.open&and=${encodeURIComponent("(" + requestFreshnessFilter("current") + ")")}&order=created_at.desc&limit=5`),
-    countRows(`requests?select=id&status=eq.open&and=${encodeURIComponent("(" + requestFreshnessFilter("current") + ")")}`),
-    countRows(`offers?select=id&agent_id=eq.${encodeURIComponent(userId)}`),
-    countRows("deals?select=id&status=in.(accepted,processing,issued)"),
-    countRows("profiles?select=id&is_active=eq.true"),
-    listFeedPosts({ postType: "announcement", limit: 3, offset: 0 }).catch(() => [] as FeedPost[]),
-  ]);
-  return { profile: profileRows[0] || null, requests, announcements, stats: { openRequests, offers, deals, agents } };
+export async function loadDashboardData() {
+  const response = await authenticatedSupabaseFetch("rpc/get_dashboard_summary", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  const summary = (await response.json()) as DashboardSummary;
+  return {
+    profile: summary.profile || null,
+    stats: {
+      openRequests: Number(summary.stats?.openRequests) || 0,
+      offers: Number(summary.stats?.offers) || 0,
+      deals: Number(summary.stats?.deals) || 0,
+      agents: Number(summary.stats?.agents) || 0,
+    },
+  };
 }

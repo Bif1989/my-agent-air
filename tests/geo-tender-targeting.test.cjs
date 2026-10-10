@@ -29,6 +29,17 @@ test('new targeted requests are matched automatically and marketplace visibility
   assert.match(source, /Agents can create own offers/);
 });
 
+test('P3 prefilters supplier types and avoids refreshes for non-matching request edits', () => {
+  const source = read('supabase/migrations/20261010154500_p3_geo_tender_matching_efficiency.sql');
+  assert.match(source, /v_capability_types text\[\]/);
+  assert.match(source, /c\.capability_type=any\(v_capability_types\)/);
+  assert.match(source, /when 'Mehmonxona' then array\['hotel','travel_agent','tour_operator'\]/);
+  assert.match(source, /when 'Transfer' then array\['transport','travel_agent','tour_operator'\]/);
+  assert.match(source, /new\.category is not distinct from old\.category/);
+  assert.match(source, /update of category,destination,destination_lat,destination_lng,adults,children,infants,budget,currency,distribution_mode,status/);
+  assert.doesNotMatch(source, /update of[^\n]*service_details/);
+});
+
 test('request push notifications use matched targets instead of broadcasting targeted requests', () => {
   const source = read('supabase/functions/push-dispatch/index.ts');
   assert.match(source, /distribution_mode/);

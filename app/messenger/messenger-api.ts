@@ -69,6 +69,7 @@ export type MessengerMessage = {
 };
 
 const MESSAGE_SELECT = "id,room_id,sender_id,message,message_type,reply_to_id,created_at,edited_at,deleted_at,sender:profiles!chat_messages_sender_id_fkey(id,full_name,company_name,avatar_url,is_verified)";
+let conversationsInFlight: Promise<MessengerConversation[]> | null = null;
 
 async function readJson<T>(response: Response) {
   return response.json() as Promise<T>;
@@ -85,12 +86,16 @@ function currentUserId() {
 }
 
 export async function listMessengerConversations() {
-  const response = await authenticatedSupabaseFetch("rpc/list_messenger_conversations", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({}),
-  });
-  return readJson<MessengerConversation[]>(response);
+  if (conversationsInFlight) return conversationsInFlight;
+  conversationsInFlight = (async () => {
+    const response = await authenticatedSupabaseFetch("rpc/list_messenger_conversations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    return readJson<MessengerConversation[]>(response);
+  })().finally(() => { conversationsInFlight = null; });
+  return conversationsInFlight;
 }
 
 export async function getPublicMessengerRoom() {
