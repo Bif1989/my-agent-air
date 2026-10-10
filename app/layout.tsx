@@ -4,7 +4,6 @@ import PwaSplash from "@/app/components/pwa-splash";
 import AiVoiceInput from "@/app/components/ai-voice-input";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
 import { UiSettingsProvider } from "@/lib/ui-settings";
 import "./globals.css";
 
@@ -63,7 +62,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <RecoveryRedirect />{children}
           <AiVoiceInput />
           <PwaInstall />
-          <Analytics />
         </UiSettingsProvider>
       </body>
     </html>
