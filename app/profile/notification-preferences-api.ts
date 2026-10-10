@@ -1,3 +1,4 @@
+import { dedupeInFlight } from "@/lib/inflight-dedupe";
 import { authenticatedSupabaseFetch, getStoredSession } from "@/lib/supabase-auth";
 
 export type NotificationPreferences = {
@@ -22,10 +23,13 @@ function currentUserId() {
   return session.user.id;
 }
 
-export async function getNotificationPreferences() {
-  const response = await authenticatedSupabaseFetch(`notification_preferences?select=${FIELDS}&user_id=eq.${encodeURIComponent(currentUserId())}&limit=1`);
-  const rows = await response.json() as NotificationPreferences[];
-  return rows[0] || DEFAULT_NOTIFICATION_PREFERENCES;
+export function getNotificationPreferences() {
+  const userId = currentUserId();
+  return dedupeInFlight("profile:notification-preferences", userId, async () => {
+    const response = await authenticatedSupabaseFetch(`notification_preferences?select=${FIELDS}&user_id=eq.${encodeURIComponent(userId)}&limit=1`);
+    const rows = await response.json() as NotificationPreferences[];
+    return rows[0] || DEFAULT_NOTIFICATION_PREFERENCES;
+  });
 }
 
 export async function updateNotificationPreferences(preferences: NotificationPreferences) {

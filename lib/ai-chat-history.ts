@@ -1,3 +1,4 @@
+import { dedupeInFlight } from "@/lib/inflight-dedupe";
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase-config";
 import type { AuthSession } from "@/lib/supabase-auth";
 
@@ -178,26 +179,28 @@ export function flushAiChatOutbox(session: AuthSession) {
   return task;
 }
 
-export async function listAiConversations(session: AuthSession): Promise<AiConversation[]> {
+export function listAiConversations(session: AuthSession): Promise<AiConversation[]> {
   void flushAiChatOutbox(session);
-  const all: AiConversation[] = [];
-  for (let offset = 0; ; offset += CONVERSATION_PAGE_SIZE) {
-    const params = new URLSearchParams({
-      select: "id,title,created_at,updated_at",
-      user_id: `eq.${session.user.id}`,
-      order: "updated_at.desc,id.desc",
-      limit: String(CONVERSATION_PAGE_SIZE),
-      offset: String(offset),
-    });
-    const response = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/ai_chat_conversations?${params.toString()}`, {
-      headers: headers(session),
-      cache: "no-store",
-    }, READ_ATTEMPTS);
-    if (!response.ok) throw new Error("AI chatlar ro‘yxati yuklanmadi.");
-    const rows = (await response.json()) as AiConversation[];
-    all.push(...rows);
-    if (rows.length < CONVERSATION_PAGE_SIZE) return all;
-  }
+  return dedupeInFlight("ai-history:conversations", session.user.id, async () => {
+    const all: AiConversation[] = [];
+    for (let offset = 0; ; offset += CONVERSATION_PAGE_SIZE) {
+      const params = new URLSearchParams({
+        select: "id,title,created_at,updated_at",
+        user_id: `eq.${session.user.id}`,
+        order: "updated_at.desc,id.desc",
+        limit: String(CONVERSATION_PAGE_SIZE),
+        offset: String(offset),
+      });
+      const response = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/ai_chat_conversations?${params.toString()}`, {
+        headers: headers(session),
+        cache: "no-store",
+      }, READ_ATTEMPTS);
+      if (!response.ok) throw new Error("AI chatlar ro‘yxati yuklanmadi.");
+      const rows = (await response.json()) as AiConversation[];
+      all.push(...rows);
+      if (rows.length < CONVERSATION_PAGE_SIZE) return all;
+    }
+  });
 }
 
 export async function createAiConversation(session: AuthSession, title = "Yangi chat"): Promise<AiConversation> {
@@ -252,22 +255,24 @@ export async function deleteAiConversations(session: AuthSession, conversationId
   }
 }
 
-export async function listAiChatHistory(session: AuthSession, conversationId: string): Promise<AiHistoryMessage[]> {
+export function listAiChatHistory(session: AuthSession, conversationId: string): Promise<AiHistoryMessage[]> {
   void flushAiChatOutbox(session);
-  const params = new URLSearchParams({
-    select: "id,role,content,actions,created_at,client_created_at",
-    user_id: `eq.${session.user.id}`,
-    conversation_id: `eq.${conversationId}`,
-    order: "client_created_at.desc,id.desc",
-    limit: String(VISIBLE_HISTORY_LIMIT),
+  return dedupeInFlight("ai-history:messages", `${session.user.id}:${conversationId}`, async () => {
+    const params = new URLSearchParams({
+      select: "id,role,content,actions,created_at,client_created_at",
+      user_id: `eq.${session.user.id}`,
+      conversation_id: `eq.${conversationId}`,
+      order: "client_created_at.desc,id.desc",
+      limit: String(VISIBLE_HISTORY_LIMIT),
+    });
+    const response = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/ai_chat_messages?${params.toString()}`, {
+      headers: headers(session),
+      cache: "no-store",
+    }, READ_ATTEMPTS);
+    if (!response.ok) throw new Error("AI tarixi yuklanmadi.");
+    const rows = (await response.json()) as (AiHistoryMessage & { client_created_at?: string })[];
+    return rows.reverse().map((row) => ({ ...row, actions: Array.isArray(row.actions) ? row.actions : [] }));
   });
-  const response = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/ai_chat_messages?${params.toString()}`, {
-    headers: headers(session),
-    cache: "no-store",
-  }, READ_ATTEMPTS);
-  if (!response.ok) throw new Error("AI tarixi yuklanmadi.");
-  const rows = (await response.json()) as (AiHistoryMessage & { client_created_at?: string })[];
-  return rows.reverse().map((row) => ({ ...row, actions: Array.isArray(row.actions) ? row.actions : [] }));
 }
 
 export async function saveAiChatMessage(
