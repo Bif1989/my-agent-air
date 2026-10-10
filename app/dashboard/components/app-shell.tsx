@@ -61,7 +61,7 @@ export default function AppShell({ children, session, activePath = "" }: { child
   const navigation = isRu ? [
     ["AI центр", "/dashboard"], ["Посты", "/feed"], ["Запросы", "/requests"], ["Агенты", "/agents"], ["Сделки", "/deals"], ["Чат", "/messenger"],
   ] as const : [
-    ["AI markaz", "/dashboard"], ["Postlar", "/feed"], ["So‘rovlar", "/requests"], ["Agentlar", "/agents"], ["Bitimlar", "/deals"], ["Chat", "/messenger"],
+    ["AI markaz", "/dashboard"], ["Postlar", "/feed"], ["So‘rovlar va takliflar", "/requests"], ["Agentlar", "/agents"], ["Bitimlar", "/deals"], ["Chat", "/messenger"],
   ] as const;
   const mobileNavigation = isRu ? [
     ["AI", "/dashboard", "✦"], ["Запрос", "/requests", "↔"], ["Агент", "/agents", "◎"], ["Сделка", "/deals", "◇"], ["Чат", "/messenger", "◌"],
