@@ -86,7 +86,7 @@ export default function AdminBillingSubscriptionsPage() {
 
   const selectedUser = users.find((user) => user.user_id === selectedUserId) || null;
   const selectedHistory = history.filter((item) => item.user_id === selectedUserId).slice(0, 12);
-  const hasCurrentSubscription = Boolean(selectedUser?.current_ends_at && new Date(selectedUser.current_ends_at).getTime() > Date.now());
+  const hasCurrentSubscription = Boolean(selectedUser?.current_ends_at);
 
   async function savePlan() {
     const priceAmount = Number(price);
@@ -150,7 +150,7 @@ export default function AdminBillingSubscriptionsPage() {
             <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.14em] text-blue-500">Foydalanuvchilar</p><h2 className="mt-1 text-xl font-semibold text-[#0b1f3a]">Abonent hisoblari</h2></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{users.length}</span></div>
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Ism, kompaniya, shahar..." className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" />
             <div className="mt-4 max-h-[650px] space-y-2 overflow-y-auto pr-1">{visibleUsers.map((user) => {
-              const active = Boolean(user.current_ends_at && new Date(user.current_ends_at).getTime() > Date.now());
+              const active = Boolean(user.current_ends_at);
               return <button key={user.user_id} type="button" onClick={() => setSelectedUserId(user.user_id)} className={`w-full rounded-2xl border p-4 text-left transition ${selectedUserId === user.user_id ? "border-blue-400 bg-blue-50" : "border-slate-200 hover:border-blue-200"}`}><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-[#0b1f3a]">{displayName(user)}</p><p className="mt-1 text-xs text-slate-500">{user.company_name || "Kompaniya ko‘rsatilmagan"} · {user.agent_type || "Agent"}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{active ? "Unlimited" : "Per-deal"}</span></div>{user.current_ends_at && <p className="mt-3 text-xs text-slate-500">Muddat: {date(user.current_ends_at)}</p>}</button>;
             })}</div>
           </section>
