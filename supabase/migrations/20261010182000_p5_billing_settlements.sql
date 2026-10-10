@@ -275,7 +275,9 @@ begin
     raise exception 'fee_selection_required' using errcode = '22023';
   end if;
 
-  v_expected_count := cardinality(array(select distinct x from unnest(p_fee_ids) as x));
+  select count(*)::integer
+  into v_expected_count
+  from (select distinct fee_id from unnest(p_fee_ids) as selected(fee_id)) unique_fees;
 
   perform 1
   from public.deal_fees f
