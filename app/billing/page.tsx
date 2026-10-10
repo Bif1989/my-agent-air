@@ -120,9 +120,9 @@ export default function BillingPage() {
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-600">P5 · Monetizatsiya</p>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#0b1f3a] sm:text-4xl">{t("Hisob va tarif", "Оплата и тариф")}</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{t("Har oy dastlabki 5 ta muvaffaqiyatli bitim bepul. 6-bitimdan boshlab xizmat haqi faoliyat turiga qarab hisoblanadi.", "Первые 5 успешных сделок каждого месяца бесплатны. Начиная с 6-й сделки комиссия зависит от типа деятельности.")}</p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{t("Per-deal tarifda har oy dastlabki 5 ta muvaffaqiyatli bitim bepul. Istasangiz Oylik Unlimited abonent tarifidan ham foydalanishingiz mumkin.", "На тарифе за сделку первые 5 успешных сделок каждого месяца бесплатны. Также доступен абонентский тариф Monthly Unlimited.")}</p>
         </div>
-        <Link href="/deals" className="w-fit rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:border-blue-300">← {t("Bitimlarga qaytish", "К сделкам")}</Link>
+        <div className="flex flex-wrap gap-2"><Link href="/billing/subscription" className="w-fit rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700">{t("Oylik Unlimited", "Monthly Unlimited")}</Link><Link href="/deals" className="w-fit rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:border-blue-300">← {t("Bitimlarga qaytish", "К сделкам")}</Link></div>
       </div>
 
       {loading && <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[1,2,3,4].map((item) => <div key={item} className="h-32 animate-pulse rounded-3xl bg-slate-200" />)}</div>}
