@@ -32,11 +32,12 @@ function listenForSessionChanges() {
   window.addEventListener(AUTH_SESSION_CHANGED_EVENT, syncSession);
   window.addEventListener("storage", (event) => { if (event.key === SESSION_STORAGE_KEY || event.key === null) syncSession(); });
   const refreshIfNeeded = () => {
+    if (document.visibilityState !== "visible" || !navigator.onLine) return;
     const session = getStoredSession();
     if (session && sessionNeedsRefresh(session)) void refreshSession().then(syncSession).catch(() => undefined);
     else syncSession();
   };
-  window.setInterval(refreshIfNeeded, 30_000);
+  window.setInterval(refreshIfNeeded, 60_000);
   window.addEventListener("online", refreshIfNeeded);
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshIfNeeded(); });
 }
