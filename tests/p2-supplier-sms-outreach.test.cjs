@@ -38,14 +38,16 @@ test('supplier SMS route normalizes Uzbekistan numbers and records provider stat
   assert.match(route, /configured: false/);
 });
 
-test('supplier SMS uses the short branded public link and support phone', () => {
+test('supplier SMS uses the short branded public link and a routing-layer redirect', () => {
   const route = read('lib/server/supplier-outreach-actions/send-sms.ts');
-  const shortRoute = read('app/s/[token]/page.tsx');
+  const config = read('next.config.ts');
   assert.match(route, /new URL\(`\/s\/\$\{encodeURIComponent\(token\)\}`/);
   assert.match(route, /My Agent Air B2B turizm platformasi/);
   assert.match(route, /Tel:\+998912924010/);
   assert.match(route, /providerMessage/);
-  assert.match(shortRoute, /redirect\(`\/supplier-request\/\$\{encodeURIComponent\(token\)\}`\)/);
+  assert.match(config, /source: "\/s\/:token"/);
+  assert.match(config, /destination: "\/supplier-request\/:token"/);
+  assert.equal(fs.existsSync(path.join(process.cwd(), 'app/s/[token]/page.tsx')), false);
 });
 
 test('public supplier landing explains the platform in Uzbek and Russian and promotes registration', () => {
