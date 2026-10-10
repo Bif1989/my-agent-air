@@ -3,8 +3,17 @@ name: Production Smoke
 on:
   push:
     branches: [main]
-  schedule:
-    - cron: "17 * * * *"
+    paths:
+      - "app/**"
+      - "lib/**"
+      - "data/**"
+      - "public/**"
+      - "package.json"
+      - "package-lock.json"
+      - "next.config.ts"
+      - "postcss.config.mjs"
+      - "tsconfig.json"
+      - "vercel.json"
   workflow_dispatch:
 
 permissions:
