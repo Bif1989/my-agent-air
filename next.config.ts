@@ -58,6 +58,14 @@ const nextConfig: NextConfig = {
         destination: "/feed-post",
       },
       {
+        source: "/messenger/:roomId/settings",
+        destination: "/messenger-room-settings",
+      },
+      {
+        source: "/messenger/:roomId",
+        destination: "/messenger-room",
+      },
+      {
         source: "/requests/:id/edit",
         destination: "/request-edit",
       },
