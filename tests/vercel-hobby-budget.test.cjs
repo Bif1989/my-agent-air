@@ -1,0 +1,59 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const root = process.cwd();
+function exists(relativePath) { return fs.existsSync(path.join(root, relativePath)); }
+function read(relativePath) { return fs.readFileSync(path.join(root, relativePath), 'utf8'); }
+
+function routeFiles(dir) {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return routeFiles(full);
+    return entry.isFile() && entry.name === 'route.ts' ? [path.relative(root, full).replaceAll('\\', '/')] : [];
+  });
+}
+
+test('Vercel Node API surface stays consolidated', () => {
+  const routes = routeFiles(path.join(root, 'app/api')).sort();
+  assert.deepEqual(routes, [
+    'app/api/ai/route.ts',
+    'app/api/ai/transcribe/route.ts',
+    'app/api/auth/[action]/route.ts',
+    'app/api/supplier-outreach/[action]/route.ts',
+  ]);
+});
+
+test('legacy per-action function routes stay removed', () => {
+  for (const route of [
+    'app/api/auth/password/route.ts',
+    'app/api/auth/recover/route.ts',
+    'app/api/auth/resend-signup/route.ts',
+    'app/api/auth/signup/route.ts',
+    'app/api/auth/update-password/route.ts',
+    'app/api/auth/verify-signup/route.ts',
+    'app/api/supplier-outreach/send/route.ts',
+    'app/api/supplier-outreach/send-sms/route.ts',
+  ]) assert.equal(exists(route), false, `${route} would create another Vercel Function`);
+});
+
+test('global Vercel Web Analytics stays disabled on Hobby', () => {
+  const layout = read('app/layout.tsx');
+  assert.doesNotMatch(layout, /@vercel\/analytics\/next/);
+  assert.doesNotMatch(layout, /<Analytics\s*\/>/);
+});
+
+test('only main deploys and documentation-only changes can skip Vercel builds', () => {
+  const config = read('vercel.json');
+  assert.match(config, /"\*\*"\s*:\s*false/);
+  assert.match(config, /"main"\s*:\s*true/);
+  assert.match(config, /VERCEL_GIT_PREVIOUS_SHA/);
+  assert.match(config, /git diff --quiet/);
+});
+
+test('production smoke has no hourly cron schedule', () => {
+  const workflow = read('.github/workflows/production-smoke.yml');
+  assert.doesNotMatch(workflow, /^\s*schedule\s*:/m);
+});
