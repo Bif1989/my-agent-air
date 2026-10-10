@@ -17,6 +17,7 @@ export type BillingSummary = {
 };
 
 export type DealFeeStatus = "free" | "pending" | "paid" | "waived";
+export type DealFeeBillingSource = "free_quota" | "per_deal" | "subscription";
 
 export type DealFeeRecord = {
   id: string;
@@ -27,6 +28,7 @@ export type DealFeeRecord = {
   currency: "UZS";
   monthly_sequence: number;
   status: DealFeeStatus;
+  billing_source: DealFeeBillingSource;
   period_start: string;
   deal_completed_at: string;
   created_at: string;
@@ -89,7 +91,7 @@ export function listMyDealFees(limit = 50) {
   const userId = currentUserId();
   const safeLimit = Math.min(100, Math.max(1, limit));
   return dedupeInFlight("billing:fees", `${userId}:${safeLimit}`, async () => {
-    const select = "id,deal_id,user_id,role_snapshot,fee_amount,currency,monthly_sequence,status,period_start,deal_completed_at,created_at,paid_at,deal:deals!deal_fees_deal_id_fkey(id,request_id,request:requests!deals_request_id_fkey(id,category,origin,destination,travel_date))";
+    const select = "id,deal_id,user_id,role_snapshot,fee_amount,currency,monthly_sequence,status,billing_source,period_start,deal_completed_at,created_at,paid_at,deal:deals!deal_fees_deal_id_fkey(id,request_id,request:requests!deals_request_id_fkey(id,category,origin,destination,travel_date))";
     const params = new URLSearchParams({
       select,
       user_id: `eq.${userId}`,
