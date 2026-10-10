@@ -75,10 +75,10 @@ test('P3 shares concurrent reads for the same agent profile', () => {
 
 test('P3 deduplicates concurrent AI history outbox flushes per user', () => {
   const history = read('lib/ai-chat-history.ts');
-  assert.match(history, /const outboxFlushInFlight = new Map<string, Promise<void>>\(\)/);
-  assert.match(history, /const existing = outboxFlushInFlight\.get\(session\.user\.id\)/);
-  assert.match(history, /outboxFlushInFlight\.set\(session\.user\.id, task\)/);
-  assert.match(history, /outboxFlushInFlight\.delete\(session\.user\.id\)/);
+  assert.match(history, /const outboxFlushes = new Map<string, Promise<void>>\(\)/);
+  assert.match(history, /const existing = outboxFlushes\.get\(userId\)/);
+  assert.match(history, /outboxFlushes\.set\(userId, task\)/);
+  assert.match(history, /outboxFlushes\.delete\(userId\)/);
 });
 
 test('P3 stays deploy-free until the combined batch is promoted', () => {
