@@ -59,11 +59,18 @@ export default function AdminBillingPage() {
   useEffect(() => {
     const stored = getStoredSession();
     if (!stored) { window.location.replace("/login"); return; }
-    setSession(stored);
-    getCurrentProfile().then(async (profile) => {
-      if (profile?.role !== "admin") { window.location.replace("/dashboard"); return; }
-      await refreshAccounts();
-    }).catch(() => setError("Billing ma’lumotlarini yuklashda xatolik yuz berdi.")).finally(() => setLoading(false));
+    const timeoutId = window.setTimeout(() => {
+      setSession(stored);
+      getCurrentProfile().then((profile) => {
+        if (profile?.role !== "admin") { window.location.replace("/dashboard"); return null; }
+        return Promise.all([listAdminBillingAccounts(), listAdminBillingSettlements()]);
+      }).then((result) => {
+        if (!result) return;
+        setAccounts(result[0]);
+        setSettlements(result[1]);
+      }).catch(() => setError("Billing ma’lumotlarini yuklashda xatolik yuz berdi.")).finally(() => setLoading(false));
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   const selectedAccount = accounts.find((item) => item.user_id === selectedUserId) || null;
