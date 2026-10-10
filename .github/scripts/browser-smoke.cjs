@@ -7,7 +7,7 @@ const baseURL = process.env.BASE_URL || 'http://127.0.0.1:3000';
 async function expectLoginRedirect(page, path, label) {
   const response = await page.goto(`${baseURL}${path}`, { waitUntil: 'domcontentloaded' });
   assert(response && response.status() < 400, `${label}: ${path} static rewrite did not load`);
-  await page.waitForURL((url) => url.pathname === '/login', { timeout: 10000 });
+  await page.waitForFunction(() => window.location.pathname === '/login', null, { timeout: 10000 });
 }
 
 async function checkProfile(browser, label, contextOptions) {
