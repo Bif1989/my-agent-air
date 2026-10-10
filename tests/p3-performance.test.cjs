@@ -63,3 +63,11 @@ test('P3 shares concurrent messenger conversation reads instead of duplicating R
   assert.match(api, /if \(conversationsInFlight\) return conversationsInFlight/);
   assert.match(api, /finally\(\(\) => \{ conversationsInFlight = null; \}\)/);
 });
+
+test('P3 shares concurrent reads for the same agent profile', () => {
+  const api = read('app/agents/agents-api.ts');
+  assert.match(api, /const agentReadsInFlight = new Map<string, Promise<AgentRecord \| null>>\(\)/);
+  assert.match(api, /const existing = agentReadsInFlight\.get\(id\)/);
+  assert.match(api, /agentReadsInFlight\.set\(id, task\)/);
+  assert.match(api, /agentReadsInFlight\.delete\(id\)/);
+});
