@@ -35,6 +35,14 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async rewrites() {
+    return [
+      {
+        source: "/agents/:id",
+        destination: "/agent-detail",
+      },
+    ];
+  },
 };
 
 export default nextConfig;
