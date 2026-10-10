@@ -45,10 +45,13 @@ test('legacy per-action function routes stay removed', () => {
   ]) assert.equal(exists(route), false, `${route} would create another Vercel Function`);
 });
 
-test('global Vercel Web Analytics stays disabled on Hobby', () => {
+test('Vercel Web Analytics and custom events stay disabled on Hobby', () => {
   const layout = read('app/layout.tsx');
+  const register = read('app/register/page.tsx');
   assert.doesNotMatch(layout, /@vercel\/analytics\/next/);
   assert.doesNotMatch(layout, /<Analytics\s*\/>/);
+  assert.doesNotMatch(register, /@vercel\/analytics/);
+  assert.doesNotMatch(register, /\btrack\s*\(/);
 });
 
 test('only main deploys and documentation-only changes can skip Vercel builds', () => {
