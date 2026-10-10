@@ -7,23 +7,48 @@ let token = "";
 let userId = "";
 let listening = false;
 let channelSequence = 0;
+let authGeneration = 0;
+let realtimeAuthReady: Promise<boolean> = Promise.resolve(false);
+
 export type RealtimeMessagePayload = { new: Record<string, unknown>; old: Record<string, unknown> };
 type Listener = (payload: RealtimeMessagePayload) => void;
 type RealtimeTable = "messages" | "chat_messages" | "request_targets";
-const shared = new Map<string, { channel: RealtimeChannel; listeners: Set<Listener> }>();
+type SharedSubscription = {
+  channel: RealtimeChannel;
+  listeners: Set<Listener>;
+  started: boolean;
+  closed: boolean;
+};
+const shared = new Map<string, SharedSubscription>();
+
+function resetRealtimeAuth() {
+  authGeneration += 1;
+  token = "";
+  realtimeAuthReady = Promise.resolve(false);
+}
 
 function syncSession() {
   const session = getStoredSession();
   if (!session || (userId && userId !== session.user.id)) {
     shared.clear();
     void realtimeClient?.removeAllChannels();
-    token = "";
+    resetRealtimeAuth();
   }
   userId = session?.user.id || "";
+
   if (session && realtimeClient && token !== session.access_token) {
-    token = session.access_token;
-    void realtimeClient.realtime.setAuth(token).catch(() => { token = ""; });
+    const nextToken = session.access_token;
+    const generation = ++authGeneration;
+    token = nextToken;
+    realtimeAuthReady = Promise.resolve(realtimeClient.realtime.setAuth(nextToken))
+      .then(() => generation === authGeneration && token === nextToken)
+      .catch(() => {
+        if (generation === authGeneration && token === nextToken) token = "";
+        return false;
+      });
   }
+
+  return realtimeAuthReady;
 }
 
 function listenForSessionChanges() {
@@ -67,9 +92,17 @@ function subscribe(table: RealtimeTable, onChange: Listener, filter?: string) {
     if (table === "messages" || table === "request_targets") {
       channel.on("postgres_changes", { event: "UPDATE", schema: "public", table, ...(filter ? { filter } : {}) }, notify);
     }
-    entry = { channel: channel.subscribe(), listeners };
+    entry = { channel, listeners, started: false, closed: false };
     shared.set(key, entry);
+
+    const subscription = entry;
+    void syncSession().then((authenticated) => {
+      if (!authenticated || subscription.closed || subscription.started || shared.get(key) !== subscription || !subscription.listeners.size) return;
+      subscription.started = true;
+      subscription.channel.subscribe();
+    });
   }
+
   entry.listeners.add(onChange);
   const subscription = entry;
   return {
@@ -78,6 +111,7 @@ function subscribe(table: RealtimeTable, onChange: Listener, filter?: string) {
       if (_channel !== subscription.channel) return Promise.resolve("ok" as const);
       subscription.listeners.delete(onChange);
       if (subscription.listeners.size) return Promise.resolve("ok" as const);
+      subscription.closed = true;
       if (shared.get(key) === subscription) shared.delete(key);
       return client.removeChannel(subscription.channel);
     } },

@@ -1,4 +1,5 @@
 import { authenticatedSupabaseFetch, getStoredSession } from "@/lib/supabase-auth";
+import { dedupeInFlight } from "@/lib/inflight-dedupe";
 import { CHAT_READ_EVENT } from "@/lib/chat-state";
 import type { DealProfile, DealRecord } from "@/app/deals/deals-api";
 
@@ -51,8 +52,16 @@ export async function listConversationSummaries() {
 }
 
 export async function getUnreadMessageCount() {
-  const summaries = await listConversationSummaries();
-  return summaries.reduce((total, summary) => total + (summary.unread_count || 0), 0);
+  const userId = currentUserId();
+  return dedupeInFlight("messages:unread-count", userId, async () => {
+    const response = await authenticatedSupabaseFetch("rpc/get_unread_deal_message_count", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const count = await readJson<number>(response);
+    return Number(count || 0);
+  });
 }
 
 export async function listConversations(deals: DealRecord[]) {
