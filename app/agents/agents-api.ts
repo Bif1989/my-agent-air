@@ -1,4 +1,3 @@
-import { searchFilterText } from "@/lib/request-freshness";
 import { authenticatedSupabaseFetch } from "@/lib/supabase-auth";
 
 const AGENT_FIELDS = "id,full_name,avatar_url,company_name,city,phone,agent_type,services,is_verified,is_active,registration_status,created_at";
@@ -17,6 +16,10 @@ export type AgentRecord = {
   is_active: boolean | null;
   registration_status: "pending_email" | "incomplete" | "active" | "suspended";
   created_at: string;
+  trust_score?: number | null;
+  rating_average?: number | null;
+  review_count?: number | null;
+  completed_deals?: number | null;
 };
 
 export type AgentFilterOptions = {
@@ -25,40 +28,30 @@ export type AgentFilterOptions = {
   services: string[];
 };
 
-export type AgentSort = "newest" | "oldest" | "name_asc" | "name_desc";
+export type AgentSort = "trust_desc" | "newest" | "oldest" | "name_asc" | "name_desc";
 const agentReadsInFlight = new Map<string, Promise<AgentRecord | null>>();
 
 async function readJson<T>(response: Response) {
   return response.json() as Promise<T>;
 }
 
-function agentOrder(sort: AgentSort | undefined) {
-  switch (sort) {
-    case "oldest": return "created_at.asc,id.asc";
-    case "name_asc": return "full_name.asc.nullslast,company_name.asc.nullslast,id.asc";
-    case "name_desc": return "full_name.desc.nullslast,company_name.desc.nullslast,id.asc";
-    case "newest":
-    default: return "created_at.desc,id.asc";
-  }
-}
-
 export async function listAgents(options: { search?: string; city?: string; agentType?: string; service?: string; verifiedOnly?: boolean; sort?: AgentSort; limit?: number; offset?: number } = {}) {
-  const params = new URLSearchParams({
-    select: AGENT_FIELDS,
-    is_active: "eq.true",
-    registration_status: "eq.active",
-    and: COMPLETE_AGENT_FILTER,
-    order: agentOrder(options.sort),
-    limit: String(options.limit || 100),
-    offset: String(options.offset || 0),
+  const safeLimit = Math.max(1, Math.min(100, options.limit || 24));
+  const safeOffset = Math.max(0, options.offset || 0);
+  const response = await authenticatedSupabaseFetch("rpc/list_agents_with_trust", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      p_search: options.search?.trim().slice(0, 100) || null,
+      p_city: options.city || null,
+      p_agent_type: options.agentType || null,
+      p_service: options.service || null,
+      p_verified_only: Boolean(options.verifiedOnly),
+      p_sort: options.sort || "trust_desc",
+      p_limit: safeLimit,
+      p_offset: safeOffset,
+    }),
   });
-  const search = searchFilterText(options.search || "");
-  if (search) params.set("or", `(full_name.ilike.*${search}*,company_name.ilike.*${search}*,city.ilike.*${search}*)`);
-  if (options.city) params.set("city", `eq.${options.city}`);
-  if (options.agentType) params.set("agent_type", `eq.${options.agentType}`);
-  if (options.service) params.set("services", `cs.{${JSON.stringify(options.service)}}`);
-  if (options.verifiedOnly) params.set("is_verified", "eq.true");
-  const response = await authenticatedSupabaseFetch(`profiles?${params}`);
   return readJson<AgentRecord[]>(response);
 }
 
