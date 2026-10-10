@@ -28,6 +28,11 @@ type AuthResponse = {
 type SupabaseUser = { id: string; email?: string };
 type JwtClaims = { sub?: unknown; exp?: unknown };
 let refreshInFlight: Promise<AuthSession | null> | null = null;
+let cachedSessionRaw: string | null | undefined;
+let cachedSession: AuthSession | null = null;
+let legacyTokenCleaned = false;
+let cachedClaimsToken: string | null = null;
+let cachedClaims: JwtClaims | null = null;
 
 export class SupabaseRequestError extends Error {
   constructor(message: string, public status: number, public code = "") {
@@ -40,17 +45,32 @@ function isBrowser() {
   return typeof window !== "undefined";
 }
 
+function cleanupLegacyToken() {
+  if (!isBrowser() || legacyTokenCleaned) return;
+  localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+  legacyTokenCleaned = true;
+}
+
 function decodeJwtClaims(token: string): JwtClaims | null {
+  if (token === cachedClaimsToken) return cachedClaims;
   try {
     const payload = token.split(".")[1];
-    if (!payload) return null;
+    if (!payload) {
+      cachedClaimsToken = token;
+      cachedClaims = null;
+      return null;
+    }
     const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
     const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
     const binary = atob(padded);
     const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
     const parsed = JSON.parse(new TextDecoder().decode(bytes));
-    return parsed && typeof parsed === "object" ? parsed as JwtClaims : null;
+    cachedClaimsToken = token;
+    cachedClaims = parsed && typeof parsed === "object" ? parsed as JwtClaims : null;
+    return cachedClaims;
   } catch {
+    cachedClaimsToken = token;
+    cachedClaims = null;
     return null;
   }
 }
@@ -109,25 +129,34 @@ export function saveSession(data: AuthResponse) {
     user: { id: data.user.id, email: data.user.email },
   };
   if (!isBrowser()) return;
-  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
-  // Older builds duplicated the access token under a second localStorage key.
-  localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+  const raw = JSON.stringify(session);
+  localStorage.setItem(SESSION_STORAGE_KEY, raw);
+  cleanupLegacyToken();
+  cachedSessionRaw = raw;
+  cachedSession = session;
   window.dispatchEvent(new Event(AUTH_SESSION_CHANGED_EVENT));
 }
 
 export function clearSession() {
   if (!isBrowser()) return;
   localStorage.removeItem(SESSION_STORAGE_KEY);
-  localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+  cleanupLegacyToken();
+  cachedSessionRaw = null;
+  cachedSession = null;
   window.dispatchEvent(new Event(AUTH_SESSION_CHANGED_EVENT));
 }
 
 export function getStoredSession(): AuthSession | null {
   if (!isBrowser()) return null;
-  // Always remove the legacy duplicate token if a user upgrades from an older build.
-  localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+  cleanupLegacyToken();
+  // Still read the raw value every time so account changes from another tab are observed immediately.
   const storedSession = localStorage.getItem(SESSION_STORAGE_KEY);
-  if (!storedSession) return null;
+  if (storedSession === cachedSessionRaw) return cachedSession;
+  if (!storedSession) {
+    cachedSessionRaw = null;
+    cachedSession = null;
+    return null;
+  }
   try {
     const session = JSON.parse(storedSession) as Partial<AuthSession> & { user?: Partial<SupabaseUser> };
     if (!session.access_token || !session.refresh_token || !session.user?.id) {
@@ -139,11 +168,14 @@ export function getStoredSession(): AuthSession | null {
       clearSession();
       return null;
     }
-    return {
+    const validated: AuthSession = {
       access_token: session.access_token,
       refresh_token: session.refresh_token,
       user: { id: session.user.id, email: session.user.email },
     };
+    cachedSessionRaw = storedSession;
+    cachedSession = validated;
+    return validated;
   } catch {
     clearSession();
     return null;
