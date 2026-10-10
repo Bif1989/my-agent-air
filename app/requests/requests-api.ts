@@ -1,3 +1,4 @@
+import { dedupeInFlight } from "@/lib/inflight-dedupe";
 import { requestFreshnessFilter, searchFilterText } from "@/lib/request-freshness";
 import { authenticatedSupabaseFetch, getStoredSession } from "@/lib/supabase-auth";
 import type { ServiceData } from "@/lib/service-request";
@@ -73,10 +74,14 @@ function encodeFilter(value: string) {
   return encodeURIComponent(value);
 }
 
-function ownerFilter() {
+function currentUserId() {
   const session = getStoredSession();
   if (!session) throw new Error("AUTH_SESSION_MISSING");
-  return `created_by=eq.${encodeFilter(session.user.id)}`;
+  return session.user.id;
+}
+
+function ownerFilter() {
+  return `created_by=eq.${encodeFilter(currentUserId())}`;
 }
 
 export async function listRequests(options: ListRequestOptions = {}) {
@@ -89,14 +94,21 @@ export async function listRequests(options: ListRequestOptions = {}) {
   const search = searchFilterText(options.search || "");
   if (search) conditions.push(`or(origin.ilike.*${search}*,destination.ilike.*${search}*,description.ilike.*${search}*)`);
   if (conditions.length) params.set("and", `(${conditions.join(",")})`);
-  const response = await authenticatedSupabaseFetch(`requests?${params}`);
-  return readJson<RequestRecord[]>(response);
+
+  const requestKey = `${currentUserId()}:${params.toString()}`;
+  return dedupeInFlight("requests:list", requestKey, async () => {
+    const response = await authenticatedSupabaseFetch(`requests?${params}`);
+    return readJson<RequestRecord[]>(response);
+  });
 }
 
-export async function getRequest(id: string) {
-  const response = await authenticatedSupabaseFetch(`requests?select=${encodeURIComponent(REQUEST_SELECT)}&id=eq.${encodeFilter(id)}&limit=1`);
-  const rows = await readJson<RequestRecord[]>(response);
-  return rows[0] || null;
+export function getRequest(id: string) {
+  const userId = currentUserId();
+  return dedupeInFlight("requests:get", `${userId}:${id}`, async () => {
+    const response = await authenticatedSupabaseFetch(`requests?select=${encodeURIComponent(REQUEST_SELECT)}&id=eq.${encodeFilter(id)}&limit=1`);
+    const rows = await readJson<RequestRecord[]>(response);
+    return rows[0] || null;
+  });
 }
 
 export async function createRequest(payload: RequestPayload, createdBy: string) {
