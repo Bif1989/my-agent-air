@@ -4,6 +4,12 @@ const { chromium, webkit, devices } = require('playwright');
 
 const baseURL = process.env.BASE_URL || 'http://127.0.0.1:3000';
 
+async function expectLoginRedirect(page, path, label) {
+  const response = await page.goto(`${baseURL}${path}`, { waitUntil: 'domcontentloaded' });
+  assert(response && response.status() < 400, `${label}: ${path} static rewrite did not load`);
+  await page.waitForURL((url) => url.pathname === '/login', { timeout: 10000 });
+}
+
 async function checkProfile(browser, label, contextOptions) {
   const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
@@ -24,9 +30,22 @@ async function checkProfile(browser, label, contextOptions) {
   }
   assert((await page.locator('[name="password"]').getAttribute('minlength')) === '10', `${label}: password minlength must be 10`);
 
-  response = await page.goto(`${baseURL}/agents/static-shell-smoke`, { waitUntil: 'domcontentloaded' });
-  assert(response && response.status() < 400, `${label}: static agent rewrite did not load`);
-  await page.waitForURL((url) => url.pathname === '/login' && url.searchParams.get('next') === '/agents/static-shell-smoke', { timeout: 10000 });
+  await expectLoginRedirect(page, '/agents/static-shell-smoke', label);
+  assert.equal(new URL(page.url()).searchParams.get('next'), '/agents/static-shell-smoke', `${label}: agent return path missing`);
+
+  for (const path of [
+    '/admin/agents/static-shell-smoke',
+    '/deals/static-shell-smoke',
+    '/feed/static-shell-smoke',
+    '/feed/static-shell-smoke/edit',
+    '/messenger/static-shell-smoke',
+    '/messenger/static-shell-smoke/settings',
+    '/requests/static-shell-smoke',
+    '/requests/static-shell-smoke/edit',
+  ]) await expectLoginRedirect(page, path, label);
+
+  response = await page.goto(`${baseURL}/supplier-request/0123456789abcdef0123456789abcdef`, { waitUntil: 'domcontentloaded' });
+  assert(response && response.status() < 400, `${label}: public supplier static rewrite did not load`);
 
   const manifest = await context.request.get(`${baseURL}/manifest.webmanifest`);
   assert(manifest.ok(), `${label}: manifest unavailable`);
