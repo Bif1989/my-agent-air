@@ -26,6 +26,7 @@ export type AgentFilterOptions = {
 };
 
 export type AgentSort = "newest" | "oldest" | "name_asc" | "name_desc";
+const agentReadsInFlight = new Map<string, Promise<AgentRecord | null>>();
 
 async function readJson<T>(response: Response) {
   return response.json() as Promise<T>;
@@ -67,17 +68,23 @@ export async function getAgentFilterOptions() {
 }
 
 export async function getAgent(id: string) {
-  const params = new URLSearchParams({
-    select: AGENT_FIELDS,
-    id: `eq.${id}`,
-    is_active: "eq.true",
-    registration_status: "eq.active",
-    and: COMPLETE_AGENT_FILTER,
-    limit: "1",
-  });
-  const response = await authenticatedSupabaseFetch(`profiles?${params}`);
-  const rows = await readJson<AgentRecord[]>(response);
-  return rows[0] || null;
+  const existing = agentReadsInFlight.get(id);
+  if (existing) return existing;
+  const task = (async () => {
+    const params = new URLSearchParams({
+      select: AGENT_FIELDS,
+      id: `eq.${id}`,
+      is_active: "eq.true",
+      registration_status: "eq.active",
+      and: COMPLETE_AGENT_FILTER,
+      limit: "1",
+    });
+    const response = await authenticatedSupabaseFetch(`profiles?${params}`);
+    const rows = await readJson<AgentRecord[]>(response);
+    return rows[0] || null;
+  })().finally(() => { agentReadsInFlight.delete(id); });
+  agentReadsInFlight.set(id, task);
+  return task;
 }
 
 export function loadAgentFilterOptions(agents: AgentRecord[]): AgentFilterOptions {
