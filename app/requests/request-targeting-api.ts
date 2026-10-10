@@ -15,6 +15,12 @@ export type RequestTargetRecord = {
     pax?: number;
     destination?: string | null;
     city?: string | null;
+    service_area?: string | null;
+    trust_score?: number;
+    trust_bonus?: number;
+    rating_average?: number | null;
+    review_count?: number;
+    completed_deals?: number;
   };
   status: RequestTargetStatus;
 };
