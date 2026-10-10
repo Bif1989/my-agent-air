@@ -1,3 +1,4 @@
+import { dedupeInFlight } from "@/lib/inflight-dedupe";
 import { authenticatedSupabaseFetch, getStoredSession } from "@/lib/supabase-auth";
 import type { RequestRecord } from "@/app/requests/requests-api";
 
@@ -54,34 +55,46 @@ function currentUserId() {
   return session.user.id;
 }
 
-export async function listMyOffers() {
+export function listMyOffers() {
   const agentId = currentUserId();
-  const response = await authenticatedSupabaseFetch(`offers?select=${encode(OFFER_FIELDS)}&agent_id=eq.${encode(agentId)}&order=created_at.desc`);
-  return readJson<OfferRecord[]>(response);
+  return dedupeInFlight("offers:list-mine", agentId, async () => {
+    const response = await authenticatedSupabaseFetch(`offers?select=${encode(OFFER_FIELDS)}&agent_id=eq.${encode(agentId)}&order=created_at.desc`);
+    return readJson<OfferRecord[]>(response);
+  });
 }
 
-export async function listIncomingOffers() {
+export function listIncomingOffers() {
   const userId = currentUserId();
-  const response = await authenticatedSupabaseFetch(`offers?select=${encode(OFFER_FIELDS)}&request.created_by=eq.${encode(userId)}&request.created_by=not.is.null&agent_id=neq.${encode(userId)}&order=created_at.desc`);
-  return readJson<OfferRecord[]>(response);
+  return dedupeInFlight("offers:list-incoming", userId, async () => {
+    const response = await authenticatedSupabaseFetch(`offers?select=${encode(OFFER_FIELDS)}&request.created_by=eq.${encode(userId)}&request.created_by=not.is.null&agent_id=neq.${encode(userId)}&order=created_at.desc`);
+    return readJson<OfferRecord[]>(response);
+  });
 }
 
-export async function getOffer(id: string) {
-  const response = await authenticatedSupabaseFetch(`offers?select=${encode(OFFER_FIELDS)}&id=eq.${encode(id)}&limit=1`);
-  const rows = await readJson<OfferRecord[]>(response);
-  return rows[0] || null;
+export function getOffer(id: string) {
+  const userId = currentUserId();
+  return dedupeInFlight("offers:get", `${userId}:${id}`, async () => {
+    const response = await authenticatedSupabaseFetch(`offers?select=${encode(OFFER_FIELDS)}&id=eq.${encode(id)}&limit=1`);
+    const rows = await readJson<OfferRecord[]>(response);
+    return rows[0] || null;
+  });
 }
 
-export async function getOffersForRequest(requestId: string) {
-  const response = await authenticatedSupabaseFetch(`offers?select=${encode(OFFER_FIELDS)}&request_id=eq.${encode(requestId)}&order=created_at.desc`);
-  return readJson<OfferRecord[]>(response);
+export function getOffersForRequest(requestId: string) {
+  const userId = currentUserId();
+  return dedupeInFlight("offers:request", `${userId}:${requestId}`, async () => {
+    const response = await authenticatedSupabaseFetch(`offers?select=${encode(OFFER_FIELDS)}&request_id=eq.${encode(requestId)}&order=created_at.desc`);
+    return readJson<OfferRecord[]>(response);
+  });
 }
 
-export async function getMyOfferForRequest(requestId: string) {
+export function getMyOfferForRequest(requestId: string) {
   const agentId = currentUserId();
-  const response = await authenticatedSupabaseFetch(`offers?select=${encode(OFFER_FIELDS)}&request_id=eq.${encode(requestId)}&agent_id=eq.${encode(agentId)}&limit=1`);
-  const rows = await readJson<OfferRecord[]>(response);
-  return rows[0] || null;
+  return dedupeInFlight("offers:request-mine", `${agentId}:${requestId}`, async () => {
+    const response = await authenticatedSupabaseFetch(`offers?select=${encode(OFFER_FIELDS)}&request_id=eq.${encode(requestId)}&agent_id=eq.${encode(agentId)}&limit=1`);
+    const rows = await readJson<OfferRecord[]>(response);
+    return rows[0] || null;
+  });
 }
 
 export async function createOffer(requestId: string, payload: OfferPayload) {
