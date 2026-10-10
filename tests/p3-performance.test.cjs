@@ -56,3 +56,10 @@ test('P3 Geo Tender client fetches only fields used by the UI', () => {
   assert.doesNotMatch(api, /SELECT_FIELDS = .*created_at/);
   assert.doesNotMatch(api, /SELECT_FIELDS = .*updated_at/);
 });
+
+test('P3 shares concurrent messenger conversation reads instead of duplicating RPC calls', () => {
+  const api = read('app/messenger/messenger-api.ts');
+  assert.match(api, /let conversationsInFlight: Promise<MessengerConversation\[\]> \| null = null/);
+  assert.match(api, /if \(conversationsInFlight\) return conversationsInFlight/);
+  assert.match(api, /finally\(\(\) => \{ conversationsInFlight = null; \}\)/);
+});
