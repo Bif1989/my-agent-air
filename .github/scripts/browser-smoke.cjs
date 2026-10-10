@@ -30,10 +30,8 @@ async function checkProfile(browser, label, contextOptions) {
   }
   assert((await page.locator('[name="password"]').getAttribute('minlength')) === '10', `${label}: password minlength must be 10`);
 
-  await expectLoginRedirect(page, '/agents/static-shell-smoke', label);
-  assert.equal(new URL(page.url()).searchParams.get('next'), '/agents/static-shell-smoke', `${label}: agent return path missing`);
-
   for (const path of [
+    '/agents/static-shell-smoke',
     '/admin/agents/static-shell-smoke',
     '/deals/static-shell-smoke',
     '/feed/static-shell-smoke',
