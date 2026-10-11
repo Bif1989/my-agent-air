@@ -11,7 +11,7 @@ function exists(relativePath) {
   return fs.existsSync(path.join(process.cwd(), relativePath));
 }
 
-test('production responses use baseline browser security headers', () => {
+test('production responses use baseline browser security headers and only trusted frame ancestors', () => {
   const source = read('next.config.ts');
   assert.match(source, /X-Content-Type-Options/);
   assert.match(source, /nosniff/);
@@ -19,10 +19,14 @@ test('production responses use baseline browser security headers', () => {
   assert.match(source, /Permissions-Policy/);
   assert.match(source, /microphone=\(self\)/);
   assert.match(source, /Strict-Transport-Security/);
-  assert.match(source, /X-Frame-Options/);
-  assert.match(source, /DENY/);
+  assert.doesNotMatch(source, /X-Frame-Options/);
   assert.match(source, /Content-Security-Policy/);
-  assert.match(source, /frame-ancestors 'none'/);
+  assert.match(source, /frame-ancestors 'self'/);
+  assert.match(source, /https:\/\/vk\.com/);
+  assert.match(source, /https:\/\/\*\.vk\.com/);
+  assert.match(source, /https:\/\/vk\.ru/);
+  assert.match(source, /https:\/\/\*\.vk\.ru/);
+  assert.doesNotMatch(source, /frame-ancestors \*/);
   assert.match(source, /base-uri 'self'/);
   assert.match(source, /form-action 'self'/);
 });
