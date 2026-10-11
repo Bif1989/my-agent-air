@@ -1,6 +1,7 @@
 "use client";
 
 import bridge from "@vkontakte/vk-bridge";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { getVkLaunchParams } from "@/lib/vk-chat";
 import { getStoredSession, saveSession } from "@/lib/supabase-auth";
@@ -21,11 +22,13 @@ export default function VkLaunchAuth() {
   useEffect(() => {
     const params = getVkLaunchParams();
     if (params.get("vk_app_id") !== "54781128" || !/^\d{1,20}$/.test(params.get("vk_user_id") || "")) return;
-    setIsVk(true);
-    if (getStoredSession()) { setIsVk(false); return; }
+    if (getStoredSession()) return;
 
     let cancelled = false;
     async function authenticate() {
+      await Promise.resolve();
+      if (cancelled) return;
+      setIsVk(true);
       setError("");
       try {
         await bridge.send("VKWebAppInit");
@@ -66,7 +69,7 @@ export default function VkLaunchAuth() {
   if (!isVk) return null;
   return <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-5 backdrop-blur-sm">
     <div className="w-full max-w-sm rounded-3xl bg-white p-6 text-center shadow-2xl dark:bg-slate-900">
-      <img src="/my-agent-air-icon.svg" alt="My Agent Air" className="mx-auto h-16 w-16" />
+      <Image src="/my-agent-air-icon.svg" alt="My Agent Air" width={64} height={64} className="mx-auto h-16 w-16" priority />
       <h2 className="mt-4 text-lg font-bold text-slate-900 dark:text-white">My Agent Air</h2>
       {!error ? <><p className="mt-2 text-sm text-slate-500 dark:text-slate-300">VK profilingiz orqali xavfsiz kirilmoqda…</p><div className="mx-auto mt-5 h-7 w-7 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" /></> : <><p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-300">{error}</p><button type="button" onClick={() => setAttempt((value) => value + 1)} className="mt-5 w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white">Qayta urinish</button><a href="/login" className="mt-3 block text-sm font-semibold text-slate-500 underline">Oddiy kirish</a></>}
     </div>
