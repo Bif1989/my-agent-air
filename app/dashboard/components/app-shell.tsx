@@ -64,9 +64,9 @@ export default function AppShell({ children, session, activePath = "" }: { child
     ["AI markaz", "/dashboard"], ["Postlar", "/feed"], ["So‘rovlar va takliflar", "/requests"], ["Agentlar", "/agents"], ["Bitimlar", "/deals"], ["Chat", "/messenger"],
   ] as const;
   const mobileNavigation = isRu ? [
-    ["AI", "/dashboard", "✦"], ["Запрос", "/requests", "↔"], ["Агент", "/agents", "◎"], ["Сделка", "/deals", "◇"], ["Чат", "/messenger", "◌"], ["Профиль", "/profile", "◉"],
+    ["AI", "/dashboard", "✦"], ["Запрос", "/requests", "↔"], ["Агент", "/agents", "◎"], ["Сделка", "/deals", "◇"], ["Чат", "/messenger", "◌"], ["Счёт и тариф", "/profile", "◉"],
   ] as const : [
-    ["AI", "/dashboard", "✦"], ["So‘rov", "/requests", "↔"], ["Agent", "/agents", "◎"], ["Bitim", "/deals", "◇"], ["Chat", "/messenger", "◌"], ["Profil", "/profile", "◉"],
+    ["AI", "/dashboard", "✦"], ["So‘rov", "/requests", "↔"], ["Agent", "/agents", "◎"], ["Bitim", "/deals", "◇"], ["Chat", "/messenger", "◌"], ["Hisob va tarif", "/profile", "◉"],
   ] as const;
 
   useEffect(() => { pathnameRef.current = pathname; }, [pathname]);
@@ -232,7 +232,7 @@ export default function AppShell({ children, session, activePath = "" }: { child
         <div className="mt-5 px-1">
           <UiControls inverse />
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <Link href="/profile" className="rounded-xl border border-white/15 px-3 py-2.5 text-center text-xs font-medium text-blue-100 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-300">{isRu ? "Профиль" : "Profil"}</Link>
+            <Link href="/profile" className="rounded-xl border border-white/15 px-3 py-2.5 text-center text-xs font-medium text-blue-100 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-300">{isRu ? "Счёт и тариф" : "Hisob va tarif"}</Link>
             <button type="button" onClick={handleLogout} disabled={isSigningOut} aria-label={isRu ? "Выйти" : "Chiqish"} className="rounded-xl border border-white/15 px-3 py-2.5 text-center text-xs font-medium text-blue-100 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-300 disabled:opacity-60">{isSigningOut ? (isRu ? "Выход..." : "Chiqilmoqda...") : (isRu ? "Выйти" : "Chiqish")}</button>
           </div>
         </div>
@@ -242,12 +242,12 @@ export default function AppShell({ children, session, activePath = "" }: { child
         </div>
       </aside>
 
-      <div className="min-w-0 flex-1 pb-16 lg:pb-0">
+      <div className="min-w-0 flex-1 pb-20 lg:pb-0">
         <header className="flex h-14 items-center justify-between border-b border-slate-200 bg-white px-3 sm:px-5 lg:hidden">
           <Link href="/dashboard" className="flex items-center gap-2 text-sm font-bold tracking-wide"><BrandMark /> MY AGENT AIR</Link>
           <div className="flex items-center gap-1.5">
             <UiControls compact />
-            <Link href="/profile" className="hidden rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 sm:block">{isRu ? "Профиль" : "Profil"}</Link>
+            <Link href="/profile" className="hidden rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 sm:block">{isRu ? "Счёт" : "Hisob"}</Link>
             <button type="button" onClick={handleLogout} disabled={isSigningOut} aria-label={isRu ? "Выйти" : "Chiqish"} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600">{isRu ? "Выход" : "Chiqish"}</button>
           </div>
         </header>
@@ -261,13 +261,13 @@ export default function AppShell({ children, session, activePath = "" }: { child
         </main>
       </div>
 
-      <nav aria-label={isRu ? "Мобильная навигация" : "Mobil asosiy navigatsiya"} className="fixed inset-x-0 bottom-0 z-50 grid h-16 grid-cols-6 border-t border-slate-200 bg-white/95 px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden dark:bg-slate-950/95">
+      <nav aria-label={isRu ? "Мобильная навигация" : "Mobil asosiy navigatsiya"} className="fixed inset-x-0 bottom-0 z-50 grid h-20 grid-cols-6 border-t border-slate-200 bg-white/95 px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden dark:bg-slate-950/95">
         {mobileNavigation.map(([label, href, icon]) => {
           const active = activePath === href || (href === "/deals" && activePath === "/messages");
           const badge = href === "/deals" ? unreadMessages : href === "/messenger" ? unreadMessenger : 0;
-          return <Link key={href} href={href} className={`relative flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl text-[10px] font-semibold ${active ? "text-blue-600" : "text-slate-500"}`}>
+          return <Link key={href} href={href} className={`relative flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 text-[10px] font-semibold ${active ? "text-blue-600" : "text-slate-500"}`}>
             <span className={`flex h-7 w-9 items-center justify-center rounded-xl text-base ${active ? "bg-blue-50" : ""}`}>{icon}</span>
-            <span className="truncate">{label}</span>
+            <span className="whitespace-normal text-center leading-tight">{label}</span>
             {badge > 0 && <span className="absolute right-[18%] top-1 rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] leading-none text-white">{badge > 99 ? "99+" : badge}</span>}
           </Link>;
         })}
