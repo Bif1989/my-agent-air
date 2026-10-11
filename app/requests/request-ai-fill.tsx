@@ -8,6 +8,13 @@ import { requestTitle, serviceDefinition, localize, type ServiceRequestInput } f
 import { useUiSettings } from "@/lib/ui-settings";
 import type { AssistantDraft } from "@/lib/request-assistant";
 
+function attachSourceText(draft: AssistantDraft, sourceText: string): AssistantDraft {
+  return {
+    ...draft,
+    service_details: { ...(draft.service_details || {}), source_text: sourceText },
+  };
+}
+
 export default function RequestAiFill({ values, disabled, onApply, onBusyChange }: { values: ServiceRequestInput; disabled: boolean; onApply: (draft: AssistantDraft) => void; onBusyChange: (busy: boolean) => void }) {
   const { isRu, locale } = useUiSettings();
   const [text, setText] = useState("");
@@ -18,14 +25,15 @@ export default function RequestAiFill({ values, disabled, onApply, onBusyChange 
   useEffect(() => () => pending.current?.abort(), []);
 
   async function fill() {
-    if (!text.trim() || pending.current || disabled) return;
+    const sourceText = text.trim();
+    if (!sourceText || pending.current || disabled) return;
     const controller = new AbortController();
     pending.current = controller; setBusy(true); onBusyChange(true); setError(""); setChoices([]);
     try {
       let session = getStoredSession();
       const owner = session?.user.id;
       if (session && sessionNeedsRefresh(session)) session = await refreshSession();
-      const body = JSON.stringify({ message: text.trim(), context: { path: "/requests/new", locale, formDraft: values } });
+      const body = JSON.stringify({ message: sourceText, context: { path: "/requests/new", locale, formDraft: values } });
       const send = () => {
         if (!session || session.user.id !== owner || getStoredSession()?.user.id !== owner) throw new Error("AUTH_REQUIRED");
         controller.signal.throwIfAborted();
@@ -36,7 +44,9 @@ export default function RequestAiFill({ values, disabled, onApply, onBusyChange 
       const data = await response.json();
       if (!response.ok) throw new Error(data.code || "AI_ERROR");
       if (getStoredSession()?.user.id !== owner) throw new Error("AUTH_REQUIRED");
-      const drafts = Array.isArray(data.requests) ? data.requests.map(aiRequestToDraft).filter((item: AssistantDraft | null): item is AssistantDraft => Boolean(item)) : [];
+      const drafts = Array.isArray(data.requests)
+        ? data.requests.map(aiRequestToDraft).filter((item: AssistantDraft | null): item is AssistantDraft => Boolean(item)).map((draft: AssistantDraft) => attachSourceText(draft, sourceText))
+        : [];
       if (!drafts.length) throw new Error("NO_DRAFT");
       if (drafts.length === 1) onApply(drafts[0]); else setChoices(drafts);
     } catch (failure) {
@@ -49,10 +59,10 @@ export default function RequestAiFill({ values, disabled, onApply, onBusyChange 
 
   return <section className="rounded-2xl border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-900 dark:bg-blue-950/20">
     <label htmlFor="request-ai-text" className="text-sm font-semibold text-blue-800 dark:text-blue-200">{isRu ? "Заполнить с AI-помощником" : "AI yordamchi bilan to‘ldirish"}</label>
-    <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{isRu ? "Опишите услугу своими словами. AI заполнит черновик; перед публикацией вы его проверите." : "Kerakli xizmatni oddiy so‘zlar bilan yozing. AI qoralamani to‘ldiradi, yuborishdan oldin o‘zingiz tekshirasiz."}</p>
-    <textarea id="request-ai-text" value={text} disabled={busy || disabled} onChange={(event) => setText(event.target.value)} maxLength={2000} rows={3} placeholder={isRu ? "Например: отель в Самарканде с 12 по 15 ноября, 2 взрослых и ребёнок 7 лет, завтрак…" : "Masalan: Samarqandda 12–15 noyabr, 2 katta va 7 yoshli bolaga mehmonxona, nonushta…"} className="mt-3 w-full rounded-xl border border-blue-200 bg-white p-3 text-sm outline-none focus:ring-2 focus:ring-blue-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
-    <button type="button" onClick={() => void fill()} disabled={busy || disabled || !text.trim()} className="mt-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{busy ? (isRu ? "Заполнение…" : "To‘ldirilmoqda…") : (isRu ? "Заполнить анкету" : "Anketani to‘ldirish")}</button>
-    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{isRu ? "Текст и текущая анкета отправляются в OpenAI. Не вводите данные паспорта и карты." : "Matn va joriy anketa OpenAI’ga yuboriladi. Pasport va karta ma’lumotlarini yozmang."}</p>
+    <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{isRu ? "Напишите запрос так же, как написали бы в группе. AI подготовит черновик, а ваш исходный текст останется заголовком запроса." : "So‘rovni guruhga yozgandek oddiy yozing. AI qoralamani tayyorlaydi, siz yozgan matn esa so‘rov sarlavhasi bo‘lib qoladi."}</p>
+    <textarea id="request-ai-text" value={text} disabled={busy || disabled} onChange={(event) => setText(event.target.value)} maxLength={2000} rows={3} placeholder={isRu ? "Например: Дубай, 2 человека, 20 октября, бюджет $500 на человека" : "Masalan: Dubai, 2 kishi, 20 oktyabr, budjet har kishiga $500"} className="mt-3 w-full rounded-xl border border-blue-200 bg-white p-3 text-sm outline-none focus:ring-2 focus:ring-blue-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+    <button type="button" onClick={() => void fill()} disabled={busy || disabled || !text.trim()} className="mt-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{busy ? (isRu ? "Заполнение…" : "To‘ldirilmoqda…") : (isRu ? "Подготовить запрос" : "So‘rovni tayyorlash")}</button>
+    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{isRu ? "После AI останутся только основные обязательные поля. Остальные детали можно уточнить в предложении или чате. Не вводите данные паспорта и карты." : "AI dan keyin faqat asosiy majburiy maydonlar qoladi. Qolgan tafsilotlarni taklif yoki chatda aniqlashtirish mumkin. Pasport va karta ma’lumotlarini yozmang."}</p>
     {error && <p role="alert" className="mt-3 text-sm text-red-700 dark:text-red-300">{error}</p>}
     {choices.length > 0 && <div className="mt-3 space-y-2"><p className="text-sm text-blue-800 dark:text-blue-200">{isRu ? "Найдено несколько услуг. Какую перенести в эту анкету?" : "Bir nechta xizmat topildi. Qaysi birini shu anketaga joylaymiz?"}</p>{choices.map((draft, index) => <button key={index} type="button" onClick={() => { onApply(draft); setChoices([]); }} className="block w-full rounded-xl border border-blue-200 bg-white p-3 text-left text-sm text-blue-800 dark:bg-slate-900 dark:text-blue-200">{localize(serviceDefinition(draft.category)!.label, isRu)} · {requestTitle(draft)} · {draft.travel_date || "…"}</button>)}</div>}
   </section>;

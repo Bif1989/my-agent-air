@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Agent Bifavia — My Agent Air",
-  "short_name": "Agent Bifavia",
-  "description": "O‘zbekiston turizm bozori uchun B2B platforma: AI yordamchi, so‘rovlar, takliflar, chat va bitimlar.",
+  "name": "My Agent Air — B2B Travel Platform",
+  "short_name": "My Agent Air",
+  "description": "Aviakassa, turagent va turoperatorlar uchun AI, Geo-Tender, so‘rov, taklif, chat va bitim platformasi.",
   "lang": "uz",
   "start_url": "/dashboard",
   "scope": "/",

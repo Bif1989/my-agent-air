@@ -2,6 +2,7 @@ import RecoveryRedirect from "@/app/components/recovery-redirect";
 import PwaInstall from "@/app/components/pwa-install";
 import PwaSplash from "@/app/components/pwa-splash";
 import AiVoiceLoader from "@/app/components/ai-voice-loader";
+import VkLaunchAuth from "@/app/components/vk-launch-auth";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { UiSettingsProvider } from "@/lib/ui-settings";
@@ -19,14 +20,14 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "My Agent Air — Travel Agent B2B Platform",
-  applicationName: "Agent Bifavia",
-  description: "Aviakassa va turizm agentlari uchun so‘rov, taklif, bitim va hamkorlik platformasi.",
+  applicationName: "My Agent Air",
+  description: "Aviakassa, turagent va turoperatorlar uchun AI, Geo-Tender, so‘rov, taklif va bitim platformasi.",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: "/my-agent-air-icon.svg",
     apple: "/my-agent-air-maskable.svg",
   },
-  appleWebApp: { capable: true, title: "Agent Bifavia", statusBarStyle: "black-translucent" },
+  appleWebApp: { capable: true, title: "My Agent Air", statusBarStyle: "black-translucent" },
   formatDetection: { telephone: false },
 };
 
@@ -59,7 +60,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         <UiSettingsProvider>
           <PwaSplash />
-          <RecoveryRedirect />{children}
+          <RecoveryRedirect />
+          <VkLaunchAuth />
+          {children}
           <AiVoiceLoader />
           <PwaInstall />
         </UiSettingsProvider>
