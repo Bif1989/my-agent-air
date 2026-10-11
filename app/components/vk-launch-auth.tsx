@@ -40,9 +40,9 @@ export default function VkLaunchAuth() {
 
         const stored = getStoredSession();
         if (stored) {
-          let active = stored;
+          let active: ReturnType<typeof getStoredSession> = stored;
           if (sessionNeedsRefresh(stored)) {
-            active = await refreshSession().catch(() => null) || null;
+            active = await refreshSession().catch(() => null);
           }
           if (active) {
             if (cancelled) return;
