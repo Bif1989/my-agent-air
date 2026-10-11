@@ -4,7 +4,7 @@ import bridge from "@vkontakte/vk-bridge";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { getVkLaunchParams } from "@/lib/vk-chat";
-import { getStoredSession, saveSession } from "@/lib/supabase-auth";
+import { getStoredSession, refreshSession, saveSession, sessionNeedsRefresh } from "@/lib/supabase-auth";
 
 type VkAuthResult = {
   ok?: boolean;
@@ -22,7 +22,6 @@ export default function VkLaunchAuth() {
   useEffect(() => {
     const params = getVkLaunchParams();
     if (params.get("vk_app_id") !== "54781128" || !/^\d{1,20}$/.test(params.get("vk_user_id") || "")) return;
-    if (getStoredSession()) return;
 
     let cancelled = false;
     async function authenticate() {
@@ -31,7 +30,27 @@ export default function VkLaunchAuth() {
       setIsVk(true);
       setError("");
       try {
-        await bridge.send("VKWebAppInit");
+        // Bridge initialization is useful for VK UI integration but is not an identity proof.
+        // Do not block a valid signed launch or an existing session if VK bridge initialization is flaky.
+        try {
+          await bridge.send("VKWebAppInit");
+        } catch {
+          // Server-side signature verification below remains the source of truth for VK identity.
+        }
+
+        const stored = getStoredSession();
+        if (stored) {
+          let active = stored;
+          if (sessionNeedsRefresh(stored)) {
+            active = await refreshSession().catch(() => null) || null;
+          }
+          if (active) {
+            if (cancelled) return;
+            window.location.replace("/dashboard");
+            return;
+          }
+        }
+
         let firstName = "";
         let lastName = "";
         let photoUrl = "";
