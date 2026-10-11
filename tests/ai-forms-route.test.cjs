@@ -42,12 +42,13 @@ test('AI form endpoint uses the shared strict schema, preserves form context and
   assert.ok(upstream.input.some(item => item.role === 'user' && item.content.includes('Current form draft') && item.content.includes('Samarqand')));
   assert.equal(calls.filter(call => call.url.includes('/rest/v1/requests')).length, 0, 'AI never publishes requests');
 });
-test('missing fields are calculated from the actual form, not trusted from AI', async () => {
+test('missing optional details are not trusted from AI, invented or promoted to blockers', async () => {
   mockProvider(completed([{ ...hotel, service_details: { kind: 'Mehmonxona' } }]));
   const body = await (await POST(request({ message: 'Mehmonxona kerak' }))).json();
-  assert.ok(body.requests[0].missing.some(text => text.includes('Chiqish sanasi')));
-  assert.ok(body.requests[0].missing.some(text => text.includes('Xonalar soni')));
-  assert.ok(body.requests[0].missing.some(text => text.includes('yoshini')));
+  assert.equal(body.requests[0].service_details.check_out, undefined);
+  assert.equal(body.requests[0].service_details.rooms, undefined);
+  assert.equal(body.requests[0].service_details.child_ages, undefined);
+  assert.deepEqual(body.requests[0].missing, []);
 });
 test('unauthenticated requests and exhausted limits make no paid provider call', async () => {
   const calls = mockProvider(completed(), { allowed: false, code: 'USER_LIMIT' });

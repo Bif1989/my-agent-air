@@ -92,7 +92,7 @@ export async function listRequests(options: ListRequestOptions = {}) {
   const conditions: string[] = [];
   if (options.freshness) conditions.push(requestFreshnessFilter(options.freshness));
   const search = searchFilterText(options.search || "");
-  if (search) conditions.push(`or(origin.ilike.*${search}*,destination.ilike.*${search}*,description.ilike.*${search}*)`);
+  if (search) conditions.push(`or(service_details->>source_text.ilike.*${search}*,origin.ilike.*${search}*,destination.ilike.*${search}*,description.ilike.*${search}*)`);
   if (conditions.length) params.set("and", `(${conditions.join(",")})`);
 
   const requestKey = `${currentUserId()}:${params.toString()}`;

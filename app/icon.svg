@@ -1,15 +1,11 @@
-<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="My Agent Air">
   <defs>
-    <linearGradient id="bubble" x1="8" y1="8" x2="56" y2="58" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#0F4C81"/>
-      <stop offset="1" stop-color="#087EA4"/>
-    </linearGradient>
+    <linearGradient id="a" x1="38" y1="34" x2="208" y2="222" gradientUnits="userSpaceOnUse"><stop stop-color="#06c7d8"/><stop offset=".45" stop-color="#0787ef"/><stop offset=".72" stop-color="#0756bc"/><stop offset="1" stop-color="#16d5b3"/></linearGradient>
+    <linearGradient id="orbit" x1="28" y1="176" x2="219" y2="82" gradientUnits="userSpaceOnUse"><stop stop-color="#1095f2"/><stop offset="1" stop-color="#16cdb5"/></linearGradient>
   </defs>
-  <path d="M10 12C10 8.686 12.686 6 16 6H48C51.314 6 54 8.686 54 12V37C54 40.314 51.314 43 48 43H31L20 54V43H16C12.686 43 10 40.314 10 37V12Z" fill="url(#bubble)"/>
-  <path d="M15 15C15 13.343 16.343 12 18 12H46C47.657 12 49 13.343 49 15V34C49 35.657 47.657 37 46 37H29L22 44V37H18C16.343 37 15 35.657 15 34V15Z" stroke="#8BE9F4" stroke-width="1.5" stroke-opacity=".5"/>
-  <path d="M20 31.5L43.8 18.1C45.3 17.25 46.75 18.7 45.9 20.2L32.5 44L28.5 32.8L20 31.5Z" fill="white"/>
-  <path d="M28.5 32.8L45.4 18.5L33.2 35.9" fill="#8BE9F4"/>
-  <path d="M47.5 10.5C51.1 11.7 53.3 13.9 54.5 17.5" stroke="#67E8F9" stroke-width="2.5" stroke-linecap="round"/>
-  <path d="M50.2 5.5C56.2 7.4 59.6 10.8 61.5 16.8" stroke="#67E8F9" stroke-width="2.5" stroke-linecap="round" opacity=".7"/>
-  <circle cx="46.5" cy="9.5" r="1.8" fill="#67E8F9"/>
+  <path d="M129 24c10 0 18 7 23 17l75 178-55-29-22-54H96l-25 54-51 25L104 43c5-12 13-19 25-19Zm-14 82h25l-12-34-13 34Z" fill="url(#a)"/>
+  <path d="M24 183c35-3 76-27 112-50 36-24 65-48 76-45 8 2-5 19-31 40-31 25-74 52-112 67-28 11-49 13-54 4-4-7 0-12 9-16Z" fill="#fff"/>
+  <path d="M17 192c27 14 86-11 139-43 34-21 60-43 72-58" fill="none" stroke="url(#orbit)" stroke-width="9" stroke-linecap="round"/>
+  <path d="m104 132 61-23-24 18 34 6-7 8-42-1-18 15-9-3 14-16-9-4Z" fill="#fff"/>
+  <circle cx="218" cy="82" r="13" fill="#18c8b8"/><circle cx="218" cy="82" r="6" fill="#fff"/>
 </svg>

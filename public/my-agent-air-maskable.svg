@@ -1,16 +1,8 @@
-<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="512" height="512" rx="112" fill="#0B1F3A"/>
-  <defs>
-    <linearGradient id="bubble" x1="126" y1="114" x2="386" y2="398" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#0F4C81"/>
-      <stop offset="1" stop-color="#087EA4"/>
-    </linearGradient>
-  </defs>
-  <path d="M144 164C144 137.49 165.49 116 192 116H320C346.51 116 368 137.49 368 164V264C368 290.51 346.51 312 320 312H252L188 376V312H192C165.49 312 144 290.51 144 264V164Z" fill="url(#bubble)"/>
-  <path d="M176 184C176 170.745 186.745 160 200 160H312C325.255 160 336 170.745 336 184V248C336 261.255 325.255 272 312 272H244L204 312V272H200C186.745 272 176 261.255 176 248V184Z" stroke="#8BE9F4" stroke-width="10" stroke-opacity=".55"/>
-  <path d="M202 246L317 180C326 175 335 184 330 193L264 308L243 253L202 246Z" fill="white"/>
-  <path d="M243 253L327 184L268 270" fill="#8BE9F4"/>
-  <path d="M330 142C352 149 366 163 373 185" stroke="#67E8F9" stroke-width="16" stroke-linecap="round"/>
-  <path d="M346 108C382 120 404 142 416 178" stroke="#67E8F9" stroke-width="16" stroke-linecap="round" opacity=".72"/>
-  <circle cx="326" cy="136" r="12" fill="#67E8F9"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="My Agent Air">
+  <defs><linearGradient id="bg" x1="20" y1="20" x2="236" y2="236"><stop stop-color="#0b3d73"/><stop offset="1" stop-color="#087bd8"/></linearGradient><linearGradient id="a" x1="65" y1="58" x2="193" y2="204"><stop stop-color="#08cad7"/><stop offset=".5" stop-color="#0790ed"/><stop offset="1" stop-color="#19d5b1"/></linearGradient></defs>
+  <rect width="256" height="256" rx="54" fill="url(#bg)"/>
+  <path d="M129 52c7 0 12 5 16 12l54 129-39-21-16-39H105l-18 39-36 18 60-124c4-9 10-14 18-14Zm-10 60h18l-9-25-9 25Z" fill="url(#a)"/>
+  <path d="M51 172c25-2 54-19 80-36 26-17 47-35 55-32 6 1-4 13-22 28-23 18-53 37-81 48-20 8-35 9-39 3-3-5 0-9 7-11Z" fill="#fff"/>
+  <path d="m108 136 44-17-17 13 24 4-5 6-30-1-13 11-7-3 10-11-6-2Z" fill="#fff"/>
+  <circle cx="190" cy="99" r="9" fill="#20d5be"/><circle cx="190" cy="99" r="4" fill="#fff"/>
 </svg>

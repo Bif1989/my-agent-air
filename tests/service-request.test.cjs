@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { SERVICE_CATEGORIES, requestIssues, hydrateServiceRequest, cleanServiceData, serviceDetailEntries, requestTitle, serviceFields } = require('../lib/service-request.ts');
+const { SERVICE_CATEGORIES, requestIssues, hydrateServiceRequest, cleanServiceData, serviceDetailEntries, requestTitle, serviceFields, serviceDefinition } = require('../lib/service-request.ts');
 const { AI_SERVICE_DETAILS_SCHEMA, aiRequestToDraft } = require('../lib/ai-request-draft.ts');
 const { readRequestDraft } = require('../lib/request-assistant.ts');
 const { joinServiceDetails } = require('../lib/request-details.ts');
@@ -33,7 +33,7 @@ for (const category of SERVICE_CATEGORIES) {
   });
 }
 
-test('hotel dates, rooms and exact child ages are validated independently', () => {
+test('hotel dates, rooms and exact child ages are validated independently when supplied', () => {
   const request = make('Mehmonxona');
   request.children = 2;
   request.service_details = { ...request.service_details, check_out: request.travel_date, rooms: '0', child_ages: '7' };
@@ -56,16 +56,18 @@ test('round trips, impossible dates and transfer return times cannot be publishe
   assert.ok(requestIssues(transfer, false, now).some((issue) => issue.field === 'service_details.pickup_time'));
 });
 
-test('unknown budget and passenger count stay unknown; price basis is required for a budget', () => {
+test('unknown budget and passenger count stay unknown; budget basis defaults to total', () => {
   const draft = aiRequestToDraft({ category: 'Aviachipta', adults: null, budget: null, currency: '', service_details: {} });
   assert.equal(draft.adults, undefined);
   assert.equal(draft.budget, undefined);
   assert.equal(draft.currency, undefined);
   const request = make('Mehmonxona');
   request.budget = 250000;
-  assert.ok(requestIssues(request, false, now).some((issue) => issue.field === 'service_details.budget_basis'));
+  assert.deepEqual(requestIssues(request, false, now), []);
+  assert.equal(cleanServiceData(request).budget_basis, 'total');
   request.service_details.budget_basis = 'per_person_night';
   assert.deepEqual(requestIssues(request, false, now), []);
+  assert.equal(cleanServiceData(request).budget_basis, 'per_person_night');
   assert.equal(aiRequestToDraft(request).budget, 250000);
 });
 
@@ -87,6 +89,28 @@ test('hidden and foreign-category details cannot leak into the saved request', (
   assert.deepEqual(cleanServiceData(request), { trip_type: 'one_way' });
   assert.equal(requestTitle(make('Mehmonxona')), 'Samarqand');
   assert.equal(requestTitle(make('Transfer')), 'Toshkent → Samarqand');
+});
+
+test('AI original text is preserved as the exact request title and is not duplicated in details', () => {
+  const request = make('Tur paket');
+  request.service_details.source_text = 'Dubaiga 2 kishiga 20 oktyabrga tur kerak, $500 har kishiga';
+  const cleaned = cleanServiceData(request);
+  assert.equal(cleaned.source_text, request.service_details.source_text);
+  assert.equal(requestTitle({ ...request, service_details: cleaned }), request.service_details.source_text);
+  assert.equal(serviceDetailEntries({ ...request, service_details: cleaned }).some((entry) => entry.key === 'source_text'), false);
+});
+
+test('detailed questionnaire fields are optional for fast publishing while supplied invalid values still fail', () => {
+  for (const category of SERVICE_CATEGORIES) assert.equal(serviceDefinition(category).fields.some((field) => field.required), false);
+  const tour = make('Tur paket');
+  tour.origin = null;
+  tour.service_details = {};
+  assert.deepEqual(requestIssues(tour, false, now), []);
+  const hotel = make('Mehmonxona');
+  hotel.service_details = {};
+  assert.deepEqual(requestIssues(hotel, false, now), []);
+  hotel.service_details = { rooms: '0' };
+  assert.ok(requestIssues(hotel, false, now).some((issue) => issue.field === 'service_details.rooms'));
 });
 
 test('AI has exactly the questionnaire fields and explicit category variants', () => {

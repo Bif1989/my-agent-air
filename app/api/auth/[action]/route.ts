@@ -5,6 +5,7 @@ import { POST as resendSignupPost } from "@/lib/server/auth-actions/resend-signu
 import { POST as signupPost } from "@/lib/server/auth-actions/signup";
 import { POST as updatePasswordPost } from "@/lib/server/auth-actions/update-password";
 import { POST as verifySignupPost } from "@/lib/server/auth-actions/verify-signup";
+import { POST as vkPost } from "@/lib/server/auth-actions/vk";
 
 export const runtime = "nodejs";
 export const maxDuration = 20;
@@ -18,6 +19,7 @@ const handlers: Record<string, Handler> = {
   signup: signupPost,
   "update-password": updatePasswordPost,
   "verify-signup": verifySignupPost,
+  vk: vkPost,
 };
 
 export async function POST(request: NextRequest) {
