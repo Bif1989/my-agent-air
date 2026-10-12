@@ -16,7 +16,6 @@ const AGENT_TYPES = new Set(["Aviakassa", "Turagent", "Turoperator", "Mehmonxona
 
 type Body = Record<string, unknown>;
 type Quota = { allowed?: boolean; retry_after?: number };
-
 type EskizLoginPayload = { data?: { token?: unknown } };
 type EskizSendPayload = { id?: unknown; message?: unknown; status?: unknown };
 
@@ -94,13 +93,6 @@ async function sendEskizCode(phone: string, code: string) {
   }
 }
 
-async function consumeQuota(admin: ReturnType<typeof createClient>, scope: string, limit: number, window: number) {
-  const { data, error } = await admin.rpc("consume_auth_action_quota", { p_scope_hash: scope, p_limit: limit, p_window_seconds: window });
-  if (error) return { ok: false, retryAfter: 60, unavailable: true };
-  const quota = (data || {}) as Quota;
-  return quota.allowed === true ? { ok: true, retryAfter: 0, unavailable: false } : { ok: false, retryAfter: Math.max(1, Number(quota.retry_after) || 60), unavailable: false };
-}
-
 export async function POST(request: NextRequest) {
   if (crossSite(request)) return json({ code: "FORBIDDEN", message: "So‘rov qabul qilinmadi." }, 403);
   const secret = process.env.SUPABASE_SECRET_KEY?.trim();
@@ -118,9 +110,20 @@ export async function POST(request: NextRequest) {
     if (!captcha.ok) return json({ code: captcha.code, message: captcha.message }, captcha.status);
 
     const scope = createHmac("sha256", secret).update(`signup-sms:${ip}\u0000${phone}`).digest("hex");
-    const quota = await consumeQuota(admin, scope, 5, 3600);
-    if (quota.unavailable) return json({ code: "AUTH_UNAVAILABLE", message: "Xizmat vaqtincha ishlamayapti." }, 503);
-    if (!quota.ok) return json({ code: "TOO_MANY_ATTEMPTS", message: "Juda ko‘p SMS so‘rovi. Birozdan keyin qayta urinib ko‘ring." }, 429, quota.retryAfter);
+    const { data: quotaData, error: quotaError } = await admin.rpc("consume_auth_action_quota", {
+      p_scope_hash: scope,
+      p_limit: 5,
+      p_window_seconds: 3600,
+    });
+    if (quotaError) {
+      console.error("Signup SMS quota check failed", quotaError.code || "unknown");
+      return json({ code: "AUTH_UNAVAILABLE", message: "Xizmat vaqtincha ishlamayapti." }, 503);
+    }
+    const quota = (quotaData || {}) as Quota;
+    if (quota.allowed !== true) {
+      const retryAfter = Math.max(1, Number(quota.retry_after) || 60);
+      return json({ code: "TOO_MANY_ATTEMPTS", message: "Juda ko‘p SMS so‘rovi. Birozdan keyin qayta urinib ko‘ring." }, 429, retryAfter);
+    }
 
     const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
     const expiresAt = new Date(Date.now() + OTP_TTL_MS).toISOString();
