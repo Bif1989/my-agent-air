@@ -93,22 +93,21 @@ test('password login is routed through a persistent server-side brute-force limi
   assert.match(migration, /revoke all on function public\.auth_login_limit_status\(text, text\) from public, anon, authenticated/);
 });
 
-test('signup and password recovery are routed through persistent send quotas', () => {
+test('SMS signup and password recovery use protected server-side quotas', () => {
   const register = read('app/register/page.tsx');
   const forgot = read('app/forgot-password/page.tsx');
   const client = read('lib/public-auth.ts');
-  const signup = read('lib/server/auth-actions/signup.ts');
+  const signupSms = read('lib/server/auth-actions/signup-sms.ts');
   const recover = read('lib/server/auth-actions/recover.ts');
   const migration = read('supabase/migrations/20261008152500_p1_auth_action_rate_limit.sql');
 
-  assert.match(register, /signUpProtected/);
+  assert.match(register, /requestSignupSmsProtected/);
   assert.match(forgot, /requestPasswordResetProtected/);
-  assert.match(client, /\/api\/auth\/signup/);
+  assert.match(client, /\/api\/auth\/signup-sms/);
   assert.match(client, /\/api\/auth\/recover/);
-  assert.match(signup, /consume_auth_action_quota/);
-  assert.match(signup, /signup-pair/);
-  assert.match(signup, /limit: 3, window: 1800/);
-  assert.match(signup, /limit: 20, window: 3600/);
+  assert.match(signupSms, /consume_auth_action_quota/);
+  assert.match(signupSms, /signup-sms/);
+  assert.match(signupSms, /5, 3600/);
   assert.match(recover, /consume_auth_action_quota/);
   assert.match(recover, /recover-pair/);
   assert.match(recover, /limit: 3, window: 1800/);
@@ -118,27 +117,30 @@ test('signup and password recovery are routed through persistent send quotas', (
   assert.match(migration, /revoke all on function public\.consume_auth_action_quota\(text, integer, integer\) from public, anon, authenticated/);
 });
 
-test('signup OTP verification and resend use protected server-side quotas', () => {
+test('SMS signup OTP is hashed, expires, limits retries, and uses server-side Eskiz credentials', () => {
   const register = read('app/register/page.tsx');
   const client = read('lib/public-auth.ts');
-  const verify = read('lib/server/auth-actions/verify-signup.ts');
-  const resend = read('lib/server/auth-actions/resend-signup.ts');
+  const route = read('lib/server/auth-actions/signup-sms.ts');
+  const migration = read('supabase/migrations/20261012162000_registration_sms_otp.sql');
 
-  assert.match(register, /verifySignupOtpProtected/);
-  assert.match(register, /resendSignupOtpProtected/);
-  assert.match(client, /\/api\/auth\/verify-signup/);
-  assert.match(client, /\/api\/auth\/resend-signup/);
-  assert.match(verify, /consume_auth_action_quota/);
-  assert.match(verify, /otp-verify-pair/);
-  assert.match(verify, /limit: 5, window: 900/);
-  assert.match(verify, /limit: 30, window: 3600/);
-  assert.match(verify, /sec-fetch-site/);
-  assert.match(verify, /INVALID_OTP/);
-  assert.match(resend, /consume_auth_action_quota/);
-  assert.match(resend, /otp-resend-pair/);
-  assert.match(resend, /limit: 3, window: 1800/);
-  assert.match(resend, /limit: 20, window: 3600/);
-  assert.match(resend, /tasdiqlash kutilayotgan bo‘lsa/);
+  assert.match(register, /verifySignupSmsProtected/);
+  assert.match(register, /resendSignupSmsProtected/);
+  assert.match(register, /completeSignupSmsProtected/);
+  assert.match(client, /phase: "verify"/);
+  assert.match(client, /phase: "resend"/);
+  assert.match(client, /phase: "complete"/);
+  assert.match(route, /createHmac\("sha256"/);
+  assert.match(route, /timingSafeEqual/);
+  assert.match(route, /OTP_TTL_MS = 5 \* 60 \* 1000/);
+  assert.match(route, /attempts\) >= 5/);
+  assert.match(route, /resend_count\) >= 3/);
+  assert.match(route, /process\.env\.ESKIZ_EMAIL/);
+  assert.match(route, /process\.env\.ESKIZ_PASSWORD/);
+  assert.match(route, /notify\.eskiz\.uz\/api\/auth\/login/);
+  assert.match(route, /notify\.eskiz\.uz\/api\/message\/sms\/send/);
+  assert.match(route, /email_confirm: true/);
+  assert.match(migration, /enable row level security/);
+  assert.match(migration, /revoke all on table public\.registration_sms_otps from anon, authenticated/);
 });
 
 test('production smoke waits for real app content instead of only an old reachable alias', () => {
