@@ -132,8 +132,8 @@ test('SMS signup OTP is hashed, expires, limits retries, and uses server-side Es
   assert.match(route, /createHmac\("sha256"/);
   assert.match(route, /timingSafeEqual/);
   assert.match(route, /OTP_TTL_MS = 5 \* 60 \* 1000/);
-  assert.match(route, /attempts\) >= 5/);
-  assert.match(route, /resend_count\) >= 3/);
+  assert.match(route, /Number\(challenge\.attempts \|\| 0\) >= 5/);
+  assert.match(route, /Number\(challenge\.resend_count \|\| 0\) >= 3/);
   assert.match(route, /process\.env\.ESKIZ_EMAIL/);
   assert.match(route, /process\.env\.ESKIZ_PASSWORD/);
   assert.match(route, /notify\.eskiz\.uz\/api\/auth\/login/);
