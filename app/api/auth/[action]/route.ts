@@ -3,6 +3,7 @@ import { POST as passwordPost } from "@/lib/server/auth-actions/password";
 import { POST as recoverPost } from "@/lib/server/auth-actions/recover";
 import { POST as resendSignupPost } from "@/lib/server/auth-actions/resend-signup";
 import { POST as signupPost } from "@/lib/server/auth-actions/signup";
+import { POST as signupSmsPost } from "@/lib/server/auth-actions/signup-sms";
 import { POST as updatePasswordPost } from "@/lib/server/auth-actions/update-password";
 import { POST as verifySignupPost } from "@/lib/server/auth-actions/verify-signup";
 import { POST as vkPost } from "@/lib/server/auth-actions/vk";
@@ -17,6 +18,7 @@ const handlers: Record<string, Handler> = {
   recover: recoverPost,
   "resend-signup": resendSignupPost,
   signup: signupPost,
+  "signup-sms": signupSmsPost,
   "update-password": updatePasswordPost,
   "verify-signup": verifySignupPost,
   vk: vkPost,
