@@ -6,6 +6,8 @@ type PublicAuthResponse = {
   access_token?: string;
   refresh_token?: string;
   user?: { id?: string; email?: string };
+  challenge_id?: string;
+  phone?: string;
   code?: string;
   message?: string;
   ok?: boolean;
@@ -46,8 +48,8 @@ async function post(path: string, body: Record<string, unknown>) {
   if (!response.ok) {
     const code = typeof data.code === "string" ? data.code : "";
     if (response.status === 429) throw new SupabaseRequestError(data.message || "Juda ko‘p urinish. Birozdan keyin qayta urinib ko‘ring.", 429, code);
-    if (response.status === 422) throw new SupabaseRequestError(data.message || "Ma’lumotlarni tekshirib qayta kiriting.", 422, code);
-    if ([400, 401, 403].includes(response.status)) throw new SupabaseRequestError(data.message || "So‘rov qabul qilinmadi.", response.status, code);
+    if ([409, 410, 422].includes(response.status)) throw new SupabaseRequestError(data.message || "Ma’lumotlarni tekshirib qayta kiriting.", response.status, code);
+    if ([400, 401, 403, 404].includes(response.status)) throw new SupabaseRequestError(data.message || "So‘rov qabul qilinmadi.", response.status, code);
     throw new SupabaseRequestError(data.message || "Xizmat vaqtincha ishlamayapti. Qayta urinib ko‘ring.", response.status, code);
   }
   return data;
@@ -66,11 +68,34 @@ export function signUpProtected(input: SignupInput) {
   });
 }
 
-export function verifySignupOtpProtected(email: string, token: string) {
-  return post("/api/auth/verify-signup", {
-    email: email.trim().toLowerCase(),
-    token: token.trim(),
+export function requestSignupSmsProtected(phone: string, captchaToken: string) {
+  return post("/api/auth/signup-sms", { phase: "request", phone: phone.trim(), captcha_token: captchaToken });
+}
+
+export function verifySignupSmsProtected(challengeId: string, phone: string, token: string) {
+  return post("/api/auth/signup-sms", { phase: "verify", challenge_id: challengeId, phone: phone.trim(), token: token.trim() });
+}
+
+export function resendSignupSmsProtected(challengeId: string, phone: string) {
+  return post("/api/auth/signup-sms", { phase: "resend", challenge_id: challengeId, phone: phone.trim() });
+}
+
+export function completeSignupSmsProtected(input: SignupInput, challengeId: string) {
+  return post("/api/auth/signup-sms", {
+    phase: "complete",
+    challenge_id: challengeId,
+    email: input.email.trim().toLowerCase(),
+    password: input.password,
+    full_name: input.full_name.trim(),
+    company_name: input.company_name.trim(),
+    phone: input.phone.trim(),
+    city: input.city.trim(),
+    agent_type: input.agent_type.trim(),
   });
+}
+
+export function verifySignupOtpProtected(email: string, token: string) {
+  return post("/api/auth/verify-signup", { email: email.trim().toLowerCase(), token: token.trim() });
 }
 
 export function resendSignupOtpProtected(email: string) {
