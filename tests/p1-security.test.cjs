@@ -107,7 +107,8 @@ test('SMS signup and password recovery use protected server-side quotas', () => 
   assert.match(client, /\/api\/auth\/recover/);
   assert.match(signupSms, /consume_auth_action_quota/);
   assert.match(signupSms, /signup-sms/);
-  assert.match(signupSms, /5, 3600/);
+  assert.match(signupSms, /p_limit: 5/);
+  assert.match(signupSms, /p_window_seconds: 3600/);
   assert.match(recover, /consume_auth_action_quota/);
   assert.match(recover, /recover-pair/);
   assert.match(recover, /limit: 3, window: 1800/);
