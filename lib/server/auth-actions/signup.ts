@@ -9,18 +9,12 @@ import { verifyTurnstile } from "@/lib/server/turnstile";
 export const runtime = "nodejs";
 export const maxDuration = 20;
 
-const MAX_BODY_BYTES = 16 * 1024;
+const MAX_BODY_BYTES = 8 * 1024;
 const UPSTREAM_TIMEOUT_MS = 15_000;
-const AGENT_TYPES = new Set(["Aviakassa", "Turagent", "Turoperator", "Mehmonxona", "Transport", "Gid", "Boshqa"]);
 
 type SignupBody = {
   email?: unknown;
   password?: unknown;
-  full_name?: unknown;
-  company_name?: unknown;
-  phone?: unknown;
-  city?: unknown;
-  agent_type?: unknown;
   captcha_token?: unknown;
 };
 type Quota = { allowed?: boolean; retry_after?: number };
@@ -46,10 +40,6 @@ function hash(secret: string, value: string) {
   return createHmac("sha256", secret).update(value).digest("hex");
 }
 
-async function body(request: NextRequest): Promise<SignupBody | null> {
-  return readBoundedJson<SignupBody>(request, MAX_BODY_BYTES);
-}
-
 function clean(value: unknown, max: number) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
@@ -63,19 +53,14 @@ export async function POST(request: NextRequest) {
     return json({ code: "AUTH_UNAVAILABLE", message: "Ro‘yxatdan o‘tish xizmati vaqtincha ishlamayapti." }, 503);
   }
 
-  const input = await body(request);
+  const input = await readBoundedJson<SignupBody>(request, MAX_BODY_BYTES);
   const email = clean(input?.email, 320).toLowerCase();
   const password = typeof input?.password === "string" ? input.password : "";
-  const fullName = clean(input?.full_name, 160);
-  const company = clean(input?.company_name, 200);
-  const phone = clean(input?.phone, 64);
-  const city = clean(input?.city, 120);
-  const agentType = clean(input?.agent_type, 60);
   const captchaToken = clean(input?.captcha_token, 4096);
   const passwordMessage = newPasswordValidationMessage(password);
 
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || passwordMessage || !fullName || !company || !phone || !city || !AGENT_TYPES.has(agentType)) {
-    return json({ code: "INVALID_INPUT", message: passwordMessage || "Ma’lumotlarni tekshirib qayta kiriting." }, 422);
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || passwordMessage) {
+    return json({ code: "INVALID_INPUT", message: passwordMessage || "Email manzilini tekshirib qayta kiriting." }, 422);
   }
 
   const ip = clientIp(request);
@@ -102,7 +87,7 @@ export async function POST(request: NextRequest) {
 
   const exposure = await checkPasswordExposure(password);
   if (exposure.status === "leaked") {
-    return json({ code: "PASSWORD_COMPROMISED", message: "Bu parol avval ma’lumot sizishlarida uchragan. Boshqa, noyob parol tanlang." }, 422);
+    return json({ code: "PASSWORD_COMPROMISED", message: "Bu parol xavfsiz emas. Boshqa, noyob parol tanlang." }, 422);
   }
   if (exposure.status === "unavailable") console.warn("Pwned-password check unavailable during signup", exposure.reason);
 
@@ -112,22 +97,20 @@ export async function POST(request: NextRequest) {
     const upstream = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
       method: "POST",
       headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email,
-        password,
-        data: { full_name: fullName, company_name: company, phone, city, agent_type: agentType },
-      }),
+      body: JSON.stringify({ email, password, data: { auth_source: "email" } }),
       cache: "no-store",
       signal: controller.signal,
     });
     const result = await upstream.json().catch(() => ({})) as Record<string, unknown>;
     if (upstream.ok) return json(result);
     if (upstream.status === 429) return json({ code: "TOO_MANY_ATTEMPTS", message: "Juda ko‘p urinish. Birozdan keyin qayta urinib ko‘ring." }, 429, Number(upstream.headers.get("retry-after") || 60));
-    if ([400, 422].includes(upstream.status)) return json({ code: "INVALID_INPUT", message: "Ma’lumotlar talabga mos kelmadi. Tekshirib qayta kiriting." }, 422);
+    if ([400, 422].includes(upstream.status)) return json({ code: "INVALID_INPUT", message: "Email yoki parol talabga mos kelmadi. Tekshirib qayta kiriting." }, 422);
     return json({ code: "AUTH_UNAVAILABLE", message: "Ro‘yxatdan o‘tish xizmati vaqtincha ishlamayapti." }, 503);
   } catch (error) {
     if (controller.signal.aborted) return json({ code: "AUTH_TIMEOUT", message: "Ro‘yxatdan o‘tish xizmatidan javob kelmadi." }, 504);
     console.error("Signup upstream failed", error instanceof Error ? error.name : "unknown");
     return json({ code: "AUTH_UNAVAILABLE", message: "Ro‘yxatdan o‘tish xizmati vaqtincha ishlamayapti." }, 503);
-  } finally { clearTimeout(timeout); }
+  } finally {
+    clearTimeout(timeout);
+  }
 }
