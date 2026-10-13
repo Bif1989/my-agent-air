@@ -20,15 +20,20 @@ async function checkProfile(browser, label, contextOptions) {
 
   response = await page.goto(`${baseURL}/login`, { waitUntil: 'domcontentloaded' });
   assert(response && response.status() < 400, `${label}: login did not load`);
-  await page.locator('input[type="email"]').waitFor();
+  await page.locator('input[name="identifier"]').waitFor();
   await page.locator('input[type="password"]').waitFor();
 
   response = await page.goto(`${baseURL}/register`, { waitUntil: 'domcontentloaded' });
   assert(response && response.status() < 400, `${label}: register did not load`);
-  for (const name of ['fullName', 'email', 'company', 'phone', 'city', 'agentType', 'password', 'passwordConfirmation']) {
+  for (const name of ['identifier', 'password', 'terms']) {
     assert.equal(await page.locator(`[name="${name}"]`).count(), 1, `${label}: missing register field ${name}`);
   }
+  for (const deferredName of ['fullName', 'company', 'city', 'agentType', 'passwordConfirmation']) {
+    assert.equal(await page.locator(`[name="${deferredName}"]`).count(), 0, `${label}: profile field ${deferredName} must be deferred until after verification`);
+  }
   assert((await page.locator('[name="password"]').getAttribute('minlength')) === '10', `${label}: password minlength must be 10`);
+  assert.match(await page.locator('body').innerText(), /Telefon|Телефон/);
+  assert.match(await page.locator('body').innerText(), /Email/);
 
   for (const path of [
     '/agents/static-shell-smoke',
