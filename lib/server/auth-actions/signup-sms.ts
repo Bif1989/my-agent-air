@@ -9,10 +9,10 @@ import { verifyTurnstile } from "@/lib/server/turnstile";
 export const runtime = "nodejs";
 export const maxDuration = 20;
 
-const MAX_BODY_BYTES = 16 * 1024;
+const MAX_BODY_BYTES = 12 * 1024;
 const OTP_TTL_MS = 5 * 60 * 1000;
 const ESKIZ_TIMEOUT_MS = 10_000;
-const AGENT_TYPES = new Set(["Aviakassa", "Turagent", "Turoperator", "Mehmonxona", "Transport", "Gid", "Boshqa"]);
+const PHONE_EMAIL_DOMAIN = "users.agent.bifavia.uz";
 
 type Body = Record<string, unknown>;
 type Quota = { allowed?: boolean; retry_after?: number };
@@ -45,6 +45,10 @@ function normalizeUzPhone(value: string) {
   if (/^998\d{9}$/.test(digits)) return digits;
   if (/^\d{9}$/.test(digits)) return `998${digits}`;
   return "";
+}
+
+function phoneSyntheticEmail(phone: string) {
+  return `phone_${phone}@${PHONE_EMAIL_DOMAIN}`;
 }
 
 function otpHash(secret: string, challengeId: string, code: string) {
@@ -93,10 +97,20 @@ async function sendEskizCode(phone: string, code: string) {
   }
 }
 
+async function passwordIsAcceptable(password: string) {
+  const message = newPasswordValidationMessage(password);
+  if (message) return { ok: false as const, message };
+  const exposure = await checkPasswordExposure(password);
+  if (exposure.status === "leaked") return { ok: false as const, message: "Bu parol xavfsiz emas. Boshqa, noyob parol tanlang." };
+  if (exposure.status === "unavailable") console.warn("Pwned-password check unavailable during SMS signup", exposure.reason);
+  return { ok: true as const };
+}
+
 export async function POST(request: NextRequest) {
   if (crossSite(request)) return json({ code: "FORBIDDEN", message: "So‘rov qabul qilinmadi." }, 403);
   const secret = process.env.SUPABASE_SECRET_KEY?.trim();
   if (!secret) return json({ code: "AUTH_UNAVAILABLE", message: "Ro‘yxatdan o‘tish xizmati vaqtincha ishlamayapti." }, 503);
+
   const input = await readBoundedJson<Body>(request, MAX_BODY_BYTES);
   const phase = clean(input?.phase, 32);
   const admin = createClient(SUPABASE_URL, secret, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
@@ -104,8 +118,13 @@ export async function POST(request: NextRequest) {
 
   if (phase === "request") {
     const phone = normalizeUzPhone(clean(input?.phone, 64));
+    const password = typeof input?.password === "string" ? input.password : "";
     const captchaToken = clean(input?.captcha_token, 4096);
     if (!phone) return json({ code: "INVALID_PHONE", message: "Telefon raqamini +998 formatida kiriting." }, 422);
+
+    const passwordCheck = await passwordIsAcceptable(password);
+    if (!passwordCheck.ok) return json({ code: "PASSWORD_COMPROMISED", message: passwordCheck.message }, 422);
+
     const captcha = await verifyTurnstile({ token: captchaToken, action: "signup", remoteIp: ip, hostname: request.nextUrl.hostname });
     if (!captcha.ok) return json({ code: captcha.code, message: captcha.message }, captcha.status);
 
@@ -129,8 +148,8 @@ export async function POST(request: NextRequest) {
     const expiresAt = new Date(Date.now() + OTP_TTL_MS).toISOString();
     const { data: challenge, error } = await admin.from("registration_sms_otps").insert({ phone, code_hash: "pending", expires_at: expiresAt }).select("id").single();
     if (error || !challenge?.id) return json({ code: "AUTH_UNAVAILABLE", message: "SMS tasdiqlashni boshlash imkoni bo‘lmadi." }, 503);
-    const codeHash = otpHash(secret, challenge.id, code);
-    await admin.from("registration_sms_otps").update({ code_hash: codeHash }).eq("id", challenge.id);
+
+    await admin.from("registration_sms_otps").update({ code_hash: otpHash(secret, challenge.id, code) }).eq("id", challenge.id);
     try { await sendEskizCode(phone, code); }
     catch (error) {
       console.error("Signup SMS send failed", error instanceof Error ? error.message : "unknown");
@@ -143,7 +162,11 @@ export async function POST(request: NextRequest) {
   const challengeId = clean(input?.challenge_id, 64);
   const phone = normalizeUzPhone(clean(input?.phone, 64));
   if (!/^[0-9a-f-]{36}$/i.test(challengeId) || !phone) return json({ code: "INVALID_REQUEST", message: "Tasdiqlash ma’lumotlari noto‘g‘ri." }, 422);
-  const { data: challenge, error: challengeError } = await admin.from("registration_sms_otps").select("id,phone,code_hash,expires_at,verified_at,consumed_at,attempts,resend_count,last_sent_at").eq("id", challengeId).maybeSingle();
+
+  const { data: challenge, error: challengeError } = await admin.from("registration_sms_otps")
+    .select("id,phone,code_hash,expires_at,verified_at,consumed_at,attempts,resend_count,last_sent_at")
+    .eq("id", challengeId)
+    .maybeSingle();
   if (challengeError || !challenge || challenge.phone !== phone) return json({ code: "INVALID_REQUEST", message: "Tasdiqlash so‘rovi topilmadi." }, 404);
   if (challenge.consumed_at) return json({ code: "ALREADY_USED", message: "Bu kod allaqachon ishlatilgan." }, 409);
   if (new Date(challenge.expires_at).getTime() <= Date.now()) return json({ code: "OTP_EXPIRED", message: "Kod muddati tugagan. Yangi kod oling." }, 410);
@@ -172,35 +195,38 @@ export async function POST(request: NextRequest) {
       console.error("Signup SMS resend failed", error instanceof Error ? error.message : "unknown");
       return json({ code: "SMS_SEND_FAILED", message: "SMS yuborilmadi." }, 502);
     }
-    await admin.from("registration_sms_otps").update({ code_hash: otpHash(secret, challengeId, code), expires_at: new Date(Date.now() + OTP_TTL_MS).toISOString(), attempts: 0, verified_at: null, resend_count: Number(challenge.resend_count || 0) + 1, last_sent_at: new Date().toISOString() }).eq("id", challengeId);
+    await admin.from("registration_sms_otps").update({
+      code_hash: otpHash(secret, challengeId, code),
+      expires_at: new Date(Date.now() + OTP_TTL_MS).toISOString(),
+      attempts: 0,
+      verified_at: null,
+      resend_count: Number(challenge.resend_count || 0) + 1,
+      last_sent_at: new Date().toISOString(),
+    }).eq("id", challengeId);
     return json({ ok: true });
   }
 
   if (phase === "complete") {
     if (!challenge.verified_at) return json({ code: "PHONE_NOT_VERIFIED", message: "Avval telefon raqamini SMS kod bilan tasdiqlang." }, 403);
-    const email = clean(input?.email, 320).toLowerCase();
     const password = typeof input?.password === "string" ? input.password : "";
-    const fullName = clean(input?.full_name, 160);
-    const company = clean(input?.company_name, 200);
-    const city = clean(input?.city, 120);
-    const agentType = clean(input?.agent_type, 60);
-    const passwordMessage = newPasswordValidationMessage(password);
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || passwordMessage || !fullName || !company || !city || !AGENT_TYPES.has(agentType)) {
-      return json({ code: "INVALID_INPUT", message: passwordMessage || "Ma’lumotlarni tekshirib qayta kiriting." }, 422);
-    }
-    const exposure = await checkPasswordExposure(password);
-    if (exposure.status === "leaked") return json({ code: "PASSWORD_COMPROMISED", message: "Bu parol avval ma’lumot sizishlarida uchragan. Boshqa parol tanlang." }, 422);
+    const passwordCheck = await passwordIsAcceptable(password);
+    if (!passwordCheck.ok) return json({ code: "PASSWORD_COMPROMISED", message: passwordCheck.message }, 422);
 
+    const email = phoneSyntheticEmail(phone);
     const { data: created, error: createError } = await admin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
-      user_metadata: { full_name: fullName, company_name: company, phone: `+${phone}`, city, agent_type: agentType, phone_verified: true },
+      user_metadata: { phone: `+${phone}`, phone_verified: true, auth_source: "phone" },
     });
     if (createError || !created.user?.id) {
       const duplicate = /already|registered|exists/i.test(createError?.message || "");
-      return json({ code: duplicate ? "ACCOUNT_EXISTS" : "AUTH_UNAVAILABLE", message: duplicate ? "Bu email bilan akkaunt mavjud. Kirish sahifasidan foydalaning." : "Akkaunt yaratib bo‘lmadi." }, duplicate ? 409 : 503);
+      return json({
+        code: duplicate ? "ACCOUNT_EXISTS" : "AUTH_UNAVAILABLE",
+        message: duplicate ? "Bu telefon raqami bilan akkaunt mavjud. Kirish sahifasidan foydalaning." : "Akkaunt yaratib bo‘lmadi.",
+      }, duplicate ? 409 : 503);
     }
+
     await admin.from("registration_sms_otps").update({ consumed_at: new Date().toISOString() }).eq("id", challengeId);
 
     const signIn = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
@@ -210,7 +236,7 @@ export async function POST(request: NextRequest) {
       cache: "no-store",
     });
     const session = await signIn.json().catch(() => ({})) as Record<string, unknown>;
-    if (!signIn.ok) return json({ ok: true, user: { id: created.user.id, email }, code: "LOGIN_REQUIRED", message: "Akkaunt yaratildi. Endi kirish sahifasidan kiring." });
+    if (!signIn.ok) return json({ ok: true, user: { id: created.user.id, email }, code: "LOGIN_REQUIRED", message: "Akkaunt yaratildi. Endi telefon raqamingiz va parolingiz bilan kiring." });
     return json(session);
   }
 
