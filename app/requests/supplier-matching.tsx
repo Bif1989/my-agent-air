@@ -46,6 +46,9 @@ type GeneratedInvite = SupplierInviteDraft & {
   delivery?: SupplierDeliveryResult;
 };
 
+type OutreachChannel = "sms" | "email";
+type ErrorCode = "match" | "invite" | "";
+
 const typeLabel = (type: SupplierType, isRu: boolean) => isRu ? TYPE_LABELS[type].ru : TYPE_LABELS[type].uz;
 const statusLabel = (status: string, isRu: boolean) => STATUS_LABELS[status] ? (isRu ? STATUS_LABELS[status].ru : STATUS_LABELS[status].uz) : status;
 
@@ -76,59 +79,22 @@ function responseSummary(invite: SupplierInviteRow, isRu: boolean) {
 
 function deliveryMessage(invite: GeneratedInvite, isRu: boolean) {
   const delivery = invite.delivery;
-  if (invite.channel === "sms" && delivery?.sent) {
+  if (delivery?.sent) {
+    const channel = invite.channel === "sms" ? "SMS" : "Email";
     return tr(
       isRu,
-      `SMS avtomatik yuborildi: ${invite.recipient_hint}. Supplier linkni ochganda holat avtomatik yangilanadi.`,
-      `SMS отправлено автоматически: ${invite.recipient_hint}. Когда поставщик откроет ссылку, статус обновится автоматически.`,
+      `${channel} yuborildi: ${invite.recipient_hint}. Hamkor linkni ochganda holat avtomatik yangilanadi.`,
+      `${channel} отправлен: ${invite.recipient_hint}. После открытия ссылки статус обновится автоматически.`,
     );
   }
-  if (invite.channel === "sms" && delivery?.configured === false) {
-    return tr(
-      isRu,
-      "Avtomatik SMS yuborish productionda sozlanmagan. Hozircha linkni qo‘lda ulashish mumkin.",
-      "Автоматическая отправка SMS пока не настроена в production. Ссылкой можно поделиться вручную.",
-    );
+  if (delivery?.configured === false) {
+    return tr(isRu, "Yuborish xizmati productionda sozlanmagan.", "Сервис отправки не настроен в production.");
   }
-  if (invite.channel === "sms" && delivery?.status === "failed") {
-    return tr(
-      isRu,
-      "SMS yuborishda xatolik bo‘ldi. Individual link saqlandi — uni qo‘lda yuborish mumkin.",
-      "Не удалось отправить SMS. Индивидуальная ссылка сохранена — её можно отправить вручную.",
-    );
-  }
-  if (invite.channel === "email" && delivery?.sent) {
-    return tr(
-      isRu,
-      `Email avtomatik yuborildi: ${invite.recipient_hint}. Supplier linkni ochganda holat avtomatik yangilanadi.`,
-      `Email отправлен автоматически: ${invite.recipient_hint}. Когда поставщик откроет ссылку, статус обновится автоматически.`,
-    );
-  }
-  if (invite.channel === "email" && delivery?.configured === false) {
-    return tr(
-      isRu,
-      "Avtomatik email yuborish hali productionda sozlanmagan. Hozircha linkni qo‘lda ulashish mumkin.",
-      "Автоматическая отправка email пока не настроена в production. Ссылкой можно поделиться вручную.",
-    );
-  }
-  if (invite.channel === "email" && delivery?.status === "failed") {
-    return tr(
-      isRu,
-      "Email yuborishda xatolik bo‘ldi. Individual link saqlandi — uni qo‘lda yuborish mumkin.",
-      "Не удалось отправить email. Индивидуальная ссылка сохранена — её можно отправить вручную.",
-    );
-  }
-  if (!["email", "sms"].includes(invite.channel)) {
-    return tr(
-      isRu,
-      `Kanal: ${invite.channel} · Kontakt: ${invite.recipient_hint}. Bu kanal uchun avtomatik yuborish keyingi bosqichda ulanadi; linkni hozir qo‘lda ulashish mumkin.`,
-      `Канал: ${invite.channel} · Контакт: ${invite.recipient_hint}. Автоматическая отправка для этого канала будет подключена следующим этапом; пока ссылкой можно поделиться вручную.`,
-    );
+  if (delivery?.status === "failed") {
+    return tr(isRu, "Yuborishda xatolik bo‘ldi. Individual link saqlandi.", "Не удалось отправить сообщение. Индивидуальная ссылка сохранена.");
   }
   return tr(isRu, "Individual so‘rov havolasi tayyor.", "Индивидуальная ссылка запроса готова.");
 }
-
-type ErrorCode = "match" | "invite" | "";
 
 export default function SupplierMatching({ request }: { request: RequestRecord }) {
   const { isRu } = useUiSettings();
@@ -136,7 +102,7 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
   const [matches, setMatches] = useState<SupplierMatch[]>([]);
   const [invites, setInvites] = useState<SupplierInviteRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [workingId, setWorkingId] = useState("");
+  const [workingKey, setWorkingKey] = useState("");
   const [error, setError] = useState<ErrorCode>("");
   const [generated, setGenerated] = useState<GeneratedInvite | null>(null);
   const [copied, setCopied] = useState(false);
@@ -180,39 +146,39 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, effectiveSupplierType, request.id]);
 
-  async function makeInvite(supplier: SupplierMatch) {
-    setWorkingId(supplier.id);
+  async function makeInvite(supplier: SupplierMatch, channel: OutreachChannel) {
+    if (channel === "sms" && !supplier.has_phone) return;
+    if (channel === "email" && !supplier.has_email) return;
+
+    const key = `${supplier.id}:${channel}`;
+    setWorkingKey(key);
     setGenerated(null);
     setCopied(false);
     setError("");
     try {
-      const draft = await createSupplierInvite(request.id, supplier.id, "auto");
-      const url = `${window.location.origin}/supplier-request/${draft.token}`;
+      const draft = await createSupplierInvite(request.id, supplier.id, channel);
+      const url = `${window.location.origin}/s/${draft.token}`;
       let delivery: SupplierDeliveryResult | undefined;
-
-      if (draft.channel === "email" || draft.channel === "sms") {
-        try {
-          delivery = draft.channel === "sms"
-            ? await deliverSupplierInviteSms(draft.invite_id, draft.token)
-            : await deliverSupplierInviteEmail(draft.invite_id, draft.token);
-        } catch (cause) {
-          const deliveryError = cause as Error & { delivery?: SupplierDeliveryResult };
-          delivery = deliveryError.delivery || {
-            sent: false,
-            configured: true,
-            status: "failed",
-            channel: draft.channel,
-            code: draft.channel === "sms" ? "SMS_SEND_FAILED" : "EMAIL_SEND_FAILED",
-          };
-        }
+      try {
+        delivery = channel === "sms"
+          ? await deliverSupplierInviteSms(draft.invite_id, draft.token)
+          : await deliverSupplierInviteEmail(draft.invite_id, draft.token);
+      } catch (cause) {
+        const deliveryError = cause as Error & { delivery?: SupplierDeliveryResult };
+        delivery = deliveryError.delivery || {
+          sent: false,
+          configured: true,
+          status: "failed",
+          channel,
+          code: channel === "sms" ? "SMS_SEND_FAILED" : "EMAIL_SEND_FAILED",
+        };
       }
-
       setGenerated({ ...draft, url, delivery });
       setInvites(await listSupplierInvites(request.id));
     } catch {
       setError("invite");
     } finally {
-      setWorkingId("");
+      setWorkingKey("");
     }
   }
 
@@ -223,10 +189,11 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
   }
 
   const errorText = error === "match"
-    ? tr(isRu, "Tashqi supplierlarni topishda xatolik yuz berdi. Qayta urinib ko‘ring.", "Не удалось найти внешних поставщиков. Попробуйте ещё раз.")
+    ? tr(isRu, "Tashqi hamkorlarni topishda xatolik yuz berdi. Qayta urinib ko‘ring.", "Не удалось найти внешних поставщиков. Попробуйте ещё раз.")
     : error === "invite"
-      ? tr(isRu, "Taklif so‘rovini tayyorlab bo‘lmadi. Qayta urinib ko‘ring.", "Не удалось подготовить запрос предложения. Попробуйте ещё раз.")
+      ? tr(isRu, "Taklif so‘rovini yuborib bo‘lmadi. Qayta urinib ko‘ring.", "Не удалось отправить запрос предложения. Попробуйте ещё раз.")
       : "";
+
   const targetingSummary = <RequestTargetingSummary requestId={request.id} isOwner distributionMode={request.distribution_mode || "targeted"} />;
   if (!enabled) return targetingSummary;
 
@@ -237,7 +204,7 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Supplier Outreach</p>
           <h2 className="mt-2 text-xl font-semibold text-[#0b1f3a]">{tr(isRu, "Tashqi hamkorlardan taklif so‘rash", "Запросить предложение у внешних партнёров")}</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{tr(isRu, "Mos hamkor topiladi. Telefon mavjud bo‘lsa individual so‘rov SMS orqali, telefon bo‘lmasa email orqali avtomatik yuboriladi. Kontakt oshkor qilinmaydi; javob xavfsiz havola orqali olinadi.", "Система подбирает подходящего партнёра. Если есть телефон, индивидуальный запрос автоматически отправляется по SMS, иначе по email. Контакт не раскрывается; ответ поступает по защищённой ссылке.")}</p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{tr(isRu, "Har bir hamkor uchun yuborish kanalini o‘zingiz tanlang: SMS yoki email. Kontaktlar xavfsizlik uchun qisman ko‘rsatiladi.", "Для каждого партнёра выберите канал отправки: SMS или email. Контакты показываются частично в целях безопасности.")}</p>
         </div>
         <button type="button" onClick={() => void refresh()} disabled={loading} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:border-blue-300 disabled:opacity-50">{loading ? tr(isRu, "Qidirilmoqda...", "Поиск...") : tr(isRu, "Qayta qidirish", "Повторить поиск")}</button>
       </div>
@@ -261,26 +228,41 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
 
       <div className="mt-6 grid gap-3 md:grid-cols-2">
         {loading && matches.length === 0 && <div className="h-32 animate-pulse rounded-2xl bg-slate-100 md:col-span-2" />}
-        {!loading && matches.length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-7 text-center text-sm text-slate-500 md:col-span-2">{tr(isRu, "Hozircha ushbu hudud va xizmatga mos tashqi supplier topilmadi. Rasmiy baza kengaygani sari natijalar shu yerda chiqadi.", "Пока внешние поставщики для этого региона и услуги не найдены. По мере расширения базы результаты появятся здесь.")}</div>}
-        {matches.map((supplier) => <article key={supplier.id} className="rounded-2xl border border-slate-200 p-5">
-          <div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-[#0b1f3a]">{supplier.name}</h3><p className="mt-1 text-sm text-slate-500">{[supplier.city, supplier.region].filter(Boolean).join(" · ") || tr(isRu, "Hudud ko‘rsatilmagan", "Регион не указан")}</p></div><span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">{statusLabel(supplier.status, isRu)}</span></div>
-          <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-600">
-            <span className="rounded-full bg-cyan-50 px-2.5 py-1 font-semibold text-cyan-800">{tr(isRu, "Moslik", "Совпадение")}: {supplier.match_score}</span>
-            <span className="rounded-full bg-slate-100 px-2.5 py-1">{sourceLabel(supplier.source_type, isRu)}</span>
-            {supplier.star_rating && <span className="rounded-full bg-slate-100 px-2.5 py-1">{supplier.star_rating}★</span>}
-            {supplier.capacity != null && <span className="rounded-full bg-slate-100 px-2.5 py-1">{tr(isRu, "Sig‘im", "Вместимость")}: {supplier.capacity}</span>}
-            {supplier.has_phone && <span className="rounded-full bg-slate-100 px-2.5 py-1">{tr(isRu, "Telefon bor", "Есть телефон")}</span>}
-            {supplier.has_email && <span className="rounded-full bg-slate-100 px-2.5 py-1">{tr(isRu, "Email bor", "Есть email")}</span>}
-          </div>
-          <button type="button" onClick={() => void makeInvite(supplier)} disabled={Boolean(workingId)} className="mt-5 w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">{workingId === supplier.id ? tr(isRu, "Yuborilmoqda...", "Отправка...") : tr(isRu, "Taklif so‘rash", "Запросить предложение")}</button>
-        </article>)}
+        {!loading && matches.length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-7 text-center text-sm text-slate-500 md:col-span-2">{tr(isRu, "Hozircha ushbu hudud va xizmatga mos tashqi hamkor topilmadi.", "Пока внешние поставщики для этого региона и услуги не найдены.")}</div>}
+        {matches.map((supplier) => {
+          const smsKey = `${supplier.id}:sms`;
+          const emailKey = `${supplier.id}:email`;
+          return <article key={supplier.id} className="rounded-2xl border border-slate-200 p-5">
+            <div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-[#0b1f3a]">{supplier.name}</h3><p className="mt-1 text-sm text-slate-500">{[supplier.city, supplier.region].filter(Boolean).join(" · ") || tr(isRu, "Hudud ko‘rsatilmagan", "Регион не указан")}</p></div><span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">{statusLabel(supplier.status, isRu)}</span></div>
+            <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-600">
+              <span className="rounded-full bg-cyan-50 px-2.5 py-1 font-semibold text-cyan-800">{tr(isRu, "Moslik", "Совпадение")}: {supplier.match_score}</span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1">{sourceLabel(supplier.source_type, isRu)}</span>
+              {supplier.star_rating && <span className="rounded-full bg-slate-100 px-2.5 py-1">{supplier.star_rating}★</span>}
+              {supplier.capacity != null && <span className="rounded-full bg-slate-100 px-2.5 py-1">{tr(isRu, "Sig‘im", "Вместимость")}: {supplier.capacity}</span>}
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <div className={`rounded-xl border p-3 ${supplier.has_phone ? "border-blue-100 bg-blue-50/50" : "border-slate-200 bg-slate-50"}`}>
+                <p className="text-xs font-semibold text-slate-500">SMS</p>
+                <p className="mt-1 text-sm font-medium text-slate-700">{supplier.has_phone ? (supplier.phone_hint || tr(isRu, "Telefon mavjud", "Телефон доступен")) : tr(isRu, "Telefon raqami yo‘q", "Номера телефона нет")}</p>
+                <button type="button" onClick={() => void makeInvite(supplier, "sms")} disabled={!supplier.has_phone || Boolean(workingKey)} className="mt-3 w-full rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300">{workingKey === smsKey ? tr(isRu, "SMS yuborilmoqda...", "Отправка SMS...") : tr(isRu, "SMS orqali so‘rash", "Запросить по SMS")}</button>
+              </div>
+
+              <div className={`rounded-xl border p-3 ${supplier.has_email ? "border-emerald-100 bg-emerald-50/50" : "border-slate-200 bg-slate-50"}`}>
+                <p className="text-xs font-semibold text-slate-500">Email</p>
+                <p className="mt-1 truncate text-sm font-medium text-slate-700">{supplier.has_email ? (supplier.email_hint || tr(isRu, "Email mavjud", "Email доступен")) : tr(isRu, "Email yo‘q", "Email отсутствует")}</p>
+                <button type="button" onClick={() => void makeInvite(supplier, "email")} disabled={!supplier.has_email || Boolean(workingKey)} className="mt-3 w-full rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300">{workingKey === emailKey ? tr(isRu, "Email yuborilmoqda...", "Отправка email...") : tr(isRu, "Email orqali so‘rash", "Запросить по email")}</button>
+              </div>
+            </div>
+          </article>;
+        })}
       </div>
 
       {invites.length > 0 && <div className="mt-8 border-t border-slate-100 pt-6">
-        <div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold text-[#0b1f3a]">{tr(isRu, "Tashqi so‘rovlar holati", "Статус внешних запросов")}</h3><p className="mt-1 text-sm text-slate-500">{tr(isRu, "Yuborish, ochish va supplier javoblari bo‘yicha funnel.", "Воронка отправки, открытия и ответов поставщиков.")}</p></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{invites.length} {tr(isRu, "ta", "шт.")}</span></div>
+        <div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold text-[#0b1f3a]">{tr(isRu, "Tashqi so‘rovlar holati", "Статус внешних запросов")}</h3><p className="mt-1 text-sm text-slate-500">{tr(isRu, "Yuborish, ochish va hamkor javoblari bo‘yicha funnel.", "Воронка отправки, открытия и ответов поставщиков.")}</p></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{invites.length} {tr(isRu, "ta", "шт.")}</span></div>
         <div className="mt-4 space-y-3">{invites.map((invite) => {
           const summary = responseSummary(invite, isRu);
-          return <div key={invite.id} className="rounded-xl border border-slate-100 px-4 py-3 text-sm"><div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center"><div><span className="font-semibold text-[#0b1f3a]">{invite.supplier_name}</span><span className="ml-2 text-slate-400">{invite.recipient_hint}</span></div><span className={`font-semibold ${invite.status === "failed" ? "text-amber-700" : "text-blue-700"}`}>{statusLabel(invite.status, isRu)}</span></div>{summary && <p className={`mt-2 ${invite.response?.available === false ? "text-amber-700" : "text-emerald-700"}`}>{summary}</p>}</div>;
+          return <div key={invite.id} className="rounded-xl border border-slate-100 px-4 py-3 text-sm"><div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center"><div><span className="font-semibold text-[#0b1f3a]">{invite.supplier_name}</span><span className="ml-2 text-slate-400">{invite.channel.toUpperCase()} · {invite.recipient_hint}</span></div><span className={`font-semibold ${invite.status === "failed" ? "text-amber-700" : "text-blue-700"}`}>{statusLabel(invite.status, isRu)}</span></div>{summary && <p className={`mt-2 ${invite.response?.available === false ? "text-amber-700" : "text-emerald-700"}`}>{summary}</p>}</div>;
         })}</div>
       </div>}
     </section>
