@@ -6,22 +6,22 @@ import { FormEvent, useEffect, useState } from "react";
 import BrandMark from "@/app/components/brand-mark";
 import TurnstileChallenge, { TURNSTILE_SITE_KEY } from "@/app/components/turnstile-challenge";
 import { UiControls, useUiSettings } from "@/lib/ui-settings";
-import { AGENT_TYPES } from "@/lib/profile-completion";
 import { saveSession } from "@/lib/supabase-auth";
-import { completeSignupSmsProtected, requestSignupSmsProtected, resendSignupSmsProtected, verifySignupSmsProtected } from "@/lib/public-auth";
+import {
+  completeSignupSmsProtected,
+  requestSignupSmsProtected,
+  resendSignupOtpProtected,
+  resendSignupSmsProtected,
+  signUpProtected,
+  verifySignupOtpProtected,
+  verifySignupSmsProtected,
+} from "@/lib/public-auth";
 
 const MIN_PASSWORD_LENGTH = 10;
-
-type PendingSignup = {
-  email: string;
-  password: string;
-  full_name: string;
-  company_name: string;
-  phone: string;
-  city: string;
-  agent_type: string;
-  captcha_token: string;
-};
+type SignupMethod = "phone" | "email";
+type PendingVerification =
+  | { method: "phone"; identifier: string; password: string; challengeId: string }
+  | { method: "email"; identifier: string };
 
 function maskPhone(phone: string) {
   const digits = phone.replace(/\D/g, "");
@@ -30,12 +30,12 @@ function maskPhone(phone: string) {
 }
 
 export default function RegisterPage() {
+  const [method, setMethod] = useState<SignupMethod>("phone");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
-  const [pending, setPending] = useState<PendingSignup | null>(null);
-  const [challengeId, setChallengeId] = useState("");
+  const [pending, setPending] = useState<PendingVerification | null>(null);
   const [otpCode, setOtpCode] = useState("");
   const [resendCooldown, setResendCooldown] = useState(0);
   const [captchaToken, setCaptchaToken] = useState("");
@@ -50,17 +50,25 @@ export default function RegisterPage() {
     return () => window.clearInterval(timer);
   }, [resendCooldown]);
 
+  function resetCredentials(nextMethod = method) {
+    setMethod(nextMethod);
+    setPending(null);
+    setOtpCode("");
+    setError("");
+    setResendCooldown(0);
+    setCaptchaToken("");
+    setCaptchaReset((value) => value + 1);
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     const formData = new FormData(event.currentTarget);
+    const identifier = String(formData.get("identifier") || "").trim();
     const password = String(formData.get("password") || "");
+
     if (password.length < MIN_PASSWORD_LENGTH) {
       setError(isRu ? `Пароль должен содержать не менее ${MIN_PASSWORD_LENGTH} символов.` : `Parol kamida ${MIN_PASSWORD_LENGTH} belgidan iborat bo‘lsin.`);
-      return;
-    }
-    if (password !== String(formData.get("passwordConfirmation") || "")) {
-      setError(isRu ? "Пароли должны совпадать." : "Parollar bir xil bo‘lishi kerak.");
       return;
     }
     if (captchaRequired && !captchaToken) {
@@ -68,27 +76,25 @@ export default function RegisterPage() {
       return;
     }
 
-    const payload: PendingSignup = {
-      email: String(formData.get("email") || "").trim(),
-      password,
-      full_name: String(formData.get("fullName") || "").trim(),
-      company_name: String(formData.get("company") || "").trim(),
-      phone: String(formData.get("phone") || "").trim(),
-      city: String(formData.get("city") || "").trim(),
-      agent_type: String(formData.get("agentType") || "").trim(),
-      captcha_token: captchaToken,
-    };
-
     setIsLoading(true);
     try {
-      const response = await requestSignupSmsProtected(payload.phone, captchaToken);
-      if (!response.challenge_id) throw new Error(isRu ? "Не удалось начать SMS-подтверждение." : "SMS tasdiqlashni boshlash imkoni bo‘lmadi.");
-      setPending(payload);
-      setChallengeId(response.challenge_id);
+      if (method === "phone") {
+        const response = await requestSignupSmsProtected(identifier, password, captchaToken);
+        if (!response.challenge_id) throw new Error(isRu ? "Не удалось отправить SMS-код." : "SMS kodni yuborib bo‘lmadi.");
+        setPending({ method: "phone", identifier, password, challengeId: response.challenge_id });
+      } else {
+        const response = await signUpProtected({ email: identifier, password, captcha_token: captchaToken });
+        if (response.access_token && response.refresh_token && response.user?.id) {
+          saveSession(response);
+          router.replace("/profile?complete=1");
+          return;
+        }
+        setPending({ method: "email", identifier: identifier.toLowerCase() });
+      }
       setOtpCode("");
       setResendCooldown(60);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : (isRu ? "Ошибка отправки SMS." : "SMS yuborishda xatolik yuz berdi."));
+      setError(requestError instanceof Error ? requestError.message : (isRu ? "Ошибка регистрации." : "Ro‘yxatdan o‘tishda xatolik yuz berdi."));
       if (captchaRequired) setCaptchaReset((value) => value + 1);
     } finally {
       setIsLoading(false);
@@ -97,22 +103,32 @@ export default function RegisterPage() {
 
   async function handleVerifyOtp(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!pending || !challengeId) return;
+    if (!pending) return;
     setError("");
     if (!/^\d{6}$/.test(otpCode)) {
       setError(isRu ? "Введите 6-значный код." : "6 xonali kodni kiriting.");
       return;
     }
+
     setIsVerifying(true);
     try {
-      await verifySignupSmsProtected(challengeId, pending.phone, otpCode);
-      const response = await completeSignupSmsProtected(pending, challengeId);
-      if (response.access_token && response.refresh_token && response.user?.id) {
-        saveSession(response);
-        router.push("/profile?complete=1");
-        return;
+      if (pending.method === "phone") {
+        await verifySignupSmsProtected(pending.challengeId, pending.identifier, otpCode);
+        const response = await completeSignupSmsProtected({ phone: pending.identifier, password: pending.password }, pending.challengeId);
+        if (response.access_token && response.refresh_token && response.user?.id) {
+          saveSession(response);
+          router.replace("/profile?complete=1");
+          return;
+        }
+      } else {
+        const response = await verifySignupOtpProtected(pending.identifier, otpCode);
+        if (response.access_token && response.refresh_token && response.user?.id) {
+          saveSession(response);
+          router.replace("/profile?complete=1");
+          return;
+        }
       }
-      router.push("/login");
+      router.replace("/login");
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : (isRu ? "Ошибка подтверждения кода." : "Kodni tasdiqlashda xatolik yuz berdi."));
     } finally {
@@ -121,15 +137,16 @@ export default function RegisterPage() {
   }
 
   async function handleResendOtp() {
-    if (!pending || !challengeId || resendCooldown > 0 || isResending) return;
+    if (!pending || resendCooldown > 0 || isResending) return;
     setError("");
     setIsResending(true);
     try {
-      await resendSignupSmsProtected(challengeId, pending.phone);
+      if (pending.method === "phone") await resendSignupSmsProtected(pending.challengeId, pending.identifier);
+      else await resendSignupOtpProtected(pending.identifier);
       setOtpCode("");
       setResendCooldown(60);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : (isRu ? "Ошибка повторной отправки SMS." : "SMSni qayta yuborishda xatolik yuz berdi."));
+      setError(requestError instanceof Error ? requestError.message : (isRu ? "Не удалось отправить код повторно." : "Kodni qayta yuborib bo‘lmadi."));
     } finally {
       setIsResending(false);
     }
@@ -140,52 +157,68 @@ export default function RegisterPage() {
   return (
     <main className="min-h-screen bg-[#f4f8fc] px-4 py-4 sm:px-6 sm:py-6">
       <div className="fixed right-4 top-4 z-50"><UiControls /></div>
-      <div className="mx-auto grid max-w-6xl overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl shadow-blue-900/10 lg:grid-cols-[0.72fr_1.28fr]">
+      <div className="mx-auto grid min-h-[calc(100vh-2rem)] max-w-5xl overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl shadow-blue-900/10 sm:min-h-[calc(100vh-3rem)] lg:grid-cols-[0.82fr_1.18fr]">
         <aside className="relative hidden overflow-hidden bg-[#0b1f3a] p-10 text-white lg:flex lg:flex-col lg:justify-between">
           <Link href="/" className="relative flex items-center gap-3 text-sm font-semibold tracking-wide"><BrandMark /> MY AGENT AIR</Link>
           <div className="relative">
-            <p className="text-sm font-medium text-cyan-300">{isRu ? "БОЛЬШЕ ВОЗМОЖНОСТЕЙ ВМЕСТЕ" : "BIRGALIKDA KO‘PROQ IMKONIYAT"}</p>
-            <h2 className="mt-4 text-4xl font-semibold leading-tight">{isRu ? "Ваша сеть. Ваши сделки." : "Sizning tarmog‘ingiz. Sizning kelishuvlaringiz."}</h2>
-            <p className="mt-5 leading-7 text-blue-100">{isRu ? "Находите партнёров и развивайте туристический бизнес быстрее." : "Yangi hamkorlarni toping va turizm biznesini tezroq rivojlantiring."}</p>
+            <p className="text-sm font-medium text-cyan-300">{isRu ? "БЫСТРАЯ РЕГИСТРАЦИЯ" : "TEZKOR RO‘YXATDAN O‘TISH"}</p>
+            <h2 className="mt-4 text-4xl font-semibold leading-tight">{isRu ? "Сначала аккаунт. Затем профиль." : "Avval hisob. Keyin profil."}</h2>
+            <p className="mt-5 leading-7 text-blue-100">{isRu ? "Подтвердите телефон или email за пару шагов. Данные компании заполните уже после входа." : "Telefon yoki emailni ikki qadamda tasdiqlang. Kompaniya ma’lumotlarini kirgandan keyin to‘ldirasiz."}</p>
           </div>
           <p className="relative text-sm text-blue-200">Find • Connect • Deal</p>
         </aside>
 
-        <section className="p-6 sm:p-10 lg:p-14">
-          <Link href="/" className="flex w-fit items-center gap-3 text-sm font-semibold tracking-wide text-[#0b1f3a] lg:hidden"><BrandMark /> MY AGENT AIR</Link>
-          <div className="mt-10 lg:mt-0">
-            <p className="text-sm font-medium text-blue-600">{isRu ? "Новый аккаунт" : "Yangi hisob"}</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[#0b1f3a]">{isRu ? "Присоединяйтесь к сети" : "Tarmoqqa qo‘shiling"}</h1>
-            <p className="mt-3 text-sm leading-6 text-slate-500">{isRu ? "Заполните данные и подтвердите номер телефона кодом из SMS." : "Ma’lumotlarni to‘ldiring va telefon raqamingizni SMS kod orqali tasdiqlang."}</p>
+        <section className="flex items-center justify-center p-6 sm:p-10 lg:p-14">
+          <div className="w-full max-w-md">
+            <Link href="/" className="flex w-fit items-center gap-3 text-sm font-semibold tracking-wide text-[#0b1f3a] lg:hidden"><BrandMark /> MY AGENT AIR</Link>
+            <div className="mt-10 lg:mt-0">
+              <p className="text-sm font-medium text-blue-600">{pending ? (isRu ? "Шаг 2 из 2" : "2-bosqich / 2") : (isRu ? "Шаг 1 из 2" : "1-bosqich / 2")}</p>
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[#0b1f3a]">{pending ? (isRu ? "Подтвердите код" : "Kodni tasdiqlang") : (isRu ? "Создать аккаунт" : "Hisob ochish")}</h1>
+              <p className="mt-3 text-sm leading-6 text-slate-500">{pending
+                ? (isRu ? "После подтверждения вы войдёте в аккаунт и заполните анкету компании." : "Tasdiqlagach hisobga kirasiz va kompaniya anketasini to‘ldirasiz.")
+                : (isRu ? "Нужны только телефон или email и пароль. Остальные данные — после подтверждения." : "Hozir faqat telefon yoki email va parol kerak. Qolgan ma’lumotlar tasdiqlashdan keyin.")}</p>
+            </div>
+
+            {pending ? (
+              <form onSubmit={handleVerifyOtp} className="mt-8 grid gap-5">
+                <p className="rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                  {pending.method === "phone"
+                    ? (isRu ? "6-значный код отправлен на:" : "6 xonali kod yuborildi:")
+                    : (isRu ? "6-значный код отправлен на email:" : "6 xonali kod emailga yuborildi:")} {" "}
+                  <span className="font-semibold">{pending.method === "phone" ? maskPhone(pending.identifier) : pending.identifier}</span>
+                </p>
+                <label className="block text-sm font-medium text-slate-700">{isRu ? "Код подтверждения" : "Tasdiqlash kodi"}
+                  <input required name="otp" type="text" value={otpCode} onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" pattern="\d{6}" maxLength={6} autoComplete="one-time-code" placeholder="123456" className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3.5 text-center text-xl tracking-[0.35em] outline-none transition placeholder:tracking-normal placeholder:text-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
+                </label>
+                {error && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+                <button type="submit" disabled={isVerifying || otpCode.length !== 6} className="rounded-xl bg-blue-600 py-3.5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-4 focus:ring-blue-100">{isVerifying ? (isRu ? "Подтверждение..." : "Tasdiqlanmoqda...") : (isRu ? "Подтвердить и продолжить" : "Tasdiqlash va davom etish")}</button>
+                <button type="button" onClick={handleResendOtp} disabled={resendCooldown > 0 || isResending} className="rounded-xl border border-slate-200 bg-white py-3.5 font-semibold text-slate-700 transition hover:border-blue-200 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-4 focus:ring-blue-100">{isResending ? (isRu ? "Отправка..." : "Yuborilmoqda...") : resendCooldown > 0 ? `${isRu ? "Отправить повторно" : "Kodni qayta yuborish"} (${resendCooldown}s)` : (isRu ? "Отправить повторно" : "Kodni qayta yuborish")}</button>
+                <button type="button" onClick={() => resetCredentials(pending.method)} className="text-sm font-medium text-slate-500 hover:text-blue-700">{isRu ? "Изменить телефон / email или пароль" : "Telefon / email yoki parolni o‘zgartirish"}</button>
+              </form>
+            ) : (
+              <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+                <div className="grid grid-cols-2 rounded-xl bg-slate-100 p-1">
+                  <button type="button" onClick={() => resetCredentials("phone")} className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition ${method === "phone" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500"}`}>{isRu ? "Телефон" : "Telefon"}</button>
+                  <button type="button" onClick={() => resetCredentials("email")} className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition ${method === "email" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500"}`}>Email</button>
+                </div>
+
+                <label className="block text-sm font-medium text-slate-700">{method === "phone" ? (isRu ? "Номер телефона" : "Telefon raqami") : "Email"}
+                  <input required name="identifier" type={method === "phone" ? "tel" : "email"} inputMode={method === "phone" ? "tel" : "email"} placeholder={method === "phone" ? "+998 90 123 45 67" : "agent@example.com"} autoComplete={method === "phone" ? "tel" : "email"} className={inputClass} />
+                </label>
+                <label className="block text-sm font-medium text-slate-700">{isRu ? "Пароль" : "Parol"}
+                  <input required name="password" type="password" minLength={MIN_PASSWORD_LENGTH} autoComplete="new-password" className={inputClass} />
+                  <span className="mt-2 block text-xs leading-5 text-slate-400">{isRu ? `Минимум ${MIN_PASSWORD_LENGTH} символов. Небезопасный пароль будет отклонён до отправки кода.` : `Kamida ${MIN_PASSWORD_LENGTH} belgi. Xavfsiz bo‘lmagan parol kod yuborilishidan oldin ko‘rsatiladi.`}</span>
+                </label>
+
+                <label className="flex items-start gap-3 text-sm text-slate-500"><input required name="terms" type="checkbox" className="mt-1 h-4 w-4 accent-blue-600" /><span>{isRu ? "Я согласен с " : ""}<Link href="/terms" target="_blank" className="text-blue-600 underline">{isRu ? "условиями использования" : "Foydalanish shartlari"}</Link>{isRu ? " и " : " va "}<Link href="/privacy" target="_blank" className="text-blue-600 underline">{isRu ? "политикой конфиденциальности" : "maxfiylik qoidalari"}</Link>{isRu ? "." : " bilan tanishdim va roziman."}</span></label>
+                <TurnstileChallenge action="signup" onToken={setCaptchaToken} resetNonce={captchaReset} />
+                {error && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+                <button type="submit" disabled={isLoading || (captchaRequired && !captchaToken)} className="w-full rounded-xl bg-blue-600 py-3.5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-4 focus:ring-blue-100">{isLoading ? (isRu ? "Отправка..." : "Yuborilmoqda...") : method === "phone" ? (isRu ? "Получить SMS-код" : "SMS kod olish") : (isRu ? "Получить код по email" : "Email kod olish")}</button>
+              </form>
+            )}
+
+            <p className="mt-6 text-center text-sm text-slate-500">{isRu ? "Уже есть аккаунт?" : "Hisobingiz bormi?"} <Link href="/login" className="font-semibold text-blue-600 hover:text-blue-700">{isRu ? "Войти" : "Kirish"}</Link></p>
           </div>
-
-          {pending ? (
-            <form onSubmit={handleVerifyOtp} className="mt-8 grid gap-5">
-              <p className="rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-700">{isRu ? "Введите 6-значный код, отправленный на номер:" : "Quyidagi raqamga yuborilgan 6 xonali kodni kiriting:"} <span className="font-semibold">{maskPhone(pending.phone)}</span></p>
-              <label className="block text-sm font-medium text-slate-700">{isRu ? "Код подтверждения" : "Tasdiqlash kodi"}<input required name="otp" type="text" value={otpCode} onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" pattern="\d{6}" maxLength={6} autoComplete="one-time-code" placeholder="123456" className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3.5 text-center text-xl tracking-[0.35em] outline-none transition placeholder:tracking-normal placeholder:text-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-100" /></label>
-              {error && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
-              <button type="submit" disabled={isVerifying || otpCode.length !== 6} className="rounded-xl bg-blue-600 py-3.5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-4 focus:ring-blue-100">{isVerifying ? (isRu ? "Подтверждение..." : "Tasdiqlanmoqda...") : (isRu ? "Подтвердить и зарегистрироваться" : "Tasdiqlash va ro‘yxatdan o‘tish")}</button>
-              <button type="button" onClick={handleResendOtp} disabled={resendCooldown > 0 || isResending} className="rounded-xl border border-slate-200 bg-white py-3.5 font-semibold text-slate-700 transition hover:border-blue-200 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-4 focus:ring-blue-100">{isResending ? (isRu ? "Отправка..." : "Yuborilmoqda...") : resendCooldown > 0 ? `${isRu ? "Отправить повторно" : "Kodni qayta yuborish"} (${resendCooldown}s)` : (isRu ? "Отправить повторно" : "Kodni qayta yuborish")}</button>
-              <button type="button" onClick={() => { setPending(null); setChallengeId(""); setOtpCode(""); setError(""); setCaptchaToken(""); setCaptchaReset((value) => value + 1); }} className="text-sm font-medium text-slate-500 hover:text-blue-700">{isRu ? "Изменить данные" : "Ma’lumotlarni o‘zgartirish"}</button>
-            </form>
-          ) : (
-            <form onSubmit={handleSubmit} className="mt-8 grid gap-5 sm:grid-cols-2">
-              <label className="block text-sm font-medium text-slate-700">{isRu ? "Имя и фамилия" : "Ism va familiya"}<input required name="fullName" type="text" autoComplete="name" className={inputClass} /></label>
-              <label className="block text-sm font-medium text-slate-700">Email<input required name="email" type="email" placeholder="agent@example.com" autoComplete="email" className={inputClass} /></label>
-              <label className="block text-sm font-medium text-slate-700">{isRu ? "Компания / бренд" : "Kompaniya / brend"}<input required name="company" type="text" autoComplete="organization" className={inputClass} /></label>
-              <label className="block text-sm font-medium text-slate-700">{isRu ? "Телефон" : "Telefon"}<input required name="phone" type="tel" placeholder="+998 90 123 45 67" autoComplete="tel" className={inputClass} /></label>
-              <label className="block text-sm font-medium text-slate-700">{isRu ? "Город" : "Shahar"}<input required name="city" type="text" autoComplete="address-level2" className={inputClass} /></label>
-              <label className="block text-sm font-medium text-slate-700">{isRu ? "Тип партнёра" : "Agent turi"}<select required name="agentType" defaultValue="" className={`${inputClass} bg-white`}><option value="" disabled>{isRu ? "Выберите" : "Tanlang"}</option>{AGENT_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
-              <label className="block text-sm font-medium text-slate-700">{isRu ? "Пароль" : "Parol"}<input required name="password" type="password" minLength={MIN_PASSWORD_LENGTH} autoComplete="new-password" className={inputClass} /></label>
-              <label className="block text-sm font-medium text-slate-700">{isRu ? "Повторите пароль" : "Parolni tasdiqlash"}<input required name="passwordConfirmation" type="password" minLength={MIN_PASSWORD_LENGTH} autoComplete="new-password" className={inputClass} /></label>
-              <label className="flex items-start gap-3 text-sm text-slate-500 sm:col-span-2"><input required name="terms" type="checkbox" className="mt-1 h-4 w-4 accent-blue-600" /><span>{isRu ? "Я согласен с " : ""}<Link href="/terms" target="_blank" className="text-blue-600 underline">{isRu ? "условиями использования" : "Foydalanish shartlari"}</Link>{isRu ? " и " : " va "}<Link href="/privacy" target="_blank" className="text-blue-600 underline">{isRu ? "политикой конфиденциальности" : "maxfiylik qoidalari"}</Link>{isRu ? "." : " bilan tanishdim va roziman."}</span></label>
-              <div className="sm:col-span-2"><TurnstileChallenge action="signup" onToken={setCaptchaToken} resetNonce={captchaReset} /></div>
-              {error && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700 sm:col-span-2">{error}</p>}
-              <button type="submit" disabled={isLoading || (captchaRequired && !captchaToken)} className="rounded-xl bg-blue-600 py-3.5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-4 focus:ring-blue-100 sm:col-span-2">{isLoading ? (isRu ? "Отправка SMS..." : "SMS yuborilmoqda...") : (isRu ? "Получить SMS-код" : "SMS kod olish")}</button>
-            </form>
-          )}
-
-          <p className="mt-6 text-center text-sm text-slate-500">{isRu ? "Уже есть аккаунт?" : "Akkauntingiz bormi?"} <Link href="/login" className="font-medium text-blue-600 hover:text-blue-700">{isRu ? "Войти" : "Kirish"}</Link></p>
         </section>
       </div>
     </main>
