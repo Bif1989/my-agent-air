@@ -10,7 +10,7 @@ type ProtectedAuthResponse = {
   code?: string;
 };
 
-export async function signInProtected(email: string, password: string, captchaToken = "") {
+export async function signInProtected(identifier: string, password: string, captchaToken = "") {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), AUTH_REQUEST_TIMEOUT_MS);
   let response: Response;
@@ -18,7 +18,7 @@ export async function signInProtected(email: string, password: string, captchaTo
     response = await fetch("/api/auth/password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email.trim().toLowerCase(), password, captcha_token: captchaToken }),
+      body: JSON.stringify({ identifier: identifier.trim(), password, captcha_token: captchaToken }),
       cache: "no-store",
       referrerPolicy: "no-referrer",
       signal: controller.signal,
@@ -42,7 +42,7 @@ export async function signInProtected(email: string, password: string, captchaTo
       throw new SupabaseRequestError(data.message || "Xavfsizlik tekshiruvi muvaffaqiyatsiz. Qayta urinib ko‘ring.", response.status, code);
     }
     if ([400, 401, 403].includes(response.status)) {
-      throw new SupabaseRequestError("Email yoki parol noto‘g‘ri.", response.status, code);
+      throw new SupabaseRequestError("Email/telefon yoki parol noto‘g‘ri.", response.status, code);
     }
     throw new SupabaseRequestError(data.message || "Kirish xizmatida vaqtinchalik xatolik. Qayta urinib ko‘ring.", response.status, code);
   }
