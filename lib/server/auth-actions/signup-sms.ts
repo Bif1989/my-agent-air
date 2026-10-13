@@ -79,7 +79,7 @@ async function sendEskizCode(phone: string, code: string) {
 
   const sendForm = new FormData();
   sendForm.set("mobile_phone", phone);
-  sendForm.set("message", `My Agent Air ro'yxatdan o'tish kodi: ${code}. Kod 5 daqiqa amal qiladi.`);
+  sendForm.set("message", `My Agent Air platformasida ro'yxatdan o'tishni tasdiqlash kodi: ${code}. Kod 5 daqiqa amal qiladi.`);
   sendForm.set("from", from);
   const sent = await fetchWithTimeout("https://notify.eskiz.uz/api/message/sms/send", {
     method: "POST",
