@@ -18,6 +18,8 @@ export type SupplierMatch = {
   services: string[];
   has_phone: boolean;
   has_email: boolean;
+  phone_hint: string | null;
+  email_hint: string | null;
   match_score: number;
 };
 
@@ -77,7 +79,7 @@ async function rpc<T>(name: string, body: Record<string, unknown>) {
 }
 
 export function matchSuppliersForRequest(requestId: string, supplierType?: SupplierType, limit = 20) {
-  return rpc<SupplierMatch[]>("match_suppliers_for_request", {
+  return rpc<SupplierMatch[]>("match_suppliers_for_request_v2", {
     p_request_id: requestId,
     p_supplier_type: supplierType || null,
     p_limit: limit,
