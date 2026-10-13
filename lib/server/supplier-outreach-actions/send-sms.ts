@@ -24,6 +24,13 @@ type InviteRow = {
   status: string;
   expires_at: string;
 };
+type RequestRow = {
+  id: string;
+  status: string;
+  origin: string | null;
+  destination: string | null;
+  travel_date: string | null;
+};
 type SupplierRow = { id: string; contact_count: number | null };
 type EskizLoginPayload = { data?: { token?: unknown }; message?: unknown };
 type EskizSendPayload = { id?: unknown; message?: unknown; status?: unknown };
@@ -72,8 +79,21 @@ function normalizeUzPhone(value: string) {
   return "";
 }
 
-function supplierSmsText(url: string) {
-  return `My Agent Air B2B turizm platformasi. Yangi so'rov: ${url} Tel:+998912924010`;
+function requestRoute(record: RequestRow) {
+  const origin = record.origin?.trim() || "";
+  const destination = record.destination?.trim() || "";
+  if (origin && destination) return `${origin} - ${destination}`;
+  return destination || origin || "Ko'rsatilmagan";
+}
+
+function requestDate(value: string | null) {
+  if (!value) return "Ko'rsatilmagan";
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[3]}.${match[2]}.${match[1]}` : value;
+}
+
+function supplierSmsText(record: RequestRow, url: string) {
+  return `My Agent Air: Yangi B2B so'rov. Yo'nalish: ${requestRoute(record)}. Sana: ${requestDate(record.travel_date)}. Taklif yuborish: ${url}`;
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit) {
@@ -206,7 +226,7 @@ export async function POST(request: NextRequest) {
   }
 
   const [{ data: requestRecord, error: requestError }, { data: supplier, error: supplierError }] = await Promise.all([
-    admin.from("requests").select("id,status").eq("id", typedInvite.request_id).maybeSingle(),
+    admin.from("requests").select("id,status,origin,destination,travel_date").eq("id", typedInvite.request_id).maybeSingle(),
     admin.from("external_suppliers").select("id,contact_count").eq("id", typedInvite.supplier_id).maybeSingle(),
   ]);
   if (requestError || !requestRecord || requestRecord.status !== "open") {
@@ -221,8 +241,8 @@ export async function POST(request: NextRequest) {
     return json({ sent: false, configured: false, status: typedInvite.status, channel: "sms", code: "SMS_NOT_CONFIGURED" });
   }
 
-  const supplierUrl = new URL(`/s/${encodeURIComponent(token)}`, request.nextUrl.origin).toString();
-  const message = supplierSmsText(supplierUrl);
+  const supplierUrl = new URL(`/s/${encodeURIComponent(token)}`, "https://agent.bifavia.uz").toString();
+  const message = supplierSmsText(requestRecord as RequestRow, supplierUrl);
 
   try {
     let eskizToken = await getEskizToken(eskizEmail, eskizPassword);
