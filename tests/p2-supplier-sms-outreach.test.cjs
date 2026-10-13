@@ -42,8 +42,8 @@ test('supplier SMS uses the short branded public link and a routing-layer redire
   const route = read('lib/server/supplier-outreach-actions/send-sms.ts');
   const config = read('next.config.ts');
   assert.match(route, /new URL\(`\/s\/\$\{encodeURIComponent\(token\)\}`/);
-  assert.match(route, /My Agent Air B2B turizm platformasi/);
-  assert.match(route, /Tel:\+998912924010/);
+  assert.match(route, /My Agent Air: Yangi B2B so'rov/);
+  assert.match(route, /Taklif yuborish: \$\{url\}/);
   assert.match(route, /providerMessage/);
   assert.match(config, /source: "\/s\/:token"/);
   assert.match(config, /destination: "\/supplier-request\/:token"/);
@@ -73,10 +73,11 @@ test('supplier outreach client automatically delivers SMS and keeps email fallba
   const ui = read('app/requests/supplier-matching.tsx');
   assert.match(api, /deliverSupplierInviteSms/);
   assert.match(api, /\/api\/supplier-outreach\/send-sms/);
-  assert.match(ui, /draft\.channel === "email" \|\| draft\.channel === "sms"/);
+  assert.match(ui, /delivery = channel === "sms"/);
   assert.match(ui, /deliverSupplierInviteSms/);
-  assert.match(ui, /SMS avtomatik yuborildi/);
-  assert.match(ui, /telefon bo‘lmasa email orqali avtomatik yuboriladi/);
+  assert.match(ui, /deliverSupplierInviteEmail/);
+  assert.match(ui, /channel === "sms" \? "SMS" : "Email"/);
+  assert.match(ui, /channel === "sms" \? "SMS_SEND_FAILED" : "EMAIL_SEND_FAILED"/);
 });
 
 test('supplier invite migration prefers SMS and permits intentional resend after cooldown', () => {
