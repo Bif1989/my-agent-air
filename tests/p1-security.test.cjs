@@ -39,7 +39,7 @@ test('auth requests are normalized, uncached and time bounded without direct pub
   assert.match(session, /controller\.abort\(\)/);
   assert.match(session, /cache: "no-store"/);
   assert.match(session, /referrerPolicy: "no-referrer"/);
-  assert.match(password, /email\.trim\(\)\.toLowerCase\(\)/);
+  assert.match(password, /identifier: identifier\.trim\(\)/);
   assert.match(publicAuth, /email: input\.email\.trim\(\)\.toLowerCase\(\)/);
   assert.doesNotMatch(session, /export function signIn\(/);
   assert.doesNotMatch(session, /export function signUp\(/);
@@ -87,6 +87,8 @@ test('password login is routed through a persistent server-side brute-force limi
   assert.match(route, /sec-fetch-site/);
   assert.match(route, /TOO_MANY_ATTEMPTS/);
   assert.match(route, /Retry-After/);
+  assert.match(route, /normalizeUzPhone/);
+  assert.match(route, /phone_\$\{phone\}@\$\{PHONE_EMAIL_DOMAIN\}/);
   assert.match(migration, /\(p_pair_hash, 5, 900\)/);
   assert.match(migration, /\(p_ip_hash, 30, 1800\)/);
   assert.match(migration, /grant execute on function public\.auth_login_limit_status\(text, text\) to service_role/);
