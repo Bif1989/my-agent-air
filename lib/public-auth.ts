@@ -13,15 +13,15 @@ type PublicAuthResponse = {
   ok?: boolean;
 };
 
-type SignupInput = {
+type EmailSignupInput = {
   email: string;
   password: string;
-  full_name: string;
-  company_name: string;
-  phone: string;
-  city: string;
-  agent_type: string;
   captcha_token?: string;
+};
+
+type PhoneSignupInput = {
+  phone: string;
+  password: string;
 };
 
 async function post(path: string, body: Record<string, unknown>) {
@@ -55,21 +55,16 @@ async function post(path: string, body: Record<string, unknown>) {
   return data;
 }
 
-export function signUpProtected(input: SignupInput) {
+export function signUpProtected(input: EmailSignupInput) {
   return post("/api/auth/signup", {
-    ...input,
     email: input.email.trim().toLowerCase(),
-    full_name: input.full_name.trim(),
-    company_name: input.company_name.trim(),
-    phone: input.phone.trim(),
-    city: input.city.trim(),
-    agent_type: input.agent_type.trim(),
+    password: input.password,
     captcha_token: input.captcha_token || "",
   });
 }
 
-export function requestSignupSmsProtected(phone: string, captchaToken: string) {
-  return post("/api/auth/signup-sms", { phase: "request", phone: phone.trim(), captcha_token: captchaToken });
+export function requestSignupSmsProtected(phone: string, password: string, captchaToken: string) {
+  return post("/api/auth/signup-sms", { phase: "request", phone: phone.trim(), password, captcha_token: captchaToken });
 }
 
 export function verifySignupSmsProtected(challengeId: string, phone: string, token: string) {
@@ -80,17 +75,12 @@ export function resendSignupSmsProtected(challengeId: string, phone: string) {
   return post("/api/auth/signup-sms", { phase: "resend", challenge_id: challengeId, phone: phone.trim() });
 }
 
-export function completeSignupSmsProtected(input: SignupInput, challengeId: string) {
+export function completeSignupSmsProtected(input: PhoneSignupInput, challengeId: string) {
   return post("/api/auth/signup-sms", {
     phase: "complete",
     challenge_id: challengeId,
-    email: input.email.trim().toLowerCase(),
-    password: input.password,
-    full_name: input.full_name.trim(),
-    company_name: input.company_name.trim(),
     phone: input.phone.trim(),
-    city: input.city.trim(),
-    agent_type: input.agent_type.trim(),
+    password: input.password,
   });
 }
 
