@@ -26,8 +26,25 @@ function normalizeCommand(text) {
     .toLowerCase();
 }
 
+function safePayload(payload) {
+  if (!payload) return {};
+  if (typeof payload === 'object') return payload;
+  try { return JSON.parse(payload); } catch { return {}; }
+}
+
 function sha256(value) {
   return crypto.createHash('sha256').update(String(value || ''), 'utf8').digest('hex');
+}
+
+function fmtTime(value) {
+  if (!value) return '';
+  try {
+    return new Intl.DateTimeFormat('uz-UZ', {
+      timeZone: 'Asia/Tashkent',
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    }).format(new Date(value));
+  } catch { return ''; }
 }
 
 async function sbRpc(fn, payload) {
@@ -43,9 +60,11 @@ async function sbRpc(fn, payload) {
     },
     body: JSON.stringify(payload),
   });
-  if (!r.ok) throw new Error(`Supabase RPC ${fn} failed: ${r.status}`);
   const text = await r.text();
-  try { return text ? JSON.parse(text) : null; } catch { return text; }
+  let data;
+  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+  if (!r.ok) throw new Error(`Supabase RPC ${fn} failed: ${r.status}`);
+  return data;
 }
 
 async function diagnostic(stage, context = {}, error = null) {
@@ -125,6 +144,84 @@ async function sendVkMessage(peerId, message, keyboard) {
   return vkApi('messages.send', params);
 }
 
+async function eventAnswer(event, text) {
+  if (!event?.event_id || !event?.user_id || !event?.peer_id) return;
+  try {
+    await vkApi('messages.sendMessageEventAnswer', {
+      event_id: event.event_id,
+      user_id: event.user_id,
+      peer_id: event.peer_id,
+      event_data: JSON.stringify({ type: 'show_snackbar', text: String(text).slice(0, 90) }),
+    });
+  } catch (_) {}
+}
+
+async function deleteChatMessage(peerId, cmid) {
+  if (!cmid) return false;
+  try {
+    await vkApi('messages.delete', {
+      peer_id: peerId,
+      cmids: cmid,
+      delete_for_all: 1,
+    });
+    return true;
+  } catch (error) {
+    await diagnostic('group_draft_delete_failed', { peerId }, error);
+    return false;
+  }
+}
+
+async function setSession(userId, mode) {
+  return sbRpc('set_vk_market_session', {
+    p_secret: process.env.VK_INGEST_SECRET,
+    p_user_id: userId,
+    p_mode: mode,
+  });
+}
+
+async function getSession(userId) {
+  return sbRpc('get_vk_market_session', {
+    p_secret: process.env.VK_INGEST_SECRET,
+    p_user_id: userId,
+  });
+}
+
+async function clearSession(userId) {
+  return sbRpc('clear_vk_market_session', {
+    p_secret: process.env.VK_INGEST_SECRET,
+    p_user_id: userId,
+  });
+}
+
+async function createListing(userId, kind, text) {
+  return sbRpc('create_vk_market_listing', {
+    p_secret: process.env.VK_INGEST_SECRET,
+    p_from_id: userId,
+    p_kind: kind,
+    p_text: text,
+    p_peer_id: PRIMARY_PEER_ID,
+  });
+}
+
+async function userNames(ids) {
+  const unique = [...new Set(ids.filter(x => Number(x) > 0))].slice(0, 100);
+  if (!unique.length) return new Map();
+  try {
+    const users = await vkApi('users.get', { user_ids: unique.join(',') });
+    return new Map((users || []).map(u => [Number(u.id), `${u.first_name || ''} ${u.last_name || ''}`.trim()]));
+  } catch {
+    return new Map();
+  }
+}
+
+async function publishListing(userId, kind, text) {
+  const names = await userNames([userId]);
+  const name = names.get(userId) || `ID ${userId}`;
+  const header = kind === 'offer' ? '✈️ TAKLIF' : '🔎 SO‘ROV';
+  const body = `${header}\n👤 [id${userId}|${name}]\n🕒 ${fmtTime(new Date().toISOString())}\n\n${text}\n\n#AviaMarket`;
+  await sendVkMessage(PRIMARY_PEER_ID, body);
+}
+
 async function handleMenu(event, res) {
   const msg = event.object?.message || {};
   const peerId = Number(msg.peer_id || 0);
@@ -141,7 +238,7 @@ async function handleMenu(event, res) {
 
   await diagnostic('menu_received', context);
 
-  const menuText = '✈️ Avia Market\n\nBu chat — umumiy bozor lentasi. Taklif va so‘rovlarni tugmalar orqali kiriting. Shaxsiy amallar bot bilan alohida dialogda bajariladi.';
+  const menuText = '✈️ Avia Market\n\n➕ Taklif yoki 🔎 So‘rov tugmasini bosing va ma’lumotni shu chatning o‘ziga yozing. Bot xabaringizni avtomatik formatlab bozor lentasiga joylaydi.\n\nRo‘yxatlar shaxsiy botga yuboriladi.';
 
   try {
     await sendVkMessage(peerId, menuText, groupMenu);
@@ -160,14 +257,93 @@ async function handleMenu(event, res) {
   }
 }
 
+async function startGroupEntry(event, mode) {
+  const userId = Number(event?.user_id || 0);
+  if (!userId) return;
+  await setSession(userId, mode);
+  await eventAnswer(
+    event,
+    mode === 'offer'
+      ? 'Taklifni shu chatga bitta xabarda yozing'
+      : 'So‘rovni shu chatga bitta xabarda yozing'
+  );
+  await diagnostic('group_entry_session_started', {
+    eventType: 'message_event',
+    peerId: event.peer_id,
+    fromId: userId,
+    command: mode,
+    eventId: event.event_id,
+    secretPresent: true,
+    secretMatch: true,
+  });
+}
+
+async function handleGroupDraft(event, res) {
+  const msg = event.object?.message || {};
+  const peerId = Number(msg.peer_id || 0);
+  const userId = Number(msg.from_id || 0);
+  const cmid = Number(msg.conversation_message_id || 0);
+  const text = String(msg.text || '').trim();
+  if (!userId || !text || text.startsWith('/')) return false;
+
+  let session;
+  try {
+    session = await getSession(userId);
+  } catch (error) {
+    await diagnostic('group_draft_session_failed', { eventType: event.type, peerId, fromId: userId }, error);
+    return false;
+  }
+  if (!session?.active) return false;
+
+  const kind = session.mode === 'search' ? 'search' : 'offer';
+  let result;
+  try {
+    result = await createListing(userId, kind, text);
+  } catch (error) {
+    await diagnostic('group_draft_store_failed', { eventType: event.type, peerId, fromId: userId, command: kind }, error);
+    await deleteChatMessage(peerId, cmid);
+    try { await sendVkMessage(userId, '⚠️ Ma’lumotni saqlab bo‘lmadi. Qayta urinib ko‘ring.'); } catch (_) {}
+    return sendOk(res);
+  }
+
+  await deleteChatMessage(peerId, cmid);
+
+  if (result?.duplicate) {
+    await setSession(userId, kind);
+    const noun = kind === 'offer' ? 'taklif' : 'so‘rov';
+    try {
+      await sendVkMessage(userId, `⚠️ Bu ${noun}ni bugun allaqachon joylashtirgansiz.\n\nBugun boshqa ${noun} kiritishingiz mumkin, yoki shu ${noun}ni ertaga qayta joylashtirishingiz mumkin.`);
+    } catch (_) {}
+    await diagnostic('group_draft_duplicate', { eventType: event.type, peerId, fromId: userId, command: kind });
+    return sendOk(res);
+  }
+
+  if (!result?.stored) {
+    try { await sendVkMessage(userId, '⚠️ Ma’lumotni saqlab bo‘lmadi. Qayta urinib ko‘ring.'); } catch (_) {}
+    await diagnostic('group_draft_not_stored', { eventType: event.type, peerId, fromId: userId, command: kind });
+    return sendOk(res);
+  }
+
+  try { await clearSession(userId); } catch (_) {}
+
+  try {
+    await publishListing(userId, kind, text);
+    await diagnostic('group_draft_published', { eventType: event.type, peerId, fromId: userId, command: kind });
+  } catch (error) {
+    await diagnostic('group_draft_publish_failed', { eventType: event.type, peerId, fromId: userId, command: kind }, error);
+    try { await sendVkMessage(userId, '⚠️ Ma’lumot saqlandi, lekin chatga chiqarishda xato bo‘ldi.'); } catch (_) {}
+  }
+  return sendOk(res);
+}
+
 module.exports = async function handler(req, res) {
   if (req.method === 'GET') {
     return json(res, 200, {
       ok: true,
       service: 'vk-avia-market-bot',
-      version: 'chat-migration-secure-v5',
+      version: 'same-chat-entry-v6',
       primary_peer_id: PRIMARY_PEER_ID,
-      strict_market_chat: false,
+      strict_market_chat: true,
       token_configured: Boolean(process.env.VK_TOKEN),
       callback_security: 'pinned_sha256',
       diagnostics_configured: Boolean(process.env.VK_INGEST_SECRET && process.env.SUPABASE_URL),
@@ -250,6 +426,24 @@ module.exports = async function handler(req, res) {
   });
 
   if (isPrimaryMenu) return handleMenu(event, res);
+
+  if (event.type === 'message_event' && Number(event.object?.peer_id || 0) === PRIMARY_PEER_ID) {
+    const payload = safePayload(event.object?.payload);
+    const cmd = String(payload.cmd || '');
+    if (cmd === 'new_offer' || cmd === 'new_search') {
+      await startGroupEntry(event.object, cmd === 'new_offer' ? 'offer' : 'search');
+      return sendOk(res);
+    }
+  }
+
+  if (
+    event.type === 'message_new' &&
+    Number(msg.out || 0) !== 1 &&
+    peerId === PRIMARY_PEER_ID
+  ) {
+    const handled = await handleGroupDraft(event, res);
+    if (handled !== false) return handled;
+  }
 
   // The legacy marketplace handler still checks VK_SECRET. After the callback has
   // been verified against the pinned SHA-256 value, pass a compatibility copy so
