@@ -1,6 +1,13 @@
 {
   "version": 2,
   "regions": ["hnd1"],
+  "git": {
+    "deploymentEnabled": {
+      "**": false,
+      "vk-avia-market-bot": true
+    }
+  },
+  "ignoreCommand": "git diff --quiet \"$VERCEL_GIT_PREVIOUS_SHA\" HEAD -- .",
   "env": {
     "VK_STRICT_MARKET_CHAT": "true"
   },
