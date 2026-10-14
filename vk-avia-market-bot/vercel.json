@@ -1,0 +1,7 @@
+{
+  "version": 2,
+  "regions": ["hnd1"],
+  "functions": {
+    "api/vk-callback.js": { "maxDuration": 30 }
+  }
+}
