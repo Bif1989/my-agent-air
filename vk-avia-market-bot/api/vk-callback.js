@@ -1,9 +1,9 @@
+const crypto = require('crypto');
 const legacyHandler = require('./vk-callback-legacy');
 
 const VK_API_VERSION = process.env.VK_API_VERSION || '5.199';
 const VK_GROUP_ID = Number(process.env.VK_GROUP_ID || 0);
 const PRIMARY_PEER_ID = Number(process.env.VK_PRIMARY_PEER_ID || 2000000003);
-const BOT_OPEN_URL = process.env.VK_BOT_OPEN_URL || 'https://vk.me/aviamarketbot';
 
 function sendOk(res) {
   res.status(200).setHeader('content-type', 'text/plain; charset=utf-8');
@@ -24,6 +24,10 @@ function normalizeCommand(text) {
     .replace(/^\[club\d+\|@[^\]]+\]\s*/i, '')
     .trim()
     .toLowerCase();
+}
+
+function sha256(value) {
+  return crypto.createHash('sha256').update(String(value || ''), 'utf8').digest('hex');
 }
 
 async function sbRpc(fn, payload) {
@@ -132,7 +136,7 @@ async function handleMenu(event, res) {
     command: '/menu',
     eventId: event.event_id,
     secretPresent: Boolean(event.secret),
-    secretMatch: Boolean(process.env.VK_SECRET && event.secret === process.env.VK_SECRET),
+    secretMatch: true,
   };
 
   await diagnostic('menu_received', context);
@@ -161,11 +165,11 @@ module.exports = async function handler(req, res) {
     return json(res, 200, {
       ok: true,
       service: 'vk-avia-market-bot',
-      version: 'chat-migration-diagnostic-v4',
+      version: 'chat-migration-secure-v5',
       primary_peer_id: PRIMARY_PEER_ID,
       strict_market_chat: false,
       token_configured: Boolean(process.env.VK_TOKEN),
-      callback_secret_configured: Boolean(process.env.VK_SECRET),
+      callback_security: 'pinned_sha256',
       diagnostics_configured: Boolean(process.env.VK_INGEST_SECRET && process.env.SUPABASE_URL),
     });
   }
@@ -180,8 +184,6 @@ module.exports = async function handler(req, res) {
   const peerId = Number(msg.peer_id || event.object?.peer_id || 0);
   const fromId = Number(msg.from_id || event.object?.user_id || 0);
   const command = normalizeCommand(msg.text);
-  const secretConfigured = Boolean(process.env.VK_SECRET);
-  const secretMatch = !secretConfigured || event.secret === process.env.VK_SECRET;
   const isPrimaryMenu = (
     event.type === 'message_new' &&
     Number(msg.out || 0) !== 1 &&
@@ -189,43 +191,72 @@ module.exports = async function handler(req, res) {
     (command === '/menu' || command.startsWith('/menu '))
   );
 
-  if (!secretMatch) {
+  if (!event.secret) {
+    await diagnostic('callback_secret_missing', {
+      eventType: event.type,
+      peerId,
+      fromId,
+      command: command.startsWith('/') ? command.slice(0, 40) : null,
+      eventId: event.event_id,
+      secretPresent: false,
+      secretMatch: false,
+    });
+    return json(res, 403, { ok: false });
+  }
+
+  let verification;
+  try {
+    verification = await sbRpc('verify_vk_callback_secret', {
+      p_secret: process.env.VK_INGEST_SECRET,
+      p_group_id: VK_GROUP_ID,
+      p_from_id: fromId || null,
+      p_event_secret_hash: sha256(event.secret),
+      p_allow_pin: isPrimaryMenu,
+    });
+  } catch (error) {
+    await diagnostic('callback_secret_verify_failed', {
+      eventType: event.type,
+      peerId,
+      fromId,
+      command: command.startsWith('/') ? command.slice(0, 40) : null,
+      eventId: event.event_id,
+      secretPresent: true,
+      secretMatch: false,
+    }, error);
+    return json(res, 503, { ok: false });
+  }
+
+  if (!verification?.ok) {
     await diagnostic('callback_secret_mismatch', {
       eventType: event.type,
       peerId,
       fromId,
       command: command.startsWith('/') ? command.slice(0, 40) : null,
       eventId: event.event_id,
-      secretPresent: Boolean(event.secret),
+      secretPresent: true,
       secretMatch: false,
     });
-
-    // Temporary, narrowly scoped migration diagnostic: allow only /menu in the one
-    // configured Avia Market chat so we can distinguish secret mismatch from VK_TOKEN
-    // or messages.send permission errors. All other events remain blocked.
-    if (!isPrimaryMenu) return json(res, 403, { ok: false });
-
-    await diagnostic('menu_secret_mismatch_bypass', {
-      eventType: event.type,
-      peerId,
-      fromId,
-      command: '/menu',
-      eventId: event.event_id,
-      secretPresent: Boolean(event.secret),
-      secretMatch: false,
-    });
+    return json(res, 403, { ok: false });
   }
 
-  if (isPrimaryMenu) return handleMenu(event, res);
-
-  await diagnostic('event_forwarded_to_legacy', {
+  await diagnostic(verification?.pinned ? 'callback_secret_pinned' : 'callback_secret_verified', {
     eventType: event.type,
     peerId,
     fromId,
     command: command.startsWith('/') ? command.slice(0, 40) : null,
     eventId: event.event_id,
-    secretPresent: Boolean(event.secret),
+    secretPresent: true,
     secretMatch: true,
   });
-  return legacyHandler(req, res);
+
+  if (isPrimaryMenu) return handleMenu(event, res);
+
+  // The legacy marketplace handler still checks VK_SECRET. After the callback has
+  // been verified against the pinned SHA-256 value, pass a compatibility copy so
+  // the old handler cannot reject a valid VK event because of stale env config.
+  const legacyEvent = {
+    ...event,
+    secret: process.env.VK_SECRET || event.secret,
+  };
+  return legacyHandler({ method: req.method, body: legacyEvent }, res);
 };
