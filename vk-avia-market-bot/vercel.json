@@ -1,6 +1,9 @@
 {
   "version": 2,
   "regions": ["hnd1"],
+  "env": {
+    "VK_STRICT_MARKET_CHAT": "false"
+  },
   "functions": {
     "api/vk-callback.js": { "maxDuration": 30 }
   }
