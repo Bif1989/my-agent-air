@@ -45,8 +45,8 @@ function sha256(value) {
 
 function callbackSecretOk(event) {
   if (!event?.secret) return false;
-  if (CALLBACK_SECRET_HASH) return sha256(event.secret) === CALLBACK_SECRET_HASH;
-  if (process.env.VK_SECRET) return event.secret === process.env.VK_SECRET;
+  if (CALLBACK_SECRET_HASH && sha256(event.secret) === CALLBACK_SECRET_HASH) return true;
+  if (process.env.VK_SECRET && event.secret === process.env.VK_SECRET) return true;
   return false;
 }
 
@@ -219,34 +219,40 @@ async function cleanChatHistory(peerId) {
   return { found, deleted, failed, passes, firstError };
 }
 
-async function sendCleanupSummary(userId, result) {
+async function sendOwnerMessage(userId, message) {
   if (!userId) return;
-  const details = [
-    '🧹 Avia Market chat tozalash yakunlandi.',
-    `✅ O‘chirildi: ${Number(result.deleted || 0)}`,
-    result.failed ? `⚠️ O‘chmagan: ${Number(result.failed || 0)}` : null,
-  ].filter(Boolean).join('\n');
-
   try {
     await vkApi('messages.send', {
       peer_id: userId,
       random_id: randomId(),
-      message: details,
+      message,
       disable_mentions: 1,
     });
   } catch (_) {}
 }
 
-async function runCleanup(event) {
-  const msg = event.object?.message || {};
-  const peerId = Number(msg.peer_id || 0);
-  const fromId = Number(msg.from_id || 0);
+async function sendCleanupSummary(userId, result) {
+  const details = [
+    '🧹 Avia Market chat tozalash yakunlandi.',
+    `✅ O‘chirildi: ${Number(result.deleted || 0)}`,
+    result.failed ? `⚠️ O‘chmagan: ${Number(result.failed || 0)}` : null,
+  ].filter(Boolean).join('\n');
+  await sendOwnerMessage(userId, details);
+}
 
+async function runCleanup(event, targetPeerId = PRIMARY_PEER_ID) {
+  const msg = event.object?.message || {};
+  const sourcePeerId = Number(msg.peer_id || 0);
+  const fromId = Number(msg.from_id || 0);
+  const peerId = Number(targetPeerId || PRIMARY_PEER_ID);
+
+  await sendOwnerMessage(fromId, '🧹 Avia Market umumiy chatini tozalash boshlandi…');
   await sbClearSession(fromId);
   const result = await cleanChatHistory(peerId);
   await sendCleanupSummary(fromId, result);
   console.log('cleanall_completed', {
     peerId,
+    sourcePeerId,
     fromId,
     found: result.found,
     deleted: result.deleted,
@@ -256,21 +262,46 @@ async function runCleanup(event) {
   });
 }
 
-function isAuthorizedCleanAll(event) {
+function getCleanupTarget(event) {
   const msg = event.object?.message || {};
   const peerId = Number(msg.peer_id || 0);
   const fromId = Number(msg.from_id || 0);
   const command = normalizeCommand(msg.text);
-  return (
+  const privateOwnerChat = peerId > 0 && peerId === fromId;
+
+  const authorized = (
     event.type === 'message_new' &&
     Number(event.group_id || 0) === VK_GROUP_ID &&
     Number(msg.out || 0) !== 1 &&
-    peerId === PRIMARY_PEER_ID &&
     command === '/cleanall' &&
     CLEANUP_USER_ID > 0 &&
     fromId === CLEANUP_USER_ID &&
     callbackSecretOk(event)
   );
+
+  if (!authorized) return 0;
+  if (peerId === PRIMARY_PEER_ID || privateOwnerChat) return PRIMARY_PEER_ID;
+  return 0;
+}
+
+function logRejectedCleanAll(event) {
+  const msg = event.object?.message || {};
+  const command = normalizeCommand(msg.text);
+  if (command !== '/cleanall') return;
+  const peerId = Number(msg.peer_id || 0);
+  const fromId = Number(msg.from_id || 0);
+  console.warn('cleanall_rejected', {
+    eventType: event.type || null,
+    groupMatch: Number(event.group_id || 0) === VK_GROUP_ID,
+    outgoing: Number(msg.out || 0) === 1,
+    peerId,
+    primaryPeerId: PRIMARY_PEER_ID,
+    privateOwnerChat: peerId > 0 && peerId === fromId,
+    fromId,
+    ownerConfigured: CLEANUP_USER_ID > 0,
+    ownerMatch: CLEANUP_USER_ID > 0 && fromId === CLEANUP_USER_ID,
+    secretMatch: callbackSecretOk(event),
+  });
 }
 
 module.exports = async function handler(req, res) {
@@ -278,9 +309,10 @@ module.exports = async function handler(req, res) {
     return json(res, 200, {
       ok: true,
       service: 'vk-avia-market-bot',
-      version: 'fast-ack-cleanall-v1',
+      version: 'fast-ack-cleanall-v2',
       primary_peer_id: PRIMARY_PEER_ID,
       cleanup_enabled: CLEANUP_USER_ID > 0,
+      private_owner_cleanall: true,
       fast_ack: true,
     });
   }
@@ -295,8 +327,9 @@ module.exports = async function handler(req, res) {
   // callback retries or make the bot feel frozen.
   sendOk(res);
 
-  if (isAuthorizedCleanAll(event)) {
-    waitUntil(runCleanup(event).catch((error) => {
+  const cleanupTarget = getCleanupTarget(event);
+  if (cleanupTarget) {
+    waitUntil(runCleanup(event, cleanupTarget).catch((error) => {
       console.error('cleanall_failed', {
         message: error?.message || String(error),
         code: error?.code || null,
@@ -305,6 +338,7 @@ module.exports = async function handler(req, res) {
     return;
   }
 
+  logRejectedCleanAll(event);
   waitUntil(Promise.resolve(worker(req, sinkResponse())).catch((error) => {
     console.error('vk_background_worker_failed', {
       type: event.type || null,
