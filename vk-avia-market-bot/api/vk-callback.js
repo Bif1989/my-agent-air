@@ -4,6 +4,7 @@ const legacyHandler = require('./vk-callback-legacy');
 const VK_API_VERSION = process.env.VK_API_VERSION || '5.199';
 const VK_GROUP_ID = Number(process.env.VK_GROUP_ID || 0);
 const PRIMARY_PEER_ID = Number(process.env.VK_PRIMARY_PEER_ID || 2000000003);
+const CLEANUP_USER_ID = Number(process.env.VK_CLEANUP_USER_ID || 0);
 
 function sendOk(res) {
   res.status(200).setHeader('content-type', 'text/plain; charset=utf-8');
@@ -69,14 +70,6 @@ async function sbRpc(fn, payload) {
 
 async function diagnostic(stage, context = {}, error = null) {
   try {
-    const details = {
-      command: context.command || null,
-      secret_present: context.secretPresent === true,
-      secret_match: context.secretMatch === true,
-      has_keyboard: context.hasKeyboard === true,
-      fallback: context.fallback === true,
-      event_id: context.eventId ? String(context.eventId).slice(0, 100) : null,
-    };
     await sbRpc('log_vk_bot_diagnostic', {
       p_secret: process.env.VK_INGEST_SECRET,
       p_event_type: context.eventType || null,
@@ -85,19 +78,21 @@ async function diagnostic(stage, context = {}, error = null) {
       p_stage: stage,
       p_error_code: error?.code != null ? String(error.code) : null,
       p_error_message: error?.message ? String(error.message).slice(0, 1000) : null,
-      p_details: details,
+      p_details: context.details || {},
     });
-  } catch (_) {
-    // Diagnostics must never break the VK callback response.
-  }
+  } catch (_) {}
 }
 
 async function vkApi(method, params = {}) {
-  const token = process.env.VK_TOKEN;
   const body = new URLSearchParams();
-  for (const [key, value] of Object.entries({ ...params, access_token: token, v: VK_API_VERSION })) {
+  for (const [key, value] of Object.entries({
+    ...params,
+    access_token: process.env.VK_TOKEN,
+    v: VK_API_VERSION,
+  })) {
     if (value !== undefined && value !== null) body.set(key, String(value));
   }
+
   const response = await fetch(`https://api.vk.com/method/${method}`, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -165,8 +160,7 @@ async function deleteChatMessage(peerId, cmid) {
       delete_for_all: 1,
     });
     return true;
-  } catch (error) {
-    await diagnostic('group_draft_delete_failed', { peerId }, error);
+  } catch {
     return false;
   }
 }
@@ -204,11 +198,11 @@ async function createListing(userId, kind, text) {
 }
 
 async function userNames(ids) {
-  const unique = [...new Set(ids.filter(x => Number(x) > 0))].slice(0, 100);
+  const unique = [...new Set(ids.filter((x) => Number(x) > 0))].slice(0, 100);
   if (!unique.length) return new Map();
   try {
     const users = await vkApi('users.get', { user_ids: unique.join(',') });
-    return new Map((users || []).map(u => [Number(u.id), `${u.first_name || ''} ${u.last_name || ''}`.trim()]));
+    return new Map((users || []).map((u) => [Number(u.id), `${u.first_name || ''} ${u.last_name || ''}`.trim()]));
   } catch {
     return new Map();
   }
@@ -225,36 +219,14 @@ async function publishListing(userId, kind, text) {
 async function handleMenu(event, res) {
   const msg = event.object?.message || {};
   const peerId = Number(msg.peer_id || 0);
-  const fromId = Number(msg.from_id || 0);
-  const context = {
-    eventType: event.type,
-    peerId,
-    fromId,
-    command: '/menu',
-    eventId: event.event_id,
-    secretPresent: Boolean(event.secret),
-    secretMatch: true,
-  };
-
-  await diagnostic('menu_received', context);
-
   const menuText = '✈️ Avia Market\n\n➕ Taklif yoki 🔎 So‘rov tugmasini bosing va ma’lumotni shu chatning o‘ziga yozing. Bot xabaringizni avtomatik formatlab bozor lentasiga joylaydi.\n\nRo‘yxatlar shaxsiy botga yuboriladi.';
 
   try {
     await sendVkMessage(peerId, menuText, groupMenu);
-    await diagnostic('menu_keyboard_sent', { ...context, hasKeyboard: true });
-    return sendOk(res);
-  } catch (keyboardError) {
-    await diagnostic('menu_keyboard_send_failed', { ...context, hasKeyboard: true }, keyboardError);
-    try {
-      await sendVkMessage(peerId, `${menuText}\n\n⚙️ Tugmalar vaqtincha tekshirilmoqda.`, null);
-      await diagnostic('menu_plain_fallback_sent', { ...context, fallback: true });
-      return sendOk(res);
-    } catch (plainError) {
-      await diagnostic('menu_plain_send_failed', { ...context, fallback: true }, plainError);
-      return sendOk(res);
-    }
+  } catch {
+    await sendVkMessage(peerId, menuText, null);
   }
+  return sendOk(res);
 }
 
 async function startGroupEntry(event, mode) {
@@ -267,15 +239,6 @@ async function startGroupEntry(event, mode) {
       ? 'Taklifni shu chatga bitta xabarda yozing'
       : 'So‘rovni shu chatga bitta xabarda yozing'
   );
-  await diagnostic('group_entry_session_started', {
-    eventType: 'message_event',
-    peerId: event.peer_id,
-    fromId: userId,
-    command: mode,
-    eventId: event.event_id,
-    secretPresent: true,
-    secretMatch: true,
-  });
 }
 
 async function handleGroupDraft(event, res) {
@@ -287,20 +250,14 @@ async function handleGroupDraft(event, res) {
   if (!userId || !text || text.startsWith('/')) return false;
 
   let session;
-  try {
-    session = await getSession(userId);
-  } catch (error) {
-    await diagnostic('group_draft_session_failed', { eventType: event.type, peerId, fromId: userId }, error);
-    return false;
-  }
+  try { session = await getSession(userId); } catch { return false; }
   if (!session?.active) return false;
 
   const kind = session.mode === 'search' ? 'search' : 'offer';
   let result;
   try {
     result = await createListing(userId, kind, text);
-  } catch (error) {
-    await diagnostic('group_draft_store_failed', { eventType: event.type, peerId, fromId: userId, command: kind }, error);
+  } catch {
     await deleteChatMessage(peerId, cmid);
     try { await sendVkMessage(userId, '⚠️ Ma’lumotni saqlab bo‘lmadi. Qayta urinib ko‘ring.'); } catch (_) {}
     return sendOk(res);
@@ -314,13 +271,11 @@ async function handleGroupDraft(event, res) {
     try {
       await sendVkMessage(userId, `⚠️ Bu ${noun}ni bugun allaqachon joylashtirgansiz.\n\nBugun boshqa ${noun} kiritishingiz mumkin, yoki shu ${noun}ni ertaga qayta joylashtirishingiz mumkin.`);
     } catch (_) {}
-    await diagnostic('group_draft_duplicate', { eventType: event.type, peerId, fromId: userId, command: kind });
     return sendOk(res);
   }
 
   if (!result?.stored) {
     try { await sendVkMessage(userId, '⚠️ Ma’lumotni saqlab bo‘lmadi. Qayta urinib ko‘ring.'); } catch (_) {}
-    await diagnostic('group_draft_not_stored', { eventType: event.type, peerId, fromId: userId, command: kind });
     return sendOk(res);
   }
 
@@ -328,12 +283,74 @@ async function handleGroupDraft(event, res) {
 
   try {
     await publishListing(userId, kind, text);
-    await diagnostic('group_draft_published', { eventType: event.type, peerId, fromId: userId, command: kind });
-  } catch (error) {
-    await diagnostic('group_draft_publish_failed', { eventType: event.type, peerId, fromId: userId, command: kind }, error);
+  } catch {
     try { await sendVkMessage(userId, '⚠️ Ma’lumot saqlandi, lekin chatga chiqarishda xato bo‘ldi.'); } catch (_) {}
   }
   return sendOk(res);
+}
+
+async function deleteCmidBatch(peerId, cmids) {
+  const list = [...new Set(cmids.map(Number).filter(Boolean))];
+  if (!list.length) return { deleted: 0, failed: 0 };
+
+  try {
+    await vkApi('messages.delete', {
+      peer_id: peerId,
+      cmids: list.join(','),
+      delete_for_all: 1,
+    });
+    return { deleted: list.length, failed: 0 };
+  } catch {
+    if (list.length === 1) return { deleted: 0, failed: 1 };
+    const middle = Math.ceil(list.length / 2);
+    const left = await deleteCmidBatch(peerId, list.slice(0, middle));
+    const right = await deleteCmidBatch(peerId, list.slice(middle));
+    return {
+      deleted: left.deleted + right.deleted,
+      failed: left.failed + right.failed,
+    };
+  }
+}
+
+async function cleanChatHistory(peerId) {
+  let deleted = 0;
+  let failed = 0;
+  let previousSignature = '';
+
+  for (let pass = 0; pass < 20; pass += 1) {
+    const history = await vkApi('messages.getHistory', {
+      peer_id: peerId,
+      count: 200,
+      rev: 0,
+    });
+    const items = Array.isArray(history?.items) ? history.items : [];
+    const cmids = items
+      .map((item) => Number(item?.conversation_message_id || 0))
+      .filter(Boolean);
+
+    if (!cmids.length) break;
+    const signature = cmids.join(',');
+    if (signature === previousSignature) break;
+    previousSignature = signature;
+
+    const result = await deleteCmidBatch(peerId, cmids);
+    deleted += result.deleted;
+    failed += result.failed;
+    if (!result.deleted) break;
+  }
+
+  return { deleted, failed };
+}
+
+async function verifyCallbackSecret(event, fromId, allowPin) {
+  if (!event.secret) return { ok: false };
+  return sbRpc('verify_vk_callback_secret', {
+    p_secret: process.env.VK_INGEST_SECRET,
+    p_group_id: VK_GROUP_ID,
+    p_from_id: fromId || null,
+    p_event_secret_hash: sha256(event.secret),
+    p_allow_pin: Boolean(allowPin),
+  });
 }
 
 module.exports = async function handler(req, res) {
@@ -341,12 +358,10 @@ module.exports = async function handler(req, res) {
     return json(res, 200, {
       ok: true,
       service: 'vk-avia-market-bot',
-      version: 'same-chat-entry-v6',
+      version: 'same-chat-cleanup-v7',
       primary_peer_id: PRIMARY_PEER_ID,
-      strict_market_chat: true,
-      token_configured: Boolean(process.env.VK_TOKEN),
+      cleanup_enabled: CLEANUP_USER_ID > 0,
       callback_security: 'pinned_sha256',
-      diagnostics_configured: Boolean(process.env.VK_INGEST_SECRET && process.env.SUPABASE_URL),
     });
   }
 
@@ -360,72 +375,46 @@ module.exports = async function handler(req, res) {
   const peerId = Number(msg.peer_id || event.object?.peer_id || 0);
   const fromId = Number(msg.from_id || event.object?.user_id || 0);
   const command = normalizeCommand(msg.text);
-  const isPrimaryMenu = (
+  const isPrimaryMessage = (
     event.type === 'message_new' &&
     Number(msg.out || 0) !== 1 &&
-    peerId === PRIMARY_PEER_ID &&
-    (command === '/menu' || command.startsWith('/menu '))
+    peerId === PRIMARY_PEER_ID
   );
-
-  if (!event.secret) {
-    await diagnostic('callback_secret_missing', {
-      eventType: event.type,
-      peerId,
-      fromId,
-      command: command.startsWith('/') ? command.slice(0, 40) : null,
-      eventId: event.event_id,
-      secretPresent: false,
-      secretMatch: false,
-    });
-    return json(res, 403, { ok: false });
-  }
+  const isPrimaryMenu = isPrimaryMessage && (command === '/menu' || command.startsWith('/menu '));
+  const isCleanup = isPrimaryMessage && command === '/cleanall';
 
   let verification;
   try {
-    verification = await sbRpc('verify_vk_callback_secret', {
-      p_secret: process.env.VK_INGEST_SECRET,
-      p_group_id: VK_GROUP_ID,
-      p_from_id: fromId || null,
-      p_event_secret_hash: sha256(event.secret),
-      p_allow_pin: isPrimaryMenu,
-    });
-  } catch (error) {
-    await diagnostic('callback_secret_verify_failed', {
-      eventType: event.type,
-      peerId,
-      fromId,
-      command: command.startsWith('/') ? command.slice(0, 40) : null,
-      eventId: event.event_id,
-      secretPresent: true,
-      secretMatch: false,
-    }, error);
+    verification = await verifyCallbackSecret(event, fromId, isPrimaryMenu || isCleanup);
+  } catch {
     return json(res, 503, { ok: false });
   }
-
-  if (!verification?.ok) {
-    await diagnostic('callback_secret_mismatch', {
-      eventType: event.type,
-      peerId,
-      fromId,
-      command: command.startsWith('/') ? command.slice(0, 40) : null,
-      eventId: event.event_id,
-      secretPresent: true,
-      secretMatch: false,
-    });
-    return json(res, 403, { ok: false });
-  }
-
-  await diagnostic(verification?.pinned ? 'callback_secret_pinned' : 'callback_secret_verified', {
-    eventType: event.type,
-    peerId,
-    fromId,
-    command: command.startsWith('/') ? command.slice(0, 40) : null,
-    eventId: event.event_id,
-    secretPresent: true,
-    secretMatch: true,
-  });
+  if (!verification?.ok) return json(res, 403, { ok: false });
 
   if (isPrimaryMenu) return handleMenu(event, res);
+
+  if (isCleanup) {
+    if (!CLEANUP_USER_ID || fromId !== CLEANUP_USER_ID) return sendOk(res);
+
+    try { await clearSession(fromId); } catch (_) {}
+
+    try {
+      const result = await cleanChatHistory(peerId);
+      await diagnostic('cleanup_completed', {
+        eventType: event.type,
+        peerId,
+        fromId,
+        details: result,
+      });
+    } catch (error) {
+      await diagnostic('cleanup_failed', {
+        eventType: event.type,
+        peerId,
+        fromId,
+      }, error);
+    }
+    return sendOk(res);
+  }
 
   if (event.type === 'message_event' && Number(event.object?.peer_id || 0) === PRIMARY_PEER_ID) {
     const payload = safePayload(event.object?.payload);
@@ -436,18 +425,11 @@ module.exports = async function handler(req, res) {
     }
   }
 
-  if (
-    event.type === 'message_new' &&
-    Number(msg.out || 0) !== 1 &&
-    peerId === PRIMARY_PEER_ID
-  ) {
+  if (isPrimaryMessage) {
     const handled = await handleGroupDraft(event, res);
     if (handled !== false) return handled;
   }
 
-  // The legacy marketplace handler still checks VK_SECRET. After the callback has
-  // been verified against the pinned SHA-256 value, pass a compatibility copy so
-  // the old handler cannot reject a valid VK event because of stale env config.
   const legacyEvent = {
     ...event,
     secret: process.env.VK_SECRET || event.secret,
