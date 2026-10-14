@@ -143,6 +143,9 @@ function inlineGroupMenu() {
     inline: true,
     buttons: [
       [
+        { action: { type: 'open_link', label: '🤖 SHAXSIY CHATGA O‘TISH', link: BOT_OPEN_URL }, color: 'primary' },
+      ],
+      [
         { action: { type: 'callback', label: '➕ TAKLIF', payload: JSON.stringify({ cmd: 'new_offer' }) }, color: 'primary' },
         { action: { type: 'callback', label: '🔎 SO‘ROV', payload: JSON.stringify({ cmd: 'new_search' }) }, color: 'primary' },
       ],
@@ -153,9 +156,6 @@ function inlineGroupMenu() {
       [
         { action: { type: 'callback', label: '📦 MENING TAKLIFLARIM', payload: JSON.stringify({ cmd: 'my_offers' }) }, color: 'secondary' },
         { action: { type: 'callback', label: '📋 MENING SO‘ROVLARIM', payload: JSON.stringify({ cmd: 'my_searches' }) }, color: 'secondary' },
-      ],
-      [
-        { action: { type: 'open_link', label: '🤖 SHAXSIY BOT / KABINET', link: BOT_OPEN_URL }, color: 'secondary' },
       ],
     ],
   };
@@ -270,7 +270,8 @@ async function sendGroupMenu({ pin = false } = {}) {
     'Oddiy yozishmalar avtomatik o‘chiriladi.',
     'Taklif yoki so‘rovni quyidagi tugmalar orqali kiriting.',
     '',
-    '👤 Kabinet, balans va shaxsiy ma’lumotlar — SHAXSIY BOTda.',
+    `🤖 SHAXSIY CHAT / KABINET: ${BOT_OPEN_URL}`,
+    'Balans, tarif va shaxsiy amallar shu bot ichida.',
   ].join('\n');
 
   const sent = await vkApi('messages.send', {
