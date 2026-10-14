@@ -6,9 +6,10 @@
   },
   "functions": {
     "api/vk-callback.js": { "maxDuration": 60 },
-    "api/vk-fast.js": { "maxDuration": 60 }
+    "api/vk-fast.js": { "maxDuration": 60 },
+    "api/vk-menu-entry.js": { "maxDuration": 60 }
   },
   "rewrites": [
-    { "source": "/api/vk-callback", "destination": "/api/vk-fast" }
+    { "source": "/api/vk-callback", "destination": "/api/vk-menu-entry" }
   ]
 }
