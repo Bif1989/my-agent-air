@@ -1,7 +1,11 @@
 {
-  "name": "vk-avia-market-bot",
-  "version": "1.0.0",
+  "name": "vk-avia-market-bot-v2",
+  "version": "2.0.0",
   "private": true,
+  "scripts": {
+    "test": "node tests/smoke.test.js",
+    "check": "node --check api/vk-callback.js && node --check lib/vk.js && node --check lib/ui.js && node --check lib/market.js"
+  },
   "dependencies": {
     "@vercel/functions": "3.9.11"
   }
