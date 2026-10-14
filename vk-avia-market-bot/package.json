@@ -1,9 +1,8 @@
 {
   "name": "vk-avia-market-bot-v2",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "private": true,
   "scripts": {
-    "build": "node scripts/repair-vk-callback.js",
     "test": "node tests/smoke.test.js",
     "check": "node --check api/vk-callback.js && node --check lib/vk.js && node --check lib/ui.js && node --check lib/market.js"
   },
