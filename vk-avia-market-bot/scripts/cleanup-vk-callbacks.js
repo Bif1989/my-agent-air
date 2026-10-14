@@ -25,19 +25,18 @@ async function vkApi(method, params = {}) {
   return data.response;
 }
 
+const normalize = (url) => String(url || '').replace(/\/$/, '');
+
 function isOldAviaMarketServer(url) {
   try {
     const parsed = new URL(String(url || ''));
+    if (normalize(`${parsed.origin}${parsed.pathname}`) === CANONICAL_URL) return false;
     const host = parsed.hostname.toLowerCase();
     const path = parsed.pathname.toLowerCase();
-    if (`${parsed.origin}${parsed.pathname}` === CANONICAL_URL) return false;
     const aviaHost = host.endsWith('.vercel.app') && (
-      host.includes('vk-avia-market') ||
-      host.includes('my-agent-air') ||
-      host.includes('project-xj41n')
+      host.includes('vk-avia-market') || host.includes('my-agent-air') || host.includes('project-xj41n')
     );
-    const aviaPath = path.includes('/api/vk-');
-    return aviaHost && aviaPath;
+    return aviaHost && path.includes('/api/vk-');
   } catch {
     return false;
   }
@@ -45,40 +44,54 @@ function isOldAviaMarketServer(url) {
 
 (async () => {
   if (!GROUP_ID || !TOKEN) {
-    console.log('VK_CALLBACK_CLEANUP skipped: VK_GROUP_ID or VK_TOKEN missing');
+    console.log('VK_CALLBACK_MIGRATION skipped: VK_GROUP_ID or VK_TOKEN missing');
     return;
   }
 
   try {
-    const result = await vkApi('groups.getCallbackServers', { group_id: GROUP_ID });
-    const items = Array.isArray(result?.items) ? result.items : [];
-    console.log(`VK_CALLBACK_CLEANUP found=${items.length}`);
+    let result = await vkApi('groups.getCallbackServers', { group_id: GROUP_ID });
+    let items = Array.isArray(result?.items) ? result.items : [];
+    console.log(`VK_CALLBACK_MIGRATION found=${items.length}`);
 
-    const canonical = items.filter((item) => String(item?.url || '').replace(/\/$/, '') === CANONICAL_URL);
-    console.log(`VK_CALLBACK_CLEANUP canonical=${canonical.length}`);
+    let canonical = items.filter((item) => normalize(item?.url) === CANONICAL_URL);
+    console.log(`VK_CALLBACK_MIGRATION canonical_before=${canonical.length}`);
+
+    if (!canonical.length && items.length === 1) {
+      const current = items[0];
+      await vkApi('groups.editCallbackServer', {
+        group_id: GROUP_ID,
+        server_id: Number(current.id),
+        url: CANONICAL_URL,
+        title: 'Avia Market Bot v2',
+      });
+      console.log(`VK_CALLBACK_MIGRATION edited_server_id=${Number(current.id)}`);
+
+      result = await vkApi('groups.getCallbackServers', { group_id: GROUP_ID });
+      items = Array.isArray(result?.items) ? result.items : [];
+      canonical = items.filter((item) => normalize(item?.url) === CANONICAL_URL);
+    }
 
     if (!canonical.length) {
-      console.log('VK_CALLBACK_CLEANUP stopped: canonical server not found; nothing deleted');
+      console.log('VK_CALLBACK_MIGRATION stopped: canonical server still missing; nothing deleted');
       return;
     }
 
     const stale = items.filter((item) => isOldAviaMarketServer(item?.url));
-    console.log(`VK_CALLBACK_CLEANUP stale=${stale.length}`);
-
+    console.log(`VK_CALLBACK_MIGRATION stale=${stale.length}`);
     for (const item of stale) {
       await vkApi('groups.deleteCallbackServer', {
         group_id: GROUP_ID,
         server_id: Number(item.id),
       });
-      console.log(`VK_CALLBACK_CLEANUP deleted_server_id=${Number(item.id)}`);
+      console.log(`VK_CALLBACK_MIGRATION deleted_server_id=${Number(item.id)}`);
     }
 
     const after = await vkApi('groups.getCallbackServers', { group_id: GROUP_ID });
     const afterItems = Array.isArray(after?.items) ? after.items : [];
-    const canonicalAfter = afterItems.filter((item) => String(item?.url || '').replace(/\/$/, '') === CANONICAL_URL);
+    const canonicalAfter = afterItems.filter((item) => normalize(item?.url) === CANONICAL_URL);
     const staleAfter = afterItems.filter((item) => isOldAviaMarketServer(item?.url));
-    console.log(`VK_CALLBACK_CLEANUP verified canonical=${canonicalAfter.length} stale=${staleAfter.length} total=${afterItems.length}`);
+    console.log(`VK_CALLBACK_MIGRATION verified canonical=${canonicalAfter.length} stale=${staleAfter.length} total=${afterItems.length}`);
   } catch (error) {
-    console.log(`VK_CALLBACK_CLEANUP failed code=${error?.code || 'unknown'} message=${String(error?.message || error).slice(0, 240)}`);
+    console.log(`VK_CALLBACK_MIGRATION failed code=${error?.code || 'unknown'} message=${String(error?.message || error).slice(0, 240)}`);
   }
 })();
