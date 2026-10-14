@@ -1,22 +1,11 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "regions": ["hnd1"],
   "git": {
-    "deploymentEnabled": {
-      "**": false,
-      "vk-avia-market-bot": true
-    }
-  },
-  "ignoreCommand": "git diff --quiet \"$VERCEL_GIT_PREVIOUS_SHA\" HEAD -- .",
-  "env": {
-    "VK_STRICT_MARKET_CHAT": "true"
+    "deploymentEnabled": false
   },
   "functions": {
-    "api/vk-callback.js": { "maxDuration": 30 },
-    "api/vk-fast.js": { "maxDuration": 60 },
-    "api/vk-menu-entry.js": { "maxDuration": 60 },
-    "api/vk-market-ui.js": { "maxDuration": 60 },
-    "api/vk-safe-entry.js": { "maxDuration": 60 },
-    "api/vk-community-entry.js": { "maxDuration": 60 }
+    "api/vk-callback.js": { "maxDuration": 30 }
   }
 }
