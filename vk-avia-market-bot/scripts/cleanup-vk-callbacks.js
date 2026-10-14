@@ -62,7 +62,7 @@ function isOldAviaMarketServer(url) {
         group_id: GROUP_ID,
         server_id: Number(current.id),
         url: CANONICAL_URL,
-        title: 'Avia Market Bot v2',
+        title: 'AviaMarket v2',
       });
       console.log(`VK_CALLBACK_MIGRATION edited_server_id=${Number(current.id)}`);
 
