@@ -165,7 +165,7 @@ module.exports = async function handler(req, res) {
     return json(res, 200, {
       ok: true,
       service: 'vk-avia-market-bot',
-      version: 'chat-migration-diagnostic-v2',
+      version: 'chat-migration-diagnostic-v3',
       primary_peer_id: PRIMARY_PEER_ID,
       strict_market_chat: false,
       token_configured: Boolean(process.env.VK_TOKEN),
@@ -186,6 +186,12 @@ module.exports = async function handler(req, res) {
   const command = normalizeCommand(msg.text);
   const secretConfigured = Boolean(process.env.VK_SECRET);
   const secretMatch = !secretConfigured || event.secret === process.env.VK_SECRET;
+  const isPrimaryMenu = (
+    event.type === 'message_new' &&
+    Number(msg.out || 0) !== 1 &&
+    peerId === PRIMARY_PEER_ID &&
+    (command === '/menu' || command.startsWith('/menu '))
+  );
 
   if (!secretMatch) {
     await diagnostic('callback_secret_mismatch', {
@@ -197,17 +203,24 @@ module.exports = async function handler(req, res) {
       secretPresent: Boolean(event.secret),
       secretMatch: false,
     });
-    return json(res, 403, { ok: false });
+
+    // Temporary, narrowly scoped migration diagnostic: allow only /menu in the one
+    // configured Avia Market chat so we can distinguish secret mismatch from VK_TOKEN
+    // or messages.send permission errors. All other events remain blocked.
+    if (!isPrimaryMenu) return json(res, 403, { ok: false });
+
+    await diagnostic('menu_secret_mismatch_bypass', {
+      eventType: event.type,
+      peerId,
+      fromId,
+      command: '/menu',
+      eventId: event.event_id,
+      secretPresent: Boolean(event.secret),
+      secretMatch: false,
+    });
   }
 
-  if (
-    event.type === 'message_new' &&
-    Number(msg.out || 0) !== 1 &&
-    peerId === PRIMARY_PEER_ID &&
-    (command === '/menu' || command.startsWith('/menu '))
-  ) {
-    return handleMenu(event, res);
-  }
+  if (isPrimaryMenu) return handleMenu(event, res);
 
   await diagnostic('event_forwarded_to_legacy', {
     eventType: event.type,
