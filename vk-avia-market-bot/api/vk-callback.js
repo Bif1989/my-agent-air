@@ -93,23 +93,19 @@ async function vkApi(method, params = {}) {
 }
 
 const groupMenu = {
-  one_time: false,
   inline: true,
   buttons: [
     [
-      { action: { type: 'callback', label: '➕ Taklif', payload: JSON.stringify({ cmd: 'new_offer' }) }, color: 'primary' },
-      { action: { type: 'callback', label: '🔎 So‘rov', payload: JSON.stringify({ cmd: 'new_search' }) }, color: 'primary' },
+      { action: { type: 'callback', label: '➕ Taklif', payload: '{"cmd":"new_offer"}' } },
+      { action: { type: 'callback', label: '🔎 So‘rov', payload: '{"cmd":"new_search"}' } },
     ],
     [
-      { action: { type: 'callback', label: '🌐 Takliflar', payload: JSON.stringify({ cmd: 'offers' }) }, color: 'secondary' },
-      { action: { type: 'callback', label: '👥 So‘rovlar', payload: JSON.stringify({ cmd: 'searches' }) }, color: 'secondary' },
+      { action: { type: 'callback', label: '🌐 Takliflar', payload: '{"cmd":"offers"}' } },
+      { action: { type: 'callback', label: '👥 So‘rovlar', payload: '{"cmd":"searches"}' } },
     ],
     [
-      { action: { type: 'callback', label: '📦 Mening takliflarim', payload: JSON.stringify({ cmd: 'my_offers' }) }, color: 'secondary' },
-      { action: { type: 'callback', label: '📋 Mening so‘rovlarim', payload: JSON.stringify({ cmd: 'my_searches' }) }, color: 'secondary' },
-    ],
-    [
-      { action: { type: 'open_link', label: '💬 Shaxsiy bot', link: BOT_OPEN_URL }, color: 'secondary' },
+      { action: { type: 'callback', label: '📦 Mening takliflarim', payload: '{"cmd":"my_offers"}' } },
+      { action: { type: 'callback', label: '📋 Mening so‘rovlarim', payload: '{"cmd":"my_searches"}' } },
     ],
   ],
 };
@@ -165,7 +161,7 @@ module.exports = async function handler(req, res) {
     return json(res, 200, {
       ok: true,
       service: 'vk-avia-market-bot',
-      version: 'chat-migration-diagnostic-v3',
+      version: 'chat-migration-diagnostic-v4',
       primary_peer_id: PRIMARY_PEER_ID,
       strict_market_chat: false,
       token_configured: Boolean(process.env.VK_TOKEN),
