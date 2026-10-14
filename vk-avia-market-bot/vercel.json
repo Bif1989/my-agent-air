@@ -12,15 +12,11 @@
     "VK_STRICT_MARKET_CHAT": "true"
   },
   "functions": {
-    "api/vk-entry.js": { "maxDuration": 30 },
-    "api/vk-callback.js": { "maxDuration": 60 },
+    "api/vk-callback.js": { "maxDuration": 30 },
     "api/vk-fast.js": { "maxDuration": 60 },
     "api/vk-menu-entry.js": { "maxDuration": 60 },
     "api/vk-market-ui.js": { "maxDuration": 60 },
     "api/vk-safe-entry.js": { "maxDuration": 60 },
     "api/vk-community-entry.js": { "maxDuration": 60 }
-  },
-  "rewrites": [
-    { "source": "/api/vk-callback", "destination": "/api/vk-entry" }
-  ]
+  }
 }
