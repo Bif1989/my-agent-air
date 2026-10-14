@@ -2,10 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["hnd1"],
   "git": {
-    "deploymentEnabled": {
-      "**": false,
-      "main": true
-    }
-  },
-  "ignoreCommand": "git diff --quiet \"$VERCEL_GIT_PREVIOUS_SHA\" HEAD -- app lib data public package*.json next.config.ts tsconfig.json vercel.json"
+    "deploymentEnabled": false
+  }
 }
