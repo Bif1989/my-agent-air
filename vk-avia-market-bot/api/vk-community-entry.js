@@ -4,6 +4,7 @@ const safeEntry = require('./vk-safe-entry');
 const VK_API_VERSION = process.env.VK_API_VERSION || '5.199';
 const VK_GROUP_ID = Number(process.env.VK_GROUP_ID || 0);
 const PRIMARY_PEER_ID = Number(process.env.VK_PRIMARY_PEER_ID || 2000000003);
+const CLEANUP_USER_ID = Number(process.env.VK_CLEANUP_USER_ID || 0);
 const BOT_OPEN_URL = process.env.VK_BOT_OPEN_URL || 'https://vk.me/aviamarketbot';
 const CALLBACK_SECRET_HASH = String(process.env.VK_SECRET_SHA256 || '').trim().toLowerCase();
 
@@ -166,27 +167,34 @@ module.exports = async function handler(req, res) {
     return safeEntry(req, res);
   }
 
-  const isCommunityMessage = event.type === 'message_reply';
-  const msg = event.object?.message || (isCommunityMessage ? event.object : {});
+  const isMessageEvent = event.type === 'message_new' || event.type === 'message_reply';
+  const msg = event.object?.message || event.object || {};
   const peerId = Number(msg?.peer_id || 0);
+  const fromId = Number(msg?.from_id || 0);
   const command = normalizeCommand(msg?.text);
   const out = Number(msg?.out || 0);
 
-  const communityMenuCommand = (
+  const menuCommand = (
+    isMessageEvent &&
     peerId === PRIMARY_PEER_ID &&
-    (isCommunityMessage || out === 1) &&
     ['/menu', 'menu', '/pinmenu'].includes(command)
   );
 
-  if (!communityMenuCommand) return safeEntry(req, res);
+  if (!menuCommand) return safeEntry(req, res);
+
+  const sentByCommunity = event.type === 'message_reply' || out === 1 || fromId === -VK_GROUP_ID;
+  const owner = CLEANUP_USER_ID > 0 && fromId === CLEANUP_USER_ID;
+  const shouldPin = command === '/pinmenu' && (owner || sentByCommunity);
 
   try {
     const sent = await sendGroupMenu();
-    const shouldPin = command === '/pinmenu';
     const pinned = shouldPin ? await pinSentMessage(sent) : false;
     await deleteCommand(msg);
     console.log('community_menu_command_handled', {
+      eventType: event.type,
       command,
+      fromCommunity: sentByCommunity,
+      pinRequested: command === '/pinmenu',
       pinned: shouldPin ? pinned : null,
     });
   } catch (error) {
