@@ -5,6 +5,7 @@ const VK_API_VERSION = process.env.VK_API_VERSION || '5.199';
 const VK_GROUP_ID = Number(process.env.VK_GROUP_ID || 0);
 const PRIMARY_PEER_ID = Number(process.env.VK_PRIMARY_PEER_ID || 2000000003);
 const CLEANUP_USER_ID = Number(process.env.VK_CLEANUP_USER_ID || 0);
+const CALLBACK_SECRET_HASH = String(process.env.VK_SECRET_SHA256 || '').trim().toLowerCase();
 
 function sendOk(res) {
   res.status(200).setHeader('content-type', 'text/plain; charset=utf-8');
@@ -48,11 +49,21 @@ function fmtTime(value) {
   } catch { return ''; }
 }
 
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function sbRpc(fn, payload) {
   const base = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
   const key = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
   if (!base || !key) throw new Error('Supabase configuration missing');
-  const r = await fetch(`${base}/rest/v1/rpc/${fn}`, {
+  const r = await fetchWithTimeout(`${base}/rest/v1/rpc/${fn}`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -60,7 +71,7 @@ async function sbRpc(fn, payload) {
       authorization: `Bearer ${key}`,
     },
     body: JSON.stringify(payload),
-  });
+  }, 5000);
   const text = await r.text();
   let data;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
@@ -93,11 +104,20 @@ async function vkApi(method, params = {}) {
     if (value !== undefined && value !== null) body.set(key, String(value));
   }
 
-  const response = await fetch(`https://api.vk.com/method/${method}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body,
-  });
+  let response;
+  try {
+    response = await fetchWithTimeout(`https://api.vk.com/method/${method}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body,
+    }, 8000);
+  } catch (cause) {
+    const error = new Error(`VK ${method} timeout/network error`);
+    error.code = 'network';
+    error.cause = cause;
+    throw error;
+  }
+
   let data = null;
   try { data = await response.json(); } catch { data = null; }
   if (!response.ok || data?.error) {
@@ -108,6 +128,13 @@ async function vkApi(method, params = {}) {
     throw error;
   }
   return data?.response;
+}
+
+function callbackSecretOk(event) {
+  if (!event?.secret) return false;
+  if (CALLBACK_SECRET_HASH) return sha256(event.secret) === CALLBACK_SECRET_HASH;
+  if (process.env.VK_SECRET) return event.secret === process.env.VK_SECRET;
+  return false;
 }
 
 const groupMenu = {
@@ -197,34 +224,56 @@ async function createListing(userId, kind, text) {
   });
 }
 
-async function userNames(ids) {
-  const unique = [...new Set(ids.filter((x) => Number(x) > 0))].slice(0, 100);
-  if (!unique.length) return new Map();
-  try {
-    const users = await vkApi('users.get', { user_ids: unique.join(',') });
-    return new Map((users || []).map((u) => [Number(u.id), `${u.first_name || ''} ${u.last_name || ''}`.trim()]));
-  } catch {
-    return new Map();
-  }
+async function getMenuData(action, userId, limit = 5) {
+  return sbRpc('get_vk_aviation_menu_data_v2', {
+    p_secret: process.env.VK_INGEST_SECRET,
+    p_action: action,
+    p_limit: limit,
+    p_from_id: userId || null,
+  });
+}
+
+function formatItems(title, items) {
+  if (!items?.length) return `${title}\n\nHozircha ma’lumot yo‘q.`;
+  const blocks = items.map((it, index) => {
+    const uid = Number(it.from_id || 0);
+    const who = uid ? `[id${uid}|Agent]` : 'Agent';
+    const icon = it.message_kind === 'search' ? '🔎' : (it.message_kind === 'sold' ? '🔴' : '✈️');
+    const when = fmtTime(it.sent_at || it.sort_at);
+    return `${index + 1}. ${icon} ${who}${when ? `\n🕒 ${when}` : ''}\n${String(it.text || '').trim()}`;
+  });
+  return `${title}\n\n${blocks.join('\n\n────────\n\n')}`.slice(0, 3900);
+}
+
+async function sendListToUser(userId, action) {
+  const data = await getMenuData(action, userId, 5);
+  const titles = {
+    offers: '🌐 Barcha takliflar',
+    searches: '👥 Barcha so‘rovlar',
+    my_offers: '📦 Mening takliflarim',
+    my_searches: '📋 Mening so‘rovlarim',
+  };
+  await sendVkMessage(userId, formatItems(titles[action] || 'Avia Market', data?.items || []));
 }
 
 async function publishListing(userId, kind, text) {
-  const names = await userNames([userId]);
-  const name = names.get(userId) || `ID ${userId}`;
   const header = kind === 'offer' ? '✈️ TAKLIF' : '🔎 SO‘ROV';
-  const body = `${header}\n👤 [id${userId}|${name}]\n🕒 ${fmtTime(new Date().toISOString())}\n\n${text}\n\n#AviaMarket`;
+  const body = `${header}\n👤 [id${userId}|Agent]\n🕒 ${fmtTime(new Date().toISOString())}\n\n${text}\n\n#AviaMarket`;
   await sendVkMessage(PRIMARY_PEER_ID, body);
 }
 
 async function handleMenu(event, res) {
   const msg = event.object?.message || {};
   const peerId = Number(msg.peer_id || 0);
+  const cmid = Number(msg.conversation_message_id || 0);
   const menuText = '✈️ Avia Market\n\n➕ Taklif yoki 🔎 So‘rov tugmasini bosing va ma’lumotni shu chatning o‘ziga yozing. Bot xabaringizni avtomatik formatlab bozor lentasiga joylaydi.\n\nRo‘yxatlar shaxsiy botga yuboriladi.';
 
-  try {
-    await sendVkMessage(peerId, menuText, groupMenu);
-  } catch {
-    await sendVkMessage(peerId, menuText, null);
+  const [sent] = await Promise.allSettled([
+    sendVkMessage(peerId, menuText, groupMenu),
+    deleteChatMessage(peerId, cmid),
+  ]);
+  if (sent.status === 'rejected') {
+    try { await sendVkMessage(peerId, menuText); } catch (_) {}
   }
   return sendOk(res);
 }
@@ -232,13 +281,35 @@ async function handleMenu(event, res) {
 async function startGroupEntry(event, mode) {
   const userId = Number(event?.user_id || 0);
   if (!userId) return;
-  await setSession(userId, mode);
-  await eventAnswer(
-    event,
-    mode === 'offer'
-      ? 'Taklifni shu chatga bitta xabarda yozing'
-      : 'So‘rovni shu chatga bitta xabarda yozing'
-  );
+  await Promise.allSettled([
+    setSession(userId, mode),
+    eventAnswer(
+      event,
+      mode === 'offer'
+        ? 'Taklifni shu chatga bitta xabarda yozing'
+        : 'So‘rovni shu chatga bitta xabarda yozing'
+    ),
+  ]);
+}
+
+async function handleGroupAction(event, cmd) {
+  const userId = Number(event?.user_id || 0);
+  if (!userId) return;
+
+  if (cmd === 'new_offer' || cmd === 'new_search') {
+    await startGroupEntry(event, cmd === 'new_offer' ? 'offer' : 'search');
+    return;
+  }
+
+  if (['offers', 'searches', 'my_offers', 'my_searches'].includes(cmd)) {
+    await Promise.allSettled([
+      sendListToUser(userId, cmd),
+      eventAnswer(event, 'Natija shaxsiy botga yuborilmoqda'),
+    ]);
+    return;
+  }
+
+  await eventAnswer(event, 'Noma’lum amal');
 }
 
 async function handleGroupDraft(event, res) {
@@ -258,99 +329,84 @@ async function handleGroupDraft(event, res) {
   try {
     result = await createListing(userId, kind, text);
   } catch {
-    await deleteChatMessage(peerId, cmid);
-    try { await sendVkMessage(userId, '⚠️ Ma’lumotni saqlab bo‘lmadi. Qayta urinib ko‘ring.'); } catch (_) {}
+    await Promise.allSettled([
+      deleteChatMessage(peerId, cmid),
+      sendVkMessage(userId, '⚠️ Ma’lumotni saqlab bo‘lmadi. Qayta urinib ko‘ring.'),
+    ]);
     return sendOk(res);
   }
 
-  await deleteChatMessage(peerId, cmid);
-
   if (result?.duplicate) {
-    await setSession(userId, kind);
     const noun = kind === 'offer' ? 'taklif' : 'so‘rov';
-    try {
-      await sendVkMessage(userId, `⚠️ Bu ${noun}ni bugun allaqachon joylashtirgansiz.\n\nBugun boshqa ${noun} kiritishingiz mumkin, yoki shu ${noun}ni ertaga qayta joylashtirishingiz mumkin.`);
-    } catch (_) {}
+    await Promise.allSettled([
+      deleteChatMessage(peerId, cmid),
+      setSession(userId, kind),
+      sendVkMessage(userId, `⚠️ Bu ${noun}ni bugun allaqachon joylashtirgansiz.\n\nBugun boshqa ${noun} kiritishingiz mumkin, yoki shu ${noun}ni ertaga qayta joylashtirishingiz mumkin.`),
+    ]);
     return sendOk(res);
   }
 
   if (!result?.stored) {
-    try { await sendVkMessage(userId, '⚠️ Ma’lumotni saqlab bo‘lmadi. Qayta urinib ko‘ring.'); } catch (_) {}
+    await Promise.allSettled([
+      deleteChatMessage(peerId, cmid),
+      sendVkMessage(userId, '⚠️ Ma’lumotni saqlab bo‘lmadi. Qayta urinib ko‘ring.'),
+    ]);
     return sendOk(res);
   }
 
-  try { await clearSession(userId); } catch (_) {}
+  const tasks = await Promise.allSettled([
+    deleteChatMessage(peerId, cmid),
+    clearSession(userId),
+    publishListing(userId, kind, text),
+  ]);
 
-  try {
-    await publishListing(userId, kind, text);
-  } catch {
+  if (tasks[2].status === 'rejected') {
     try { await sendVkMessage(userId, '⚠️ Ma’lumot saqlandi, lekin chatga chiqarishda xato bo‘ldi.'); } catch (_) {}
   }
   return sendOk(res);
 }
 
-async function deleteCmidBatch(peerId, cmids) {
-  const list = [...new Set(cmids.map(Number).filter(Boolean))];
-  if (!list.length) return { deleted: 0, failed: 0 };
-
-  try {
-    await vkApi('messages.delete', {
-      peer_id: peerId,
-      cmids: list.join(','),
-      delete_for_all: 1,
-    });
-    return { deleted: list.length, failed: 0 };
-  } catch {
-    if (list.length === 1) return { deleted: 0, failed: 1 };
-    const middle = Math.ceil(list.length / 2);
-    const left = await deleteCmidBatch(peerId, list.slice(0, middle));
-    const right = await deleteCmidBatch(peerId, list.slice(middle));
-    return {
-      deleted: left.deleted + right.deleted,
-      failed: left.failed + right.failed,
-    };
-  }
+function chunks(list, size) {
+  const out = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
 }
 
 async function cleanChatHistory(peerId) {
+  const history = await vkApi('messages.getHistory', {
+    peer_id: peerId,
+    count: 200,
+    rev: 0,
+  });
+  const cmids = [...new Set((Array.isArray(history?.items) ? history.items : [])
+    .map((item) => Number(item?.conversation_message_id || 0))
+    .filter(Boolean))];
+
   let deleted = 0;
   let failed = 0;
-  let previousSignature = '';
+  let firstError = null;
 
-  for (let pass = 0; pass < 20; pass += 1) {
-    const history = await vkApi('messages.getHistory', {
-      peer_id: peerId,
-      count: 200,
-      rev: 0,
-    });
-    const items = Array.isArray(history?.items) ? history.items : [];
-    const cmids = items
-      .map((item) => Number(item?.conversation_message_id || 0))
-      .filter(Boolean);
-
-    if (!cmids.length) break;
-    const signature = cmids.join(',');
-    if (signature === previousSignature) break;
-    previousSignature = signature;
-
-    const result = await deleteCmidBatch(peerId, cmids);
-    deleted += result.deleted;
-    failed += result.failed;
-    if (!result.deleted) break;
+  for (const batch of chunks(cmids, 50)) {
+    try {
+      await vkApi('messages.delete', {
+        peer_id: peerId,
+        cmids: batch.join(','),
+        delete_for_all: 1,
+      });
+      deleted += batch.length;
+    } catch (error) {
+      failed += batch.length;
+      if (!firstError) firstError = { code: error.code || null, message: error.message || 'delete failed' };
+    }
   }
 
-  return { deleted, failed };
-}
-
-async function verifyCallbackSecret(event, fromId, allowPin) {
-  if (!event.secret) return { ok: false };
-  return sbRpc('verify_vk_callback_secret', {
-    p_secret: process.env.VK_INGEST_SECRET,
-    p_group_id: VK_GROUP_ID,
-    p_from_id: fromId || null,
-    p_event_secret_hash: sha256(event.secret),
-    p_allow_pin: Boolean(allowPin),
-  });
+  return {
+    found: cmids.length,
+    deleted,
+    failed,
+    first_error_code: firstError?.code || null,
+    first_error_message: firstError?.message ? String(firstError.message).slice(0, 300) : null,
+  };
 }
 
 module.exports = async function handler(req, res) {
@@ -358,10 +414,10 @@ module.exports = async function handler(req, res) {
     return json(res, 200, {
       ok: true,
       service: 'vk-avia-market-bot',
-      version: 'same-chat-cleanup-v7',
+      version: 'fast-callback-cleanup-v8',
       primary_peer_id: PRIMARY_PEER_ID,
       cleanup_enabled: CLEANUP_USER_ID > 0,
-      callback_security: 'pinned_sha256',
+      callback_security: CALLBACK_SECRET_HASH ? 'local_sha256' : 'legacy_secret',
     });
   }
 
@@ -375,28 +431,25 @@ module.exports = async function handler(req, res) {
   const peerId = Number(msg.peer_id || event.object?.peer_id || 0);
   const fromId = Number(msg.from_id || event.object?.user_id || 0);
   const command = normalizeCommand(msg.text);
+
+  if (!callbackSecretOk(event)) return json(res, 403, { ok: false });
+
   const isPrimaryMessage = (
     event.type === 'message_new' &&
     Number(msg.out || 0) !== 1 &&
     peerId === PRIMARY_PEER_ID
   );
-  const isPrimaryMenu = isPrimaryMessage && (command === '/menu' || command.startsWith('/menu '));
-  const isCleanup = isPrimaryMessage && command === '/cleanall';
 
-  let verification;
-  try {
-    verification = await verifyCallbackSecret(event, fromId, isPrimaryMenu || isCleanup);
-  } catch {
-    return json(res, 503, { ok: false });
+  if (isPrimaryMessage && (command === '/menu' || command.startsWith('/menu '))) {
+    return handleMenu(event, res);
   }
-  if (!verification?.ok) return json(res, 403, { ok: false });
 
-  if (isPrimaryMenu) return handleMenu(event, res);
-
-  if (isCleanup) {
+  if (isPrimaryMessage && command === '/cleanall') {
     if (!CLEANUP_USER_ID || fromId !== CLEANUP_USER_ID) return sendOk(res);
 
+    const cmid = Number(msg.conversation_message_id || 0);
     try { await clearSession(fromId); } catch (_) {}
+    try { await deleteChatMessage(peerId, cmid); } catch (_) {}
 
     try {
       const result = await cleanChatHistory(peerId);
@@ -418,11 +471,8 @@ module.exports = async function handler(req, res) {
 
   if (event.type === 'message_event' && Number(event.object?.peer_id || 0) === PRIMARY_PEER_ID) {
     const payload = safePayload(event.object?.payload);
-    const cmd = String(payload.cmd || '');
-    if (cmd === 'new_offer' || cmd === 'new_search') {
-      await startGroupEntry(event.object, cmd === 'new_offer' ? 'offer' : 'search');
-      return sendOk(res);
-    }
+    await handleGroupAction(event.object, String(payload.cmd || ''));
+    return sendOk(res);
   }
 
   if (isPrimaryMessage) {
@@ -430,6 +480,9 @@ module.exports = async function handler(req, res) {
     if (handled !== false) return handled;
   }
 
+  // The legacy handler still validates VK_SECRET. At this point the event has
+  // already passed the local SHA-256 verification, so provide a compatibility
+  // copy to avoid rejecting valid callbacks because an old plaintext env is stale.
   const legacyEvent = {
     ...event,
     secret: process.env.VK_SECRET || event.secret,
