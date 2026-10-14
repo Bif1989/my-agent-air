@@ -26,6 +26,17 @@ function normalizeCommand(text) {
     .toLowerCase();
 }
 
+function safePayload(value) {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  try {
+    const parsed = JSON.parse(String(value));
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 function randomId() {
   return Math.floor(Math.random() * 2147483647);
 }
@@ -54,27 +65,31 @@ async function vkApi(method, params = {}) {
   return data?.response;
 }
 
+function payload(cmd) {
+  return JSON.stringify({ cmd, v: 2 });
+}
+
 function groupMenu() {
   return {
     inline: true,
     buttons: [
       [
-        { action: { type: 'open_link', label: '🤖 SHAXSIY CHAT / KABINET', link: BOT_OPEN_URL }, color: 'primary' },
+        { action: { type: 'open_link', label: '🤖 SHAXSIY CHAT / KABINET', link: BOT_OPEN_URL } },
       ],
       [
-        { action: { type: 'callback', label: '➕ TAKLIF', payload: JSON.stringify({ cmd: 'new_offer' }) }, color: 'primary' },
-        { action: { type: 'callback', label: '🔎 SO‘ROV', payload: JSON.stringify({ cmd: 'new_search' }) }, color: 'primary' },
+        { action: { type: 'callback', label: '➕ TAKLIF', payload: payload('new_offer') }, color: 'primary' },
+        { action: { type: 'callback', label: '🔎 SO‘ROV', payload: payload('new_search') }, color: 'primary' },
       ],
       [
-        { action: { type: 'callback', label: '🌐 TAKLIFLAR', payload: JSON.stringify({ cmd: 'offers' }) }, color: 'secondary' },
-        { action: { type: 'callback', label: '👥 SO‘ROVLAR', payload: JSON.stringify({ cmd: 'searches' }) }, color: 'secondary' },
+        { action: { type: 'callback', label: '🌐 TAKLIFLAR', payload: payload('offers') }, color: 'secondary' },
+        { action: { type: 'callback', label: '👥 SO‘ROVLAR', payload: payload('searches') }, color: 'secondary' },
       ],
       [
-        { action: { type: 'callback', label: '📊 STATISTIKA', payload: JSON.stringify({ cmd: 'stats' }) }, color: 'secondary' },
+        { action: { type: 'callback', label: '📊 STATISTIKA', payload: payload('stats') }, color: 'secondary' },
       ],
       [
-        { action: { type: 'callback', label: '📦 MENING TAKLIFLARIM', payload: JSON.stringify({ cmd: 'my_offers' }) }, color: 'secondary' },
-        { action: { type: 'callback', label: '📋 MENING SO‘ROVLARIM', payload: JSON.stringify({ cmd: 'my_searches' }) }, color: 'secondary' },
+        { action: { type: 'callback', label: '📦 MENING TAKLIFLARIM', payload: payload('my_offers') }, color: 'secondary' },
+        { action: { type: 'callback', label: '📋 MENING SO‘ROVLARIM', payload: payload('my_searches') }, color: 'secondary' },
       ],
     ],
   };
@@ -84,16 +99,18 @@ async function sendGroupMenu() {
   const message = [
     '🌐 AVIA MARKET — UMUMIY CHAT',
     '',
-    'Taklif va so‘rovlar uchun tugmalardan foydalaning.',
-    'Oddiy yozishmalar strict rejimda avtomatik o‘chiriladi.',
-    '',
     `🤖 SHAXSIY CHAT / KABINET: ${BOT_OPEN_URL}`,
     '',
-    'Qisqa format namunalari:',
-    'TASMOW25OCT ADT1 HK1 220USD',
-    '25OCT TASMOW 2ADT',
+    '➕ TAKLIF yoki 🔎 SO‘ROV tugmasini bosing.',
+    'Bot turli aviakassa/GDS yozuvlarini qabul qiladi.',
     '',
-    '➕ TAKLIF yoki 🔎 SO‘ROVni bossangiz, bot 4 xil yozish namunasini ko‘rsatadi.',
+    'Namuna formatlar:',
+    '1) TASMOW25OCT ADT1 HK1 220USD',
+    '2) 25OCT TASMOW HY601 HK2 220$ BAG20',
+    '3) TAS-MOW 25OCT 2ADT Y HK2 20KG 230USD',
+    '4) TAS MOW 25.10 ADT1 CHD1 HK2 450USD',
+    '',
+    '📊 Statistika va shaxsiy ro‘yxatlar ham shu menyuda.',
   ].join('\n');
 
   return vkApi('messages.send', {
@@ -164,6 +181,28 @@ module.exports = async function handler(req, res) {
 
   const event = req.body || {};
   if (Number(event.group_id || 0) !== VK_GROUP_ID || !callbackSecretOk(event)) {
+    return safeEntry(req, res);
+  }
+
+  if (event.type === 'message_event') {
+    const object = event.object || {};
+    const peerId = Number(object.peer_id || 0);
+    const eventPayload = safePayload(object.payload);
+    const version = Number(eventPayload.v || 0);
+
+    if (peerId === PRIMARY_PEER_ID && version < 2) {
+      try {
+        await sendGroupMenu();
+        console.log('legacy_group_menu_refreshed', { cmd: eventPayload.cmd || null });
+      } catch (error) {
+        console.error('legacy_group_menu_refresh_failed', {
+          code: error?.code || null,
+          message: error?.message || String(error),
+        });
+      }
+      return sendOk(res);
+    }
+
     return safeEntry(req, res);
   }
 
