@@ -3,6 +3,7 @@
   "version": "2.0.0",
   "private": true,
   "scripts": {
+    "build": "node scripts/cleanup-vk-callbacks.js",
     "test": "node tests/smoke.test.js",
     "check": "node --check api/vk-callback.js && node --check lib/vk.js && node --check lib/ui.js && node --check lib/market.js"
   },
