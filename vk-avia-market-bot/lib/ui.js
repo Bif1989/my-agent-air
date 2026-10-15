@@ -29,8 +29,6 @@ function privateMenu() {
   };
 }
 
-// Public chat intentionally has no inline keyboard.
-// The stable entry point is a pinned plain-text link to the private bot.
 function groupMenu() {
   return null;
 }
@@ -39,7 +37,7 @@ function adminMenu() {
   return {
     inline: true,
     buttons: [
-      [{ action: { type: 'callback', label: '📌 ZAKREPLEN XABARNI YANGILASH', payload: payload('admin_pinmenu') }, color: 'primary' }],
+      [{ action: { type: 'callback', label: '📌 QOIDALARNI YANGILASH', payload: payload('admin_pinmenu') }, color: 'primary' }],
       [{ action: { type: 'callback', label: '🧹 BOT E’LONLARINI TOZALASH', payload: payload('admin_cleanall') }, color: 'negative' }],
     ],
   };
@@ -48,15 +46,16 @@ function adminMenu() {
 function privateHome() {
   return {
     text: [
-      '🔒 AVIA MARKET — SHAXSIY BOT / KABINET', '',
-      'Bu — sizning shaxsiy boshqaruv oynangiz.',
-      'Bu yerga yozgan oddiy xabaringiz UMUMIY CHATga avtomatik chiqmaydi.', '',
-      'E’lon berish tartibi:',
-      '1) “➕ TAKLIF BERISH” yoki “🔎 SO‘ROV BERISH”ni bosing.',
-      '2) Keyingi BITTA xabarda e’lon matnini yuboring.',
-      '3) Shundan keyingina e’lon UMUMIY CHATga chiqariladi.', '',
-      '🛡 Bir xil e’lon 24 soat ichida qayta joylanmaydi.',
-      '⏱ E’lonlar orasida 30 soniyalik himoya bor.',
+      '📌 AVIA MARKET — SHAXSIY BOT QOIDALARI', '',
+      '1️⃣ Taklif yoki So‘rovni faqat tegishli tugma orqali yuboring.',
+      '2️⃣ Bir xil Taklif/So‘rov 24 soat ichida faqat 1 marta joylanadi.',
+      '3️⃣ Yangi e’lonlar orasida kamida 30 soniya bo‘lishi kerak.',
+      '4️⃣ Yo‘nalish, sana, narx, joy soni va bagajni imkon qadar aniq yozing.',
+      '5️⃣ Spam, flood, haqorat, firibgarlik va mavzuga aloqasiz reklama taqiqlanadi.',
+      '6️⃣ Bu yerga oddiy yozgan xabaringiz UMUMIY CHATga avtomatik chiqmaydi.', '',
+      '✈️ E’lon berish:',
+      '“➕ TAKLIF BERISH” yoki “🔎 SO‘ROV BERISH” → keyingi BITTA xabarda matnni yuboring.', '',
+      '🌐 UMUMIY CHAT tugmasi orqali ochiq suhbatga o‘tasiz.',
     ].join('\n'),
     keyboard: privateMenu(),
   };
@@ -65,14 +64,17 @@ function privateHome() {
 function groupHome() {
   return {
     text: [
-      '📌 AVIA MARKET — UMUMIY CHAT', '',
-      'Bu — ochiq umumiy suhbat.',
-      '✅ Barcha ishtirokchilar erkin yozishi va javob berishi mumkin.',
-      '🛡 Bir foydalanuvchining bir xil uzun xabari 24 soat ichida faqat 1 marta qoladi.', '',
-      '✈️ Taklif va 🔎 So‘rovlarni tartibli joylash uchun SHAXSIY BOTdan foydalaning:',
-      `🔒 ${BOT_OPEN_URL}`,
+      '📌 AVIA MARKET — UMUMIY CHAT QOIDALARI', '',
+      '1️⃣ Chat ochiq: barcha ishtirokchilar erkin yozishi va javob berishi mumkin.',
+      '2️⃣ Bir foydalanuvchi aynan bir xil 10+ belgilik xabarni 24 soat ichida faqat 1 marta qoldira oladi. Takrori bot tomonidan o‘chiriladi.',
+      '3️⃣ Taklif va So‘rovlarni tartibli joylash uchun SHAXSIY BOTdan foydalaning.',
+      '4️⃣ Yo‘nalish, sana, narx, joy soni va bagajni imkon qadar aniq yozing.',
+      '5️⃣ Spam, flood, haqorat, firibgarlik va mavzuga aloqasiz reklama taqiqlanadi.',
+      '6️⃣ Har bir agent o‘zi bergan ma’lumot va kelishuv uchun javobgar.', '',
+      '🔒 SHAXSIY BOT:',
+      BOT_OPEN_URL,
       '',
-      'Shaxsiy bot orqali berilgan e’lonlar shu chatga ham avtomatik chiqariladi.',
+      'Shaxsiy bot orqali berilgan Taklif/So‘rovlar shu chatga ham avtomatik chiqariladi.',
     ].join('\n'),
     keyboard: null,
   };
@@ -84,7 +86,7 @@ function adminHome() {
       '⚙️ AVIA MARKET — ADMIN BOSHQARUV', '',
       'Bu bo‘lim faqat admin akkauntida ko‘rinadi.',
       'Alohida ADMIN BOT yo‘q — boshqaruv shu SHAXSIY BOT ichida.', '',
-      '📌 Zakreplen xabar — UMUMIY CHATga SHAXSIY BOT havolasini yuboradi va pin qiladi.',
+      '📌 Qoidalarni yangilash — UMUMIY CHATga yangi qoidalarni yuboradi va eski zakreplyon xabar o‘rniga pin qiladi.',
       '🧹 Bot e’lonlarini tozalash — faqat bot kuzatgan e’lon/xizmat xabarlarini tozalaydi; oddiy foydalanuvchi yozishmalariga tegmaydi.', '',
       '↩️ Shaxsiy menyuga qaytish: /menu',
     ].join('\n'),
