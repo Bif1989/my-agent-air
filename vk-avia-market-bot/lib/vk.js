@@ -88,6 +88,25 @@ async function sendMessage(peerId, message, keyboard) {
   return vkApi('messages.send', params);
 }
 
+async function editMessage(peerId, refs, message) {
+  const ref = messageRef(refs);
+  if (!ref.message_id && !ref.conversation_message_id) return false;
+  const params = {
+    peer_id: Number(peerId),
+    message: String(message).slice(0, 4000),
+    disable_mentions: 1,
+  };
+  if (ref.conversation_message_id) params.conversation_message_id = ref.conversation_message_id;
+  else params.message_id = ref.message_id;
+  try {
+    await vkApi('messages.edit', params);
+    return true;
+  } catch (error) {
+    console.warn('edit_message_failed', { code: error?.code || null });
+    return false;
+  }
+}
+
 async function answerEvent(obj, text) {
   if (!obj?.event_id || !obj?.user_id || !obj?.peer_id) return false;
   try {
@@ -231,6 +250,7 @@ module.exports = {
   vkApi,
   messageRef,
   sendMessage,
+  editMessage,
   answerEvent,
   deleteMessage,
   deleteMessageRefs,
