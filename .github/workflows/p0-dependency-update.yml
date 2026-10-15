@@ -26,7 +26,9 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Upgrade patched Next.js dependency set
-        run: npm install --save-exact next@16.4.1 --save-dev eslint-config-next@16.4.1
+        run: |
+          npm install --save-exact next@16.4.1
+          npm install --save-dev --save-exact eslint-config-next@16.4.1
       - name: Verify production dependency audit
         run: npm audit --omit=dev --audit-level=high
       - run: npm test
