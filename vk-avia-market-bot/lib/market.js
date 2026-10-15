@@ -18,6 +18,7 @@ const isAdmin = (userId) => ADMIN_USER_ID > 0 && Number(userId) === ADMIN_USER_I
 const normalizeListingText = (text) => String(text || '').replace(/\s+/g, ' ').trim().toLowerCase();
 const normalizeCommand = (text) => String(text || '').replace(/^\[club\d+\|@[^\]]+\]\s*/i, '').trim().toLowerCase();
 const listingMarker = (kind, userId) => `#AM2_${kind === 'search' ? 'SEARCH' : 'OFFER'}_${Number(userId)}`;
+const isForwardedMessage = (msg) => Array.isArray(msg?.fwd_messages) && msg.fwd_messages.length > 0;
 
 function safePayload(value) {
   if (!value) return {};
@@ -313,6 +314,16 @@ async function handleGroupMessage(msg) {
   const text = String(msg?.text || '').trim();
   const command = normalizeCommand(text);
 
+  if (fromId && cmid && isForwardedMessage(msg)) {
+    await deleteMessage(peerId, cmid);
+    await sendMessage(
+      fromId,
+      '🚫 UMUMIY CHATga boshqa gruppa, kanal yoki chatdan pereslat (forward) qilingan xabar yuborish mumkin emas. Xabaringiz o‘chirildi.',
+      privateMenu(),
+    ).catch(() => {});
+    return;
+  }
+
   if (['/menu', 'menu'].includes(command)) {
     const admin = isAdmin(fromId);
     return Promise.allSettled([
@@ -391,6 +402,7 @@ module.exports = {
   parseListing,
   normalizeListingText,
   listingMarker,
+  isForwardedMessage,
   formatStoredList,
   sendPrivateHome,
   sendGroupMenu,
