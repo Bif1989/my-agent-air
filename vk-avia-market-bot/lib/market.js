@@ -15,6 +15,7 @@ const PRIMARY_PEER_ID = Number(process.env.VK_PRIMARY_PEER_ID || 0);
 const ADMIN_USER_ID = Number(process.env.VK_CLEANUP_USER_ID || 0);
 
 const isAdmin = (userId) => ADMIN_USER_ID > 0 && Number(userId) === ADMIN_USER_ID;
+const isGroupPeer = (peerId) => Number(peerId) >= 2000000000;
 const normalizeListingText = (text) => String(text || '').replace(/\s+/g, ' ').trim().toLowerCase();
 const normalizeCommand = (text) => String(text || '').replace(/^\[club\d+\|@[^\]]+\]\s*/i, '').trim().toLowerCase();
 const listingMarker = (kind, userId) => `#AM2_${kind === 'search' ? 'SEARCH' : 'OFFER'}_${Number(userId)}`;
@@ -150,12 +151,18 @@ async function sendMarketLink(userId) {
   const inviteLink = PRIMARY_PEER_ID ? await getInviteLink(PRIMARY_PEER_ID) : null;
   const link = inviteLink || directLink;
   const label = inviteLink ? 'Chatga kirish / qo‘shilish havolasi' : 'Umumiy chatni ochish';
-  await sendMessage(userId, `🌐 AVIA MARKET — UMUMIY CHAT\n\n${label}:\n👉 ${link}`, privateMenu());
+  await sendMessage(userId, `🌐 AVIA MARKET — ASOSIY UMUMIY CHAT\n\n${label}:\n👉 ${link}`, privateMenu());
 }
 
-async function rememberBotMessage(purpose, sent) {
+async function rememberBotMessage(purpose, sent, peerId = PRIMARY_PEER_ID) {
   const ref = messageRef(sent);
   if (!ref.message_id && !ref.conversation_message_id) return ref;
+
+  // Cleanup storage currently belongs to the primary Avia Market chat only.
+  // Secondary managed chats must never leak their conversation_message_id into
+  // primary-chat cleanup, because cmid values are local to each conversation.
+  if (Number(peerId) !== PRIMARY_PEER_ID) return ref;
+
   try {
     await storage.trackBotMessage(purpose, ref);
   } catch (error) {
@@ -171,18 +178,19 @@ async function sendPrivateHome(userId, { pin = true } = {}) {
   return { sent, pinned };
 }
 
-async function sendGroupMenu({ pin = false, forcePin = false } = {}) {
-  if (!PRIMARY_PEER_ID) throw new Error('VK_PRIMARY_PEER_ID is not configured');
-  const home = groupHome();
-  const sent = await sendMessage(PRIMARY_PEER_ID, home.text, home.keyboard);
-  const ref = await rememberBotMessage('menu', sent);
-  const pinned = pin ? await pinMessage(PRIMARY_PEER_ID, sent, { force: forcePin }) : false;
-  return { sent, ref, pinned };
+async function sendGroupMenu({ peerId = PRIMARY_PEER_ID, pin = false, forcePin = false } = {}) {
+  const targetPeerId = Number(peerId || 0);
+  if (!isGroupPeer(targetPeerId)) throw new Error('A valid VK group-chat peer_id is required');
+  const home = groupHome({ isPrimary: targetPeerId === PRIMARY_PEER_ID });
+  const sent = await sendMessage(targetPeerId, home.text, home.keyboard);
+  const ref = await rememberBotMessage('menu', sent, targetPeerId);
+  const pinned = pin ? await pinMessage(targetPeerId, sent, { force: forcePin }) : false;
+  return { sent, ref, pinned, peerId: targetPeerId };
 }
 
 async function cleanChat(userId) {
   if (!isAdmin(userId)) return sendMessage(userId, '⛔ Bu amal faqat admin uchun.');
-  if (!PRIMARY_PEER_ID) return sendMessage(userId, '⚠️ Umumiy chat sozlanmagan.', privateMenu());
+  if (!PRIMARY_PEER_ID) return sendMessage(userId, '⚠️ Asosiy umumiy chat sozlanmagan.', privateMenu());
 
   let targets;
   try {
@@ -227,7 +235,7 @@ async function cleanChat(userId) {
 
   let rulesPinned = false;
   try {
-    const rules = await sendGroupMenu({ pin: true, forcePin: true });
+    const rules = await sendGroupMenu({ peerId: PRIMARY_PEER_ID, pin: true, forcePin: true });
     rulesPinned = Boolean(rules?.pinned);
   } catch (error) {
     console.warn('cleanup_rules_refresh_failed', { code: error?.code || null });
@@ -236,9 +244,9 @@ async function cleanChat(userId) {
   return sendMessage(userId, [
     '🧹 BOT E’LONLARI TOZALANDI',
     '',
-    `✅ Bot kuzatgan xabarlar o‘chirildi: ${deleted}`,
+    `✅ Asosiy chatdagi bot kuzatgan xabarlar o‘chirildi: ${deleted}`,
     targets.length === 0 ? 'ℹ️ O‘chirish uchun saqlangan eski e’lonlar yo‘q edi.' : '',
-    rulesPinned ? '📌 Umumiy chat qoidalari yangilandi va pin qilindi.' : '📌 Umumiy chat qoidalari yuborildi.',
+    rulesPinned ? '📌 Asosiy chat qoidalari yangilandi va pin qilindi.' : '📌 Asosiy chat qoidalari yuborildi.',
   ].filter(Boolean).join('\n'), privateMenu());
 }
 
@@ -279,14 +287,14 @@ async function handleListingText(userId, text) {
     } catch (error) {
       console.error('storage_finalize_failed', { id: created.id, code: error?.code || null, message: error?.message || String(error) });
     }
-    return sendMessage(userId, kind === 'offer' ? '✅ Taklif UMUMIY CHATga joylashtirildi.' : '✅ So‘rov UMUMIY CHATga joylashtirildi.', privateMenu());
+    return sendMessage(userId, kind === 'offer' ? '✅ Taklif ASOSIY UMUMIY CHATga joylashtirildi.' : '✅ So‘rov ASOSIY UMUMIY CHATga joylashtirildi.', privateMenu());
   } catch (error) {
     console.error('publish_failed', { code: error?.code || null, message: error?.message || String(error) });
     await Promise.allSettled([
       storage.finalizeListing(created.id, userId, 'failed', {}, error?.code || 'vk_send_failed'),
       storage.setMode(userId, kind),
     ]);
-    return sendMessage(userId, '⚠️ VK umumiy chatga yuborishni qabul qilmadi. Rejim saqlandi — shu xabarni qayta yuboring.', privateMenu()).catch(() => {});
+    return sendMessage(userId, '⚠️ VK asosiy umumiy chatga yuborishni qabul qilmadi. Rejim saqlandi — shu xabarni qayta yuboring.', privateMenu()).catch(() => {});
   }
 }
 
@@ -314,11 +322,14 @@ async function handleGroupMessage(msg) {
   const text = String(msg?.text || '').trim();
   const command = normalizeCommand(text);
 
+  if (!isGroupPeer(peerId)) return;
+
   if (fromId && cmid && isForwardedMessage(msg)) {
-    await deleteMessage(peerId, cmid);
+    const deleted = await deleteMessage(peerId, cmid);
+    if (!deleted) console.warn('forward_delete_failed', { peerId, fromId, cmid });
     await sendMessage(
       fromId,
-      '🚫 UMUMIY CHATga boshqa gruppa, kanal yoki chatdan pereslat (forward) qilingan xabar yuborish mumkin emas. Xabaringiz o‘chirildi.',
+      '🚫 Bu chatga boshqa gruppa, kanal yoki chatdan pereslat (forward) qilingan xabar yuborish mumkin emas. Xabaringiz o‘chirildi.',
       privateMenu(),
     ).catch(() => {});
     return;
@@ -327,7 +338,7 @@ async function handleGroupMessage(msg) {
   if (['/menu', 'menu'].includes(command)) {
     const admin = isAdmin(fromId);
     return Promise.allSettled([
-      sendGroupMenu({ pin: admin, forcePin: admin }),
+      sendGroupMenu({ peerId, pin: admin, forcePin: admin }),
       deleteMessage(peerId, cmid),
     ]);
   }
@@ -338,14 +349,15 @@ async function handleGroupMessage(msg) {
     const result = await storage.checkChatDuplicate(fromId, peerId, text);
     if (!result?.duplicate) return;
 
-    await deleteMessage(peerId, cmid);
+    const deleted = await deleteMessage(peerId, cmid);
+    if (!deleted) console.warn('duplicate_delete_failed', { peerId, fromId, cmid });
     await sendMessage(
       fromId,
-      '🛡 Bir xil ma’lumot UMUMIY CHATga 24 soat ichida faqat 1 marta yuboriladi. Takroriy xabaringiz o‘chirildi.',
+      '🛡 Bir xil ma’lumot bitta chatga 24 soat ichida faqat 1 marta yuboriladi. Takroriy xabaringiz o‘chirildi.',
       privateMenu(),
     ).catch(() => {});
   } catch (error) {
-    console.warn('chat_duplicate_check_failed', { code: error?.code || null, message: error?.message || String(error) });
+    console.warn('chat_duplicate_check_failed', { peerId, code: error?.code || null, message: error?.message || String(error) });
   }
 }
 
@@ -370,18 +382,18 @@ async function handleCallback(obj) {
   if (['offers', 'searches', 'my_offers', 'my_searches'].includes(cmd)) return run(() => sendList(userId, cmd), 'Natija shaxsiy botga yuborildi');
   if (cmd === 'stats') return run(() => sendStats(userId), 'Statistika shaxsiy botga yuborildi');
   if (cmd === 'cabinet') return run(() => sendCabinet(userId), 'Kabinet shaxsiy botga yuborildi');
-  if (cmd === 'open_market_chat') return run(() => sendMarketLink(userId), 'Umumiy chat havolasi yuborildi');
+  if (cmd === 'open_market_chat') return run(() => sendMarketLink(userId), 'Asosiy umumiy chat havolasi yuborildi');
   if (cmd === 'admin_cleanall') return run(() => cleanChat(userId), 'Tozalash yakunlandi');
   if (cmd === 'admin_pinmenu') {
     if (!isAdmin(userId)) return answerEvent(obj, 'Bu amal faqat admin uchun');
     return run(async () => {
-      const result = await sendGroupMenu({ pin: true, forcePin: true });
+      const result = await sendGroupMenu({ peerId: PRIMARY_PEER_ID, pin: true, forcePin: true });
       await sendMessage(
         userId,
-        result.pinned ? '✅ Qoidalar yangilandi va UMUMIY CHATga zakrepit qilindi.' : '✅ Qoidalar chatga yuborildi. VK pin qilishga ruxsat bermasa, yuqoridan qo‘lda zakrepit qiling.',
+        result.pinned ? '✅ Qoidalar yangilandi va ASOSIY UMUMIY CHATga zakrepit qilindi.' : '✅ Qoidalar asosiy chatga yuborildi. VK pin qilishga ruxsat bermasa, yuqoridan qo‘lda zakrepit qiling.',
         privateMenu(),
       );
-    }, 'Umumiy chat qoidalari yangilandi');
+    }, 'Asosiy chat qoidalari yangilandi');
   }
   await answerEvent(obj, 'Noma’lum amal');
 }
@@ -393,7 +405,11 @@ async function processEvent(event) {
   if (!msg || Number(msg?.out || 0) === 1) return;
   const peerId = Number(msg?.peer_id || 0);
   const fromId = Number(msg?.from_id || 0);
-  if (peerId === PRIMARY_PEER_ID) return handleGroupMessage(msg);
+
+  // Multi-chat mode: every VK conversation where the community bot is present
+  // gets the same moderation policy. The primary peer remains the only chat
+  // receiving structured listings from the private bot.
+  if (isGroupPeer(peerId)) return handleGroupMessage(msg);
   if (peerId > 0 && peerId === fromId) return handlePrivateMessage(msg);
 }
 
@@ -403,6 +419,7 @@ module.exports = {
   normalizeListingText,
   listingMarker,
   isForwardedMessage,
+  isGroupPeer,
   formatStoredList,
   sendPrivateHome,
   sendGroupMenu,
