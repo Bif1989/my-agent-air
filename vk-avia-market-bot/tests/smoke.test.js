@@ -1,6 +1,6 @@
 const assert = require('assert');
 const { parseListing, normalizeListingText, listingMarker, formatStoredList } = require('../lib/market');
-const { privateMenu, groupMenu } = require('../lib/ui');
+const { privateMenu, groupMenu, privateHome, groupHome } = require('../lib/ui');
 
 assert.strictEqual(normalizeListingText('  TAS   MOW  '), 'tas mow');
 assert.strictEqual(listingMarker('offer', 123), '#AM2_OFFER_123');
@@ -16,8 +16,23 @@ assert.strictEqual(parsed.kind, 'offer');
 assert.strictEqual(parsed.userId, 123);
 assert.strictEqual(parsed.text, 'TAS–MOW 20 oktabr 220 USD');
 
-assert.strictEqual(privateMenu().buttons.length, 5, 'private keyboard must stay within VK row limit');
-assert.strictEqual(groupMenu().buttons.length, 3, 'group keyboard must stay compact');
+const privateKeyboard = privateMenu();
+const groupKeyboard = groupMenu();
+assert.strictEqual(privateKeyboard.buttons.length, 5, 'private keyboard must stay compact');
+assert.strictEqual(groupKeyboard.buttons.length, 1, 'public chat must have one clear entry point to the private bot');
+assert.strictEqual(groupKeyboard.buttons[0][0].action.type, 'open_link');
+assert(groupKeyboard.buttons[0][0].action.label.includes('SHAXSIY BOT'));
+assert(privateKeyboard.buttons[0][0].action.label.includes('UMUMIY CHAT'));
+
+const privateHomeText = privateHome().text;
+const groupHomeText = groupHome().text;
+assert(privateHomeText.includes('SHAXSIY BOT / KABINET'));
+assert(privateHomeText.includes('avtomatik chiqmaydi'));
+assert(privateHomeText.includes('Shundan keyingina e’lon UMUMIY CHATga chiqariladi'));
+assert(groupHomeText.includes('UMUMIY CHAT'));
+assert(groupHomeText.includes('HAMMAGA OCHIQ'));
+assert(groupHomeText.includes('SHAXSIY BOT'));
+assert(!groupHomeText.includes('ADMIN BOT'));
 
 const formatted = formatStoredList('TEST', [{ kind: 'offer', body: 'TAS–MOW 220 USD', created_at: '2026-10-15T00:00:00Z' }]);
 assert(formatted.includes('TAS–MOW 220 USD'));
