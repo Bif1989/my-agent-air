@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { parseListing, normalizeListingText, listingMarker, formatStoredList, sendPrivateHome } = require('../lib/market');
+const { parseListing, normalizeListingText, listingMarker, isForwardedMessage, formatStoredList, sendPrivateHome } = require('../lib/market');
 const { messageRef } = require('../lib/vk');
 const storage = require('../lib/storage');
 const { privateMenu, groupMenu, adminMenu, privateHome, groupHome, adminHome } = require('../lib/ui');
@@ -7,6 +7,9 @@ const { privateMenu, groupMenu, adminMenu, privateHome, groupHome, adminHome } =
 assert.strictEqual(normalizeListingText('  TAS   MOW  '), 'tas mow');
 assert.strictEqual(listingMarker('offer', 123), '#AM2_OFFER_123');
 assert.strictEqual(listingMarker('search', 456), '#AM2_SEARCH_456');
+assert.strictEqual(isForwardedMessage({ fwd_messages: [{ id: 1 }] }), true, 'forwarded VK messages must be detected');
+assert.strictEqual(isForwardedMessage({ fwd_messages: [] }), false, 'empty forward list must not be blocked');
+assert.strictEqual(isForwardedMessage({ text: 'oddiy xabar' }), false, 'ordinary chat messages must remain allowed');
 
 const parsed = parseListing({
   text: '✈️ TAKLIF\n👤 [id123|Agent]\n🕒 14.10 21:00\n\nTAS–MOW 20 oktabr 220 USD\n\n#AviaMarket\n#AM2_OFFER_123',
@@ -50,6 +53,8 @@ assert(groupHomeText.includes('https://vk.me/aviamarketbot'));
 assert(groupHomeText.includes('SHAXSIY BOT'));
 assert(groupHomeText.includes('10+ belgilik'));
 assert(groupHomeText.includes('24 soat'));
+assert(groupHomeText.includes('pereslat (forward)'));
+assert(groupHomeText.includes('bot tomonidan o‘chiriladi'));
 assert.strictEqual(groupHomeCard.keyboard, null);
 assert(!groupHomeText.includes('ADMIN BOT'));
 assert(adminHomeText.includes('faqat admin akkauntida'));
