@@ -75,3 +75,10 @@ test('P10 billing hardening covers both foreign-key indexes reported by advisors
   assert.match(sql, /billing_payment_orders_subscription_id_idx/);
   assert.match(sql, /billing_payment_orders\(subscription_id\)/);
 });
+
+test('patched Next.js stays a production dependency and lint config stays development-only', () => {
+  const pkg = JSON.parse(read('package.json'));
+  assert.equal(pkg.dependencies.next, '16.4.1');
+  assert.equal(pkg.devDependencies.next, undefined);
+  assert.equal(pkg.devDependencies['eslint-config-next'], '16.4.1');
+});
