@@ -1,9 +1,11 @@
 const crypto = require('crypto');
 const { waitUntil } = require('@vercel/functions');
 const { processEvent } = require('../lib/market');
-const { vkApi } = require('../lib/vk');
+const { vkApi, sendMessage } = require('../lib/vk');
+const { privateHome, adminHome } = require('../lib/ui');
 
 const VK_GROUP_ID = Number(process.env.VK_GROUP_ID || 0);
+const ADMIN_USER_ID = Number(process.env.VK_CLEANUP_USER_ID || 0);
 const CALLBACK_SECRET_HASH = String(process.env.VK_SECRET_SHA256 || '').trim().toLowerCase();
 const CALLBACK_URL = 'https://project-xj41n.vercel.app/api/vk-callback?v=2';
 
@@ -67,6 +69,35 @@ async function repairCallbackServer() {
   };
 }
 
+function adminPrivateCommand(event) {
+  if (event?.type !== 'message_new' || !ADMIN_USER_ID) return null;
+  const msg = event?.object?.message || {};
+  const userId = Number(msg?.from_id || 0);
+  const peerId = Number(msg?.peer_id || 0);
+  if (!userId || userId !== ADMIN_USER_ID || peerId !== userId || Number(msg?.out || 0) === 1) return null;
+  const command = String(msg?.text || '').trim().toLowerCase();
+  if (['/start', '/menu', '/help', 'menu'].includes(command)) return 'home';
+  if (command === '/admin') return 'admin';
+  return null;
+}
+
+async function processEventWithAdminUi(event) {
+  const adminCommand = adminPrivateCommand(event);
+  if (adminCommand === 'home') {
+    const home = privateHome();
+    const admin = adminHome();
+    await sendMessage(ADMIN_USER_ID, home.text, home.keyboard);
+    await sendMessage(ADMIN_USER_ID, admin.text, admin.keyboard);
+    return;
+  }
+  if (adminCommand === 'admin') {
+    const admin = adminHome();
+    await sendMessage(ADMIN_USER_ID, admin.text, admin.keyboard);
+    return;
+  }
+  return processEvent(event);
+}
+
 module.exports = async function handler(req, res) {
   if (req.method === 'GET') {
     if (String(req.query?.repair || '') === '1') {
@@ -90,12 +121,13 @@ module.exports = async function handler(req, res) {
     return json(res, 200, {
       ok: true,
       service: 'vk-avia-market-bot',
-      version: '2.1.0',
+      version: '2.1.1',
       architecture: 'protected-edge-storage',
       duplicate_guard_hours: 24,
       rate_limit_seconds: 30,
       fast_ack: true,
       dynamic_confirmation: true,
+      admin_ui: 'private-only',
       group_configured: VK_GROUP_ID > 0,
       security: CALLBACK_SECRET_HASH ? 'sha256' : 'legacy-secret',
     });
@@ -117,7 +149,7 @@ module.exports = async function handler(req, res) {
   if (!secretOk(event)) return json(res, 403, { ok: false, error: 'forbidden' });
 
   text(res, 200, 'ok');
-  waitUntil(Promise.resolve(processEvent(event)).catch((error) => {
+  waitUntil(Promise.resolve(processEventWithAdminUi(event)).catch((error) => {
     console.error('event_processing_failed', {
       type: event?.type || null,
       code: error?.code || null,
