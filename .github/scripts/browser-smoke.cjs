@@ -10,9 +10,55 @@ async function expectLoginRedirect(page, path, label) {
   await page.waitForFunction(() => window.location.pathname === '/login', null, { timeout: 10000 });
 }
 
+async function installTurnstileMock(page) {
+  await page.route('https://challenges.cloudflare.com/turnstile/v0/api.js*', async (route) => {
+    await route.fulfill({
+      contentType: 'application/javascript',
+      body: `(() => {
+        let sequence = 0;
+        const widgets = new Map();
+        window.turnstile = {
+          render(element, options = {}) {
+            const id = 'ci-turnstile-' + (++sequence);
+            const marker = document.createElement('div');
+            marker.dataset.testTurnstile = String(options.action || 'unknown');
+            marker.dataset.testWidgetId = id;
+            marker.textContent = 'Turnstile test challenge';
+            element.appendChild(marker);
+            widgets.set(id, marker);
+            return id;
+          },
+          remove(id) {
+            const marker = widgets.get(id);
+            if (marker) marker.remove();
+            widgets.delete(id);
+          },
+          reset() {},
+        };
+      })();`,
+    });
+  });
+}
+
+async function expectTurnstile(page, action, label) {
+  const marker = page.locator(`[data-test-turnstile="${action}"]`);
+  await marker.waitFor({ state: 'attached', timeout: 10000 });
+  assert.equal(await marker.count(), 1, `${label}: ${action} Turnstile challenge did not render exactly once`);
+}
+
+async function clickPath(page, href, pathname, label) {
+  const link = page.locator(`a[href="${href}"]`).first();
+  assert.equal(await link.count(), 1, `${label}: missing link to ${href}`);
+  await Promise.all([
+    page.waitForURL((url) => url.pathname === pathname, { timeout: 10000 }),
+    link.click(),
+  ]);
+}
+
 async function checkProfile(browser, label, contextOptions) {
   const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
+  await installTurnstileMock(page);
 
   let response = await page.goto(`${baseURL}/`, { waitUntil: 'domcontentloaded' });
   assert(response && response.status() < 400, `${label}: home did not load`);
@@ -22,9 +68,11 @@ async function checkProfile(browser, label, contextOptions) {
   assert(response && response.status() < 400, `${label}: login did not load`);
   await page.locator('input[name="identifier"]').waitFor();
   await page.locator('input[type="password"]').waitFor();
+  await expectTurnstile(page, 'login', label);
 
-  response = await page.goto(`${baseURL}/register`, { waitUntil: 'domcontentloaded' });
-  assert(response && response.status() < 400, `${label}: register did not load`);
+  // Real user auth navigation: keep the same document/script cache and verify
+  // Turnstile remounts after each Next.js client-side route transition.
+  await clickPath(page, '/register', '/register', label);
   for (const name of ['identifier', 'password', 'terms']) {
     assert.equal(await page.locator(`[name="${name}"]`).count(), 1, `${label}: missing register field ${name}`);
   }
@@ -34,6 +82,15 @@ async function checkProfile(browser, label, contextOptions) {
   assert((await page.locator('[name="password"]').getAttribute('minlength')) === '10', `${label}: password minlength must be 10`);
   assert.match(await page.locator('body').innerText(), /Telefon|Телефон/);
   assert.match(await page.locator('body').innerText(), /Email/);
+  await expectTurnstile(page, 'signup', label);
+
+  await clickPath(page, '/login', '/login', label);
+  await expectTurnstile(page, 'login', label);
+  await clickPath(page, '/forgot-password', '/forgot-password', label);
+  await page.locator('input[name="email"]').waitFor();
+  await expectTurnstile(page, 'recover', label);
+  await clickPath(page, '/login', '/login', label);
+  await expectTurnstile(page, 'login', label);
 
   for (const path of [
     '/agents/static-shell-smoke',
@@ -75,7 +132,7 @@ async function checkProfile(browser, label, contextOptions) {
     await webkitBrowser.close();
   }
 
-  console.log('Browser smoke passed: desktop Chromium + Android Chromium + iOS WebKit');
+  console.log('Browser smoke passed: auth navigation + Turnstile remount on desktop Chromium, Android Chromium and iOS WebKit');
 })().catch((error) => {
   console.error(error);
   process.exit(1);
