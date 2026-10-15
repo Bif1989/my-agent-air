@@ -183,12 +183,14 @@ async function getPinnedMessage(peerId) {
   }
 }
 
-async function pinMessage(peerId, sendResult) {
+async function pinMessage(peerId, sendResult, options = {}) {
   const ref = messageRef(sendResult);
   const primaryPeerId = Number(process.env.VK_PRIMARY_PEER_ID || 0);
+  const force = Boolean(options?.force);
   try {
-    // Once the public chat has a persistent pinned CTA, diagnostics must not replace it.
-    if (primaryPeerId > 0 && Number(peerId) === primaryPeerId) {
+    // Diagnostics should not replace the permanent public rules pin.
+    // Explicit admin refresh passes force=true and must replace the old pin.
+    if (!force && primaryPeerId > 0 && Number(peerId) === primaryPeerId) {
       const current = await getPinnedMessage(peerId);
       if (current) return true;
     }
@@ -214,7 +216,7 @@ async function pinMessage(peerId, sendResult) {
 
 async function unpinMessage(peerId) {
   const primaryPeerId = Number(process.env.VK_PRIMARY_PEER_ID || 0);
-  // The primary market chat keeps one permanent pinned private-bot link.
+  // The primary market chat keeps one permanent pinned rules message.
   if (primaryPeerId > 0 && Number(peerId) === primaryPeerId) return true;
   try {
     await vkApi('messages.unpin', { peer_id: Number(peerId) });
