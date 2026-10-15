@@ -46,10 +46,24 @@ async function expectTurnstile(page, action, label) {
   assert.equal(await marker.count(), 1, `${label}: ${action} Turnstile challenge did not render exactly once`);
 }
 
+async function dismissPwaInstall(page) {
+  const dialog = page.locator('aside[role="dialog"][aria-label="Ilovani o‘rnatish"], aside[role="dialog"][aria-label="Установка приложения"]');
+  if (!await dialog.isVisible().catch(() => false)) return;
+  const later = dialog.getByRole('button', { name: /Keyin|Позже/ });
+  if (await later.count()) await later.click();
+  await dialog.waitFor({ state: 'detached', timeout: 5000 }).catch(() => undefined);
+}
+
 async function clickPath(page, href, pathname, label) {
+  await dismissPwaInstall(page);
   const link = page.locator(`a[href="${href}"]`).first();
   assert.equal(await link.count(), 1, `${label}: missing link to ${href}`);
-  await link.click();
+  try {
+    await link.click({ timeout: 5000 });
+  } catch (error) {
+    await dismissPwaInstall(page);
+    await link.click({ timeout: 10000 }).catch(() => { throw error; });
+  }
   await page.waitForFunction(
     (expectedPathname) => window.location.pathname === expectedPathname,
     pathname,
