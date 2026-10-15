@@ -19,12 +19,15 @@ For a new empty Supabase project only:
 5. Run `tests/resume_security.sql` and the application Quality Gate.
 6. Verify RLS/advisors before exposing the environment to users.
 
-P10 restored two original cloud migrations that were missing from Git history:
+P10 restored cloud migrations that were present in production history but absent from Git recovery history:
 
 - `20261005093623_add_ai_chat_history.sql`
 - `20261005104810_add_ai_chat_conversations.sql`
+- `20261013114437_vk_aviation_message_ingest.sql`
+- `20261013121856_disable_legacy_vk_ingest.sql`
+- `20261014045917_click_subscription_payment_orders.sql`
 
-The later AI-history hardening files assume those tables already exist, so these restored files are required for deterministic fresh recovery.
+The VK recovery file deliberately does not seed the production secret hash. The immediately following historical migration leaves that legacy ingest function unavailable to browser roles. Configure any environment-specific secret only through the environment's secret/config workflow.
 
 Do not copy live user rows, OTP records, payment secrets, push subscriptions or provider credentials into a development database.
 
@@ -35,6 +38,8 @@ Phone signup uses `registration_sms_otps` as a server-only challenge store. Brow
 ## Payment integrations
 
 Merchant secrets for Click/Payme must be configured only after the provider has issued the final merchant/service identifiers and credentials. Webhook/provider callbacks must be verified server-side and processed idempotently. Payment database migrations and frontend release should remain backward-compatible while old production code is still serving traffic.
+
+The recovered Click migration creates the service-role-only prepare/complete/cancel RPC foundation. It does not contain merchant credentials and does not by itself expose a public payment callback. P10 stages additional foreign-key indexes and least-privilege cleanup under `supabase/p10/` for the merchant rollout.
 
 ## Push dispatch
 
