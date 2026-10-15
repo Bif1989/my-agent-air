@@ -12,6 +12,10 @@ function configError() {
   return error;
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function callStorage(action, params = {}, timeoutMs = 6000) {
   const config = configError();
   if (config) throw config;
@@ -32,6 +36,7 @@ async function callStorage(action, params = {}, timeoutMs = 6000) {
   } catch (cause) {
     const error = new Error(`Storage ${action} network timeout`);
     error.code = 'storage_network';
+    error.retryable = true;
     error.cause = cause;
     throw error;
   } finally {
@@ -42,39 +47,106 @@ async function callStorage(action, params = {}, timeoutMs = 6000) {
   if (!response.ok) {
     const error = new Error(data?.error || `Storage ${action} HTTP ${response.status}`);
     error.code = data?.code || data?.error || `storage_http_${response.status}`;
+    error.status = response.status;
+    error.retryable = response.status >= 500;
     throw error;
   }
   return data;
 }
 
+async function callStorageSafe(action, params = {}, attempts = 3) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await callStorage(action, params);
+    } catch (error) {
+      lastError = error;
+      if (!error?.retryable || attempt >= attempts) throw error;
+      await sleep(150 * attempt);
+    }
+  }
+  throw lastError;
+}
+
+async function health(timeoutMs = 4000) {
+  const config = configError();
+  if (config) throw config;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(STORAGE_URL, { signal: controller.signal });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.ok) {
+      const error = new Error(`Storage health HTTP ${response.status}`);
+      error.code = `storage_health_${response.status}`;
+      throw error;
+    }
+    return data;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function setMode(userId, mode) {
-  return callStorage('set_mode', { user_id: Number(userId), mode: String(mode) });
+  return callStorageSafe('set_mode', { user_id: Number(userId), mode: String(mode) });
 }
 
 async function createListing(userId, text) {
   return callStorage('create_listing', { user_id: Number(userId), text: String(text || '') });
 }
 
-async function finalizeListing(listingId, userId, state, vkMessageId = null, failureCode = null) {
-  return callStorage('finalize_listing', {
+async function finalizeListing(listingId, userId, state, refs = {}, failureCode = null) {
+  return callStorageSafe('finalize_listing', {
     listing_id: Number(listingId),
     user_id: Number(userId),
     state: String(state),
-    vk_message_id: vkMessageId == null ? null : Number(vkMessageId),
+    vk_message_id: refs?.message_id == null ? null : Number(refs.message_id),
+    vk_conversation_message_id: refs?.conversation_message_id == null ? null : Number(refs.conversation_message_id),
     failure_code: failureCode == null ? null : String(failureCode).slice(0, 120),
   });
 }
 
 async function listUser(userId, kind = null, limit = 10) {
-  return callStorage('list_user', { user_id: Number(userId), kind: kind || null, limit: Number(limit) || 10 });
+  return callStorageSafe('list_user', { user_id: Number(userId), kind: kind || null, limit: Number(limit) || 10 });
 }
 
 async function listRecent(kind = null, limit = 10) {
-  return callStorage('list_recent', { kind: kind || null, limit: Number(limit) || 10 });
+  return callStorageSafe('list_recent', { kind: kind || null, limit: Number(limit) || 10 });
 }
 
 async function stats(userId) {
-  return callStorage('stats', { user_id: Number(userId) });
+  return callStorageSafe('stats', { user_id: Number(userId) });
 }
 
-module.exports = { callStorage, setMode, createListing, finalizeListing, listUser, listRecent, stats };
+async function trackBotMessage(purpose, refs = {}) {
+  return callStorageSafe('track_bot_message', {
+    purpose: String(purpose || 'menu').slice(0, 40),
+    vk_message_id: refs?.message_id == null ? null : Number(refs.message_id),
+    vk_conversation_message_id: refs?.conversation_message_id == null ? null : Number(refs.conversation_message_id),
+  });
+}
+
+async function listCleanupTargets(limit = 500) {
+  return callStorageSafe('list_cleanup_targets', { limit: Number(limit) || 500 });
+}
+
+async function markDeleted(listingIds = [], botMessageIds = []) {
+  return callStorageSafe('mark_deleted', {
+    listing_ids: Array.isArray(listingIds) ? listingIds.map(Number).filter((x) => Number.isFinite(x) && x > 0) : [],
+    bot_message_ids: Array.isArray(botMessageIds) ? botMessageIds.map(Number).filter((x) => Number.isFinite(x) && x > 0) : [],
+  });
+}
+
+module.exports = {
+  callStorage,
+  health,
+  setMode,
+  createListing,
+  finalizeListing,
+  listUser,
+  listRecent,
+  stats,
+  trackBotMessage,
+  listCleanupTargets,
+  markDeleted,
+};
