@@ -13,7 +13,6 @@ const storage = require('./storage');
 
 const PRIMARY_PEER_ID = Number(process.env.VK_PRIMARY_PEER_ID || 0);
 const ADMIN_USER_ID = Number(process.env.VK_CLEANUP_USER_ID || 0);
-const STRICT_MARKET_CHAT = process.env.VK_STRICT_MARKET_CHAT !== 'false';
 
 const isAdmin = (userId) => ADMIN_USER_ID > 0 && Number(userId) === ADMIN_USER_ID;
 const normalizeListingText = (text) => String(text || '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -306,14 +305,31 @@ async function handleGroupMessage(msg) {
   const peerId = Number(msg?.peer_id || 0);
   const fromId = Number(msg?.from_id || 0);
   const cmid = Number(msg?.conversation_message_id || 0);
-  const command = normalizeCommand(msg?.text);
+  const text = String(msg?.text || '').trim();
+  const command = normalizeCommand(text);
+
   if (['/menu', 'menu'].includes(command)) {
     return Promise.allSettled([
       sendGroupMenu({ pin: isAdmin(fromId) }),
       deleteMessage(peerId, cmid),
     ]);
   }
-  if (STRICT_MARKET_CHAT && Number(msg?.out || 0) !== 1) await deleteMessage(peerId, cmid);
+
+  if (!fromId || !cmid || normalizeListingText(text).length < 10) return;
+
+  try {
+    const result = await storage.checkChatDuplicate(fromId, peerId, text);
+    if (!result?.duplicate) return;
+
+    await deleteMessage(peerId, cmid);
+    await sendMessage(
+      fromId,
+      '🛡 Bir xil ma’lumot UMUMIY CHATga 24 soat ichida faqat 1 marta yuboriladi. Takroriy xabaringiz o‘chirildi.',
+      privateMenu(),
+    ).catch(() => {});
+  } catch (error) {
+    console.warn('chat_duplicate_check_failed', { code: error?.code || null, message: error?.message || String(error) });
+  }
 }
 
 async function handleCallback(obj) {
