@@ -1,5 +1,6 @@
 name: P0 Dependency Security Update
 
+# P10 runs this only on a working branch; production release remains batched.
 on:
   workflow_dispatch:
   push:
