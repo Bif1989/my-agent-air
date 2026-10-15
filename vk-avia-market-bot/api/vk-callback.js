@@ -190,12 +190,14 @@ async function runSelfTest() {
 
   let groupProbeRef = null;
   let groupProbeSent = null;
+  let groupProbeTrackingId = null;
   await run('group_send', async () => {
     groupProbeSent = await sendMessage(PRIMARY_PEER_ID, '🧪 AVIA MARKET TEXNIK TEST — UMUMIY CHAT\nBu xabar avtomatik test uchun yuborildi va o‘chiriladi.');
     groupProbeRef = messageRef(groupProbeSent);
     if (!groupProbeRef.message_id && !groupProbeRef.conversation_message_id) { const error = new Error('Group send returned no message reference'); error.code = 'missing_message_ref'; throw error; }
-    await storage.trackBotMessage('selftest', groupProbeRef);
-    return { send_ok: true, ref_type: groupProbeRef.message_id ? 'message_id' : 'conversation_message_id' };
+    const tracked = await storage.trackBotMessage('selftest', groupProbeRef);
+    groupProbeTrackingId = Number(tracked?.id || 0) || null;
+    return { send_ok: true, tracked: Boolean(groupProbeTrackingId), ref_type: groupProbeRef.message_id ? 'message_id' : 'conversation_message_id' };
   });
 
   if (groupProbeSent) {
@@ -216,7 +218,8 @@ async function runSelfTest() {
     await run('group_delete', async () => {
       const deleted = await deleteMessageRefs(PRIMARY_PEER_ID, [groupProbeRef]);
       if (!Number(deleted?.deleted || 0)) { const error = new Error('No group test message was deleted'); error.code = 'delete_failed'; throw error; }
-      return { deleted: Number(deleted.deleted) };
+      if (groupProbeTrackingId) await storage.markDeleted([], [groupProbeTrackingId]);
+      return { deleted: Number(deleted.deleted), tracking_closed: Boolean(groupProbeTrackingId) };
     });
   }
 
