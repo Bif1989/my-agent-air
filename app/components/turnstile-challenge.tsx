@@ -31,6 +31,10 @@ export default function TurnstileChallenge({
   const [scriptReady, setScriptReady] = useState(false);
 
   useEffect(() => {
+    if (TURNSTILE_SITE_KEY && window.turnstile) setScriptReady(true);
+  }, []);
+
+  useEffect(() => {
     if (!TURNSTILE_SITE_KEY || !scriptReady || !host.current || !window.turnstile || widgetId.current) return;
     widgetId.current = window.turnstile.render(host.current, {
       sitekey: TURNSTILE_SITE_KEY,
@@ -58,7 +62,12 @@ export default function TurnstileChallenge({
 
   if (!TURNSTILE_SITE_KEY) return null;
   return <>
-    <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" strategy="afterInteractive" onLoad={() => setScriptReady(true)} />
+    <Script
+      id="cloudflare-turnstile"
+      src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+      strategy="afterInteractive"
+      onReady={() => setScriptReady(true)}
+    />
     <div className="min-h-[65px]" ref={host} aria-label="Xavfsizlik tekshiruvi" />
   </>;
 }
