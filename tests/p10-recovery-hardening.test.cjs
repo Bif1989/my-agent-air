@@ -19,11 +19,30 @@ test('fresh database recovery contains the historical AI chat prerequisites', ()
   assert.match(hardening, /alter column conversation_id set not null/);
 });
 
+test('fresh recovery includes late cloud-only VK and Click schema migrations without production secrets', () => {
+  const vk = read('supabase/migrations/20261013114437_vk_aviation_message_ingest.sql');
+  const vkDisable = read('supabase/migrations/20261013121856_disable_legacy_vk_ingest.sql');
+  const click = read('supabase/migrations/20261014045917_click_subscription_payment_orders.sql');
+
+  assert.match(vk, /create table if not exists public\.vk_aviation_messages/);
+  assert.match(vk, /create table if not exists private\.vk_ingest_config/);
+  assert.doesNotMatch(vk, /85c0c04c31aa79cf47855039f054ce3d5b4ac92d52737bcb0e30e0587bdebdaa/);
+  assert.doesNotMatch(vk, /grant execute on function public\.ingest_vk_aviation_message\(text, jsonb\) to anon/);
+  assert.match(vkDisable, /revoke execute on function public\.ingest_vk_aviation_message/);
+
+  assert.match(click, /create table if not exists public\.billing_payment_orders/);
+  assert.match(click, /prepare_billing_click_order/);
+  assert.match(click, /complete_billing_click_order/);
+  assert.match(click, /cancel_billing_click_order/);
+  assert.match(click, /grant execute on function public\.complete_billing_click_order\(text,bigint,bigint,integer\) to service_role/);
+});
+
 test('recovery documentation no longer claims AI is local-only or browser smoke is unavailable', () => {
   const readme = read('README.md');
   assert.match(readme, /AI chat endpoint can call OpenAI/);
   assert.match(readme, /Phone registration is the primary flow/);
   assert.match(readme, /Desktop, Android and iOS/);
+  assert.match(readme, /Click subscription payment-order foundation/);
   assert.doesNotMatch(readme, /makes no paid model calls/);
   assert.doesNotMatch(readme, /Browser verification was blocked/);
 });
