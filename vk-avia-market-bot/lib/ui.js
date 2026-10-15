@@ -3,7 +3,7 @@ const MARKET_PEER_ID = Number(process.env.VK_PRIMARY_PEER_ID || 2000000001);
 const MARKET_CHAT_ID = MARKET_PEER_ID >= 2000000000 ? MARKET_PEER_ID - 2000000000 : MARKET_PEER_ID;
 const MARKET_CHAT_URL = process.env.VK_MARKET_CHAT_URL || `https://vk.ru/im?sel=c${MARKET_CHAT_ID}`;
 
-function payload(cmd) { return JSON.stringify({ cmd, v: 2 }); }
+function payload(cmd, extra = {}) { return JSON.stringify({ cmd, v: 2, ...extra }); }
 
 function privateMenu() {
   return {
@@ -30,6 +30,45 @@ function privateMenu() {
   };
 }
 
+function profileMenu() {
+  return {
+    inline: true,
+    buttons: [
+      [{ action: { type: 'callback', label: '✏️ KONTAKTLARNI SOZLASH', payload: payload('profile_edit') }, color: 'primary' }],
+      [
+        { action: { type: 'callback', label: '📦 TAKLIFLARIM', payload: payload('my_offers') }, color: 'secondary' },
+        { action: { type: 'callback', label: '📋 SO‘ROVLARIM', payload: payload('my_searches') }, color: 'secondary' },
+      ],
+      [{ action: { type: 'callback', label: '🏠 MENYU', payload: payload('home') }, color: 'secondary' }],
+    ],
+  };
+}
+
+function listingManageMenu(items = []) {
+  const buttons = [];
+  for (const [index, item] of items.slice(0, 5).entries()) {
+    const id = Number(item?.id || 0);
+    if (!id) continue;
+    buttons.push([
+      { action: { type: 'callback', label: `✏️ ${index + 1}`, payload: payload('edit_listing', { id }) }, color: 'primary' },
+      { action: { type: 'callback', label: `🗑 ${index + 1}`, payload: payload('delete_listing', { id }) }, color: 'negative' },
+    ]);
+  }
+  buttons.push([{ action: { type: 'callback', label: '🏠 MENYU', payload: payload('home') }, color: 'secondary' }]);
+  return { inline: true, buttons };
+}
+
+function confirmDeleteMenu(listingId) {
+  const id = Number(listingId || 0);
+  return {
+    inline: true,
+    buttons: [[
+      { action: { type: 'callback', label: '✅ O‘CHIRISH', payload: payload('confirm_delete_listing', { id }) }, color: 'negative' },
+      { action: { type: 'callback', label: '↩️ BEKOR', payload: payload('cancel_delete_listing', { id }) }, color: 'secondary' },
+    ]],
+  };
+}
+
 function groupMenu() {
   return null;
 }
@@ -52,8 +91,9 @@ function privateHome() {
       '2️⃣ Bir xil Taklif/So‘rov 24 soat ichida faqat 1 marta joylanadi.',
       '3️⃣ Yangi e’lonlar orasida kamida 30 soniya bo‘lishi kerak.',
       '4️⃣ Yo‘nalish, sana, narx, joy soni va bagajni imkon qadar aniq yozing.',
-      '5️⃣ Spam, flood, haqorat, firibgarlik va mavzuga aloqasiz reklama taqiqlanadi.',
-      '6️⃣ Bu yerga oddiy yozgan xabaringiz UMUMIY CHATga avtomatik chiqmaydi.', '',
+      '5️⃣ KABINETda kompaniya, telefon va Telegramni saqlasangiz, ular yangi e’lonlaringizga avtomatik qo‘shiladi.',
+      '6️⃣ “MENING TAKLIFLARIM / SO‘ROVLARIM” orqali o‘z e’loningizni o‘zgartirish yoki o‘chirish mumkin.',
+      '7️⃣ Spam, flood, haqorat, firibgarlik va mavzuga aloqasiz reklama taqiqlanadi.', '',
       '✈️ E’lon berish:',
       '“➕ TAKLIF BERISH” yoki “🔎 SO‘ROV BERISH” → keyingi BITTA xabarda matnni yuboring.', '',
       '🌐 UMUMIY CHAT tugmasi ASOSIY AVIA MARKET chatini ochadi.',
@@ -103,4 +143,14 @@ function adminHome() {
   };
 }
 
-module.exports = { privateMenu, groupMenu, adminMenu, privateHome, groupHome, adminHome };
+module.exports = {
+  privateMenu,
+  profileMenu,
+  listingManageMenu,
+  confirmDeleteMenu,
+  groupMenu,
+  adminMenu,
+  privateHome,
+  groupHome,
+  adminHome,
+};
