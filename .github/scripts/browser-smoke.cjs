@@ -49,10 +49,12 @@ async function expectTurnstile(page, action, label) {
 async function clickPath(page, href, pathname, label) {
   const link = page.locator(`a[href="${href}"]`).first();
   assert.equal(await link.count(), 1, `${label}: missing link to ${href}`);
-  await Promise.all([
-    page.waitForURL((url) => url.pathname === pathname, { timeout: 10000 }),
-    link.click(),
-  ]);
+  await link.click();
+  await page.waitForFunction(
+    (expectedPathname) => window.location.pathname === expectedPathname,
+    pathname,
+    { timeout: 10000 },
+  );
 }
 
 async function checkProfile(browser, label, contextOptions) {
