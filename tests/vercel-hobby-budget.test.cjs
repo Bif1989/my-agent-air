@@ -86,12 +86,10 @@ test('Vercel Web Analytics and custom events stay disabled on Hobby', () => {
   assert.doesNotMatch(register, /\btrack\s*\(/);
 });
 
-test('only main deploys and documentation-only changes can skip Vercel builds', () => {
-  const config = read('vercel.json');
-  assert.match(config, /"\*\*"\s*:\s*false/);
-  assert.match(config, /"main"\s*:\s*true/);
-  assert.match(config, /VERCEL_GIT_PREVIOUS_SHA/);
-  assert.match(config, /git diff --quiet/);
+test('automatic Git deployments stay disabled so production promotion is explicit', () => {
+  const config = JSON.parse(read('vercel.json'));
+  assert.equal(config.git?.deploymentEnabled, false);
+  assert.equal(Object.hasOwn(config, 'ignoreCommand'), false);
 });
 
 test('Hobby uses one Tokyo function region close to the Supabase database', () => {
