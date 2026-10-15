@@ -163,12 +163,19 @@ async function rememberBotMessage(purpose, sent) {
   return ref;
 }
 
-async function sendGroupMenu({ pin = false } = {}) {
+async function sendPrivateHome(userId, { pin = true } = {}) {
+  const home = privateHome();
+  const sent = await sendMessage(userId, home.text, home.keyboard);
+  const pinned = pin ? await pinMessage(userId, sent, { force: true }) : false;
+  return { sent, pinned };
+}
+
+async function sendGroupMenu({ pin = false, forcePin = false } = {}) {
   if (!PRIMARY_PEER_ID) throw new Error('VK_PRIMARY_PEER_ID is not configured');
   const home = groupHome();
   const sent = await sendMessage(PRIMARY_PEER_ID, home.text, home.keyboard);
   const ref = await rememberBotMessage('menu', sent);
-  const pinned = pin ? await pinMessage(PRIMARY_PEER_ID, sent) : false;
+  const pinned = pin ? await pinMessage(PRIMARY_PEER_ID, sent, { force: forcePin }) : false;
   return { sent, ref, pinned };
 }
 
@@ -217,20 +224,20 @@ async function cleanChat(userId) {
     }
   }
 
-  let menuPinned = false;
+  let rulesPinned = false;
   try {
-    const menu = await sendGroupMenu({ pin: true });
-    menuPinned = Boolean(menu?.pinned);
+    const rules = await sendGroupMenu({ pin: true, forcePin: true });
+    rulesPinned = Boolean(rules?.pinned);
   } catch (error) {
-    console.warn('cleanup_menu_refresh_failed', { code: error?.code || null });
+    console.warn('cleanup_rules_refresh_failed', { code: error?.code || null });
   }
 
   return sendMessage(userId, [
-    '🧹 UMUMIY CHAT TOZALANDI',
+    '🧹 BOT E’LONLARI TOZALANDI',
     '',
     `✅ Bot kuzatgan xabarlar o‘chirildi: ${deleted}`,
     targets.length === 0 ? 'ℹ️ O‘chirish uchun saqlangan eski e’lonlar yo‘q edi.' : '',
-    menuPinned ? '📌 Yangi umumiy menyu yuborildi va pin qilindi.' : '📌 Yangi umumiy menyu yuborildi.',
+    rulesPinned ? '📌 Umumiy chat qoidalari yangilandi va pin qilindi.' : '📌 Umumiy chat qoidalari yuborildi.',
   ].filter(Boolean).join('\n'), privateMenu());
 }
 
@@ -289,13 +296,11 @@ async function handlePrivateMessage(msg) {
   const command = normalizeCommand(text);
 
   if (['/start', '/menu', '/help', 'menu'].includes(command)) {
-    const home = privateHome();
-    return sendMessage(userId, home.text, home.keyboard);
+    return sendPrivateHome(userId, { pin: true });
   }
   if (command === '/cleanall' && isAdmin(userId)) return cleanChat(userId);
   if (!text || text.startsWith('/')) {
-    const home = privateHome();
-    return sendMessage(userId, home.text, home.keyboard);
+    return sendPrivateHome(userId, { pin: true });
   }
 
   return handleListingText(userId, text);
@@ -309,8 +314,9 @@ async function handleGroupMessage(msg) {
   const command = normalizeCommand(text);
 
   if (['/menu', 'menu'].includes(command)) {
+    const admin = isAdmin(fromId);
     return Promise.allSettled([
-      sendGroupMenu({ pin: isAdmin(fromId) }),
+      sendGroupMenu({ pin: admin, forcePin: admin }),
       deleteMessage(peerId, cmid),
     ]);
   }
@@ -358,13 +364,13 @@ async function handleCallback(obj) {
   if (cmd === 'admin_pinmenu') {
     if (!isAdmin(userId)) return answerEvent(obj, 'Bu amal faqat admin uchun');
     return run(async () => {
-      const result = await sendGroupMenu({ pin: true });
+      const result = await sendGroupMenu({ pin: true, forcePin: true });
       await sendMessage(
         userId,
-        result.pinned ? '✅ Menyu yangilandi va pin qilindi.' : '✅ Menyu yangilandi. VK pin qilishga ruxsat bermasa ham menyu chatga yuborildi.',
+        result.pinned ? '✅ Qoidalar yangilandi va UMUMIY CHATga zakrepit qilindi.' : '✅ Qoidalar chatga yuborildi. VK pin qilishga ruxsat bermasa, yuqoridan qo‘lda zakrepit qiling.',
         privateMenu(),
       );
-    }, 'Umumiy menyu yangilandi');
+    }, 'Umumiy chat qoidalari yangilandi');
   }
   await answerEvent(obj, 'Noma’lum amal');
 }
@@ -386,6 +392,7 @@ module.exports = {
   normalizeListingText,
   listingMarker,
   formatStoredList,
+  sendPrivateHome,
   sendGroupMenu,
   cleanChat,
 };
