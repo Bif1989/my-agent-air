@@ -31,7 +31,7 @@ function groupMenu() {
   return {
     inline: true,
     buttons: [
-      [{ action: { type: 'open_link', label: '➕ E’LON BERISH — SHAXSIY BOT', link: BOT_OPEN_URL }, color: 'primary' }],
+      [{ action: { type: 'open_link', label: '➕ E’LON BERISH — SHAXSIY BOT', link: BOT_OPEN_URL } }],
     ],
   };
 }
