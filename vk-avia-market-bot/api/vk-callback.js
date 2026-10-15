@@ -11,7 +11,7 @@ const {
   getInviteLink,
 } = require('../lib/vk');
 const storage = require('../lib/storage');
-const { privateHome, adminHome } = require('../lib/ui');
+const { privateHome, groupHome, adminHome } = require('../lib/ui');
 
 const VK_GROUP_ID = Number(process.env.VK_GROUP_ID || 0);
 const PRIMARY_PEER_ID = Number(process.env.VK_PRIMARY_PEER_ID || 0);
@@ -38,8 +38,7 @@ function safeEqual(a, b) {
 }
 
 function protectedGetOk(req) {
-  const key = String(req.query?.key || '');
-  return Boolean(ADMIN_SECRET && safeEqual(key, ADMIN_SECRET));
+  return Boolean(ADMIN_SECRET && safeEqual(String(req.query?.key || ''), ADMIN_SECRET));
 }
 
 function text(res, status, value) {
@@ -62,13 +61,7 @@ async function repairCallbackServer() {
   const items = Array.isArray(servers?.items) ? servers.items : [];
   const server = items[0];
   if (!server?.id) throw new Error('callback_server_missing');
-
-  await vkApi('groups.editCallbackServer', {
-    group_id: VK_GROUP_ID,
-    server_id: Number(server.id),
-    url: CALLBACK_URL,
-    title: 'AviaMarket v2',
-  });
+  await vkApi('groups.editCallbackServer', { group_id: VK_GROUP_ID, server_id: Number(server.id), url: CALLBACK_URL, title: 'AviaMarket v2' });
   await vkApi('groups.setCallbackSettings', {
     group_id: VK_GROUP_ID,
     server_id: Number(server.id),
@@ -78,7 +71,6 @@ async function repairCallbackServer() {
     message_allow: 1,
     message_deny: 1,
   });
-
   const after = await vkApi('groups.getCallbackServers', { group_id: VK_GROUP_ID, server_ids: Number(server.id) });
   const current = Array.isArray(after?.items) ? after.items[0] : null;
   return { server_id: Number(server.id), status: String(current?.status || 'unknown'), url: String(current?.url || '') };
@@ -125,15 +117,13 @@ async function runSelfTest() {
   const checks = {};
   const failures = [];
   const warnings = [];
-
   const run = async (name, fn, { required = true } = {}) => {
     try {
       const details = await fn();
       checks[name] = { ok: true, ...(details && typeof details === 'object' ? details : { value: details }) };
       return details;
     } catch (error) {
-      const result = { ok: false, code: error?.code || null, message: error?.message || String(error) };
-      checks[name] = result;
+      checks[name] = { ok: false, code: error?.code || null, message: error?.message || String(error) };
       (required ? failures : warnings).push(name);
       return null;
     }
@@ -180,30 +170,35 @@ async function runSelfTest() {
     if (!link) { const error = new Error('VK did not return an invite link'); error.code = 'invite_unavailable'; throw error; }
     return { available: true };
   }, { required: false });
-  await run('private_dm', async () => {
-    const sent = await sendMessage(ADMIN_USER_ID, '🧪 AVIA MARKET TEXNIK TEST — SHAXSIY BOT\nBu xabar avtomatik test uchun yuborildi va o‘chiriladi.');
-    const ref = messageRef(sent);
-    if (!ref.message_id && !ref.conversation_message_id) { const error = new Error('DM send returned no message reference'); error.code = 'missing_message_ref'; throw error; }
-    try { await deleteMessageRefs(ADMIN_USER_ID, [ref]); } catch (error) { warnings.push('private_dm_cleanup'); checks.private_dm_cleanup = { ok: false, code: error?.code || null, message: error?.message || String(error) }; }
-    return { send_ok: true, cleanup_attempted: true, ref_type: ref.message_id ? 'message_id' : 'conversation_message_id' };
+
+  await run('private_ui_keyboard', async () => {
+    const home = privateHome();
+    const admin = adminHome();
+    const sentHome = await sendMessage(ADMIN_USER_ID, home.text, home.keyboard);
+    const sentAdmin = await sendMessage(ADMIN_USER_ID, admin.text, admin.keyboard);
+    const refs = [messageRef(sentHome), messageRef(sentAdmin)];
+    try { await deleteMessageRefs(ADMIN_USER_ID, refs); }
+    catch (error) { warnings.push('private_ui_cleanup'); checks.private_ui_cleanup = { ok: false, code: error?.code || null, message: error?.message || String(error) }; }
+    return { private_menu_sent: true, admin_menu_sent: true, cleanup_attempted: true };
   });
 
   let groupProbeRef = null;
   let groupProbeSent = null;
   let groupProbeTrackingId = null;
-  await run('group_send', async () => {
-    groupProbeSent = await sendMessage(PRIMARY_PEER_ID, '🧪 AVIA MARKET TEXNIK TEST — UMUMIY CHAT\nBu xabar avtomatik test uchun yuborildi va o‘chiriladi.');
+  await run('group_ui_keyboard', async () => {
+    const home = groupHome();
+    groupProbeSent = await sendMessage(PRIMARY_PEER_ID, home.text, home.keyboard);
     groupProbeRef = messageRef(groupProbeSent);
-    if (!groupProbeRef.message_id && !groupProbeRef.conversation_message_id) { const error = new Error('Group send returned no message reference'); error.code = 'missing_message_ref'; throw error; }
+    if (!groupProbeRef.message_id && !groupProbeRef.conversation_message_id) { const error = new Error('Group menu send returned no message reference'); error.code = 'missing_message_ref'; throw error; }
     const tracked = await storage.trackBotMessage('selftest', groupProbeRef);
     groupProbeTrackingId = Number(tracked?.id || 0) || null;
-    return { send_ok: true, tracked: Boolean(groupProbeTrackingId), ref_type: groupProbeRef.message_id ? 'message_id' : 'conversation_message_id' };
+    return { menu_keyboard_sent: true, tracked: Boolean(groupProbeTrackingId), ref_type: groupProbeRef.message_id ? 'message_id' : 'conversation_message_id' };
   });
 
   if (groupProbeSent) {
     await run('group_pin', async () => {
       const pinned = await pinMessage(PRIMARY_PEER_ID, groupProbeSent);
-      if (!pinned) { const error = new Error('VK did not allow pinning the test message'); error.code = 'pin_unavailable'; throw error; }
+      if (!pinned) { const error = new Error('VK did not allow pinning the test menu'); error.code = 'pin_unavailable'; throw error; }
       return { pinned: true };
     }, { required: false });
     if (checks.group_pin?.ok) {
@@ -217,7 +212,7 @@ async function runSelfTest() {
   if (groupProbeRef) {
     await run('group_delete', async () => {
       const deleted = await deleteMessageRefs(PRIMARY_PEER_ID, [groupProbeRef]);
-      if (!Number(deleted?.deleted || 0)) { const error = new Error('No group test message was deleted'); error.code = 'delete_failed'; throw error; }
+      if (!Number(deleted?.deleted || 0)) { const error = new Error('No group menu test message was deleted'); error.code = 'delete_failed'; throw error; }
       if (groupProbeTrackingId) await storage.markDeleted([], [groupProbeTrackingId]);
       return { deleted: Number(deleted.deleted), tracking_closed: Boolean(groupProbeTrackingId) };
     });
@@ -272,7 +267,6 @@ module.exports = async function handler(req, res) {
       try { const result = await runSelfTest(); return json(res, result.ok ? 200 : 503, result); }
       catch (error) { return json(res, 500, { ok: false, error: 'selftest_failed', code: error?.code || null, message: error?.message || String(error) }); }
     }
-
     return json(res, 200, {
       ok: true,
       service: 'vk-avia-market-bot',
@@ -290,7 +284,6 @@ module.exports = async function handler(req, res) {
       security: CALLBACK_SECRET_HASH ? 'sha256-callback+separate-admin-key' : 'legacy-secret+separate-admin-key',
     });
   }
-
   if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'method_not_allowed' });
   const event = req.body || {};
   if (Number(event.group_id || 0) !== VK_GROUP_ID) return text(res, 200, 'ok');
@@ -299,7 +292,6 @@ module.exports = async function handler(req, res) {
     catch (error) { console.error('confirmation_code_failed', { code: error?.code || null, message: error?.message || String(error) }); return text(res, 200, process.env.VK_CONFIRMATION_STRING || ''); }
   }
   if (!secretOk(event)) return json(res, 403, { ok: false, error: 'forbidden' });
-
   text(res, 200, 'ok');
   waitUntil(Promise.resolve(processEventWithAdminUi(event)).catch((error) => {
     console.error('event_processing_failed', { type: event?.type || null, code: error?.code || null, message: error?.message || String(error) });
