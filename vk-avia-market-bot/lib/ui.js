@@ -27,20 +27,17 @@ function privateMenu() {
   };
 }
 
+// Public chat intentionally has no inline keyboard.
+// The stable entry point is a pinned plain-text link to the private bot.
 function groupMenu() {
-  return {
-    inline: true,
-    buttons: [
-      [{ action: { type: 'open_link', label: '➕ E’LON BERISH — SHAXSIY BOT', link: BOT_OPEN_URL } }],
-    ],
-  };
+  return null;
 }
 
 function adminMenu() {
   return {
     inline: true,
     buttons: [
-      [{ action: { type: 'callback', label: '📌 UMUMIY MENYUNI YANGILASH', payload: payload('admin_pinmenu') }, color: 'primary' }],
+      [{ action: { type: 'callback', label: '📌 ZAKREPLEN XABARNI YANGILASH', payload: payload('admin_pinmenu') }, color: 'primary' }],
       [{ action: { type: 'callback', label: '🧹 UMUMIY CHATNI TOZALASH', payload: payload('admin_cleanall') }, color: 'negative' }],
     ],
   };
@@ -66,14 +63,15 @@ function privateHome() {
 function groupHome() {
   return {
     text: [
-      '🌐 AVIA MARKET — UMUMIY CHAT', '',
-      'Bu — HAMMAGA OCHIQ taklif va so‘rovlar bozori.',
-      'Bu chat e’lonlarni ko‘rish va kuzatish uchun.', '',
-      '➕ E’lon berish uchun pastdagi “SHAXSIY BOT” tugmasini bosing.',
-      '🔒 Shaxsiy botga yozgan oddiy xabaringiz bu chatda ko‘rinmaydi.',
-      '✅ Faqat TAKLIF yoki SO‘ROV rejimida yuborgan e’loningiz shu yerga chiqadi.',
+      '📌 AVIA MARKET — UMUMIY CHAT', '',
+      'Bu chat faqat TAKLIF va SO‘ROVLARNI ko‘rish uchun.',
+      'Oddiy yozishmalar avtomatik tozalanadi.', '',
+      '➕ Taklif yoki so‘rov joylash uchun SHAXSIY BOTga o‘ting:',
+      `🔒 ${BOT_OPEN_URL}`,
+      '',
+      'Barcha e’lon berish knopkalari SHAXSIY BOT ichida.',
     ].join('\n'),
-    keyboard: groupMenu(),
+    keyboard: null,
   };
 }
 
@@ -83,8 +81,8 @@ function adminHome() {
       '⚙️ AVIA MARKET — ADMIN BOSHQARUV', '',
       'Bu bo‘lim faqat admin akkauntida ko‘rinadi.',
       'Alohida ADMIN BOT yo‘q — boshqaruv shu SHAXSIY BOT ichida.', '',
-      '📌 Umumiy menyu — yangi menyuni yuboradi va pin qilishga urinadi.',
-      '🧹 Tozalash — umumiy chat tarixini admin huquqlari doirasida tozalaydi.', '',
+      '📌 Zakreplen xabar — UMUMIY CHATga SHAXSIY BOT havolasini yuboradi va pin qiladi.',
+      '🧹 Tozalash — bot kuzatgan umumiy chat xabarlarini tozalaydi va zakreplen xabarni qayta tiklaydi.', '',
       '↩️ Shaxsiy menyuga qaytish: /menu',
     ].join('\n'),
     keyboard: adminMenu(),
