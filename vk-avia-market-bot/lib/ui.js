@@ -36,6 +36,16 @@ function groupMenu() {
   };
 }
 
+function adminMenu() {
+  return {
+    inline: true,
+    buttons: [
+      [{ action: { type: 'callback', label: '📌 UMUMIY MENYUNI YANGILASH', payload: payload('admin_pinmenu') }, color: 'primary' }],
+      [{ action: { type: 'callback', label: '🧹 UMUMIY CHATNI TOZALASH', payload: payload('admin_cleanall') }, color: 'negative' }],
+    ],
+  };
+}
+
 function privateHome() {
   return {
     text: [
@@ -67,4 +77,18 @@ function groupHome() {
   };
 }
 
-module.exports = { privateMenu, groupMenu, privateHome, groupHome };
+function adminHome() {
+  return {
+    text: [
+      '⚙️ AVIA MARKET — ADMIN BOSHQARUV', '',
+      'Bu bo‘lim faqat admin akkauntida ko‘rinadi.',
+      'Alohida ADMIN BOT yo‘q — boshqaruv shu SHAXSIY BOT ichida.', '',
+      '📌 Umumiy menyu — yangi menyuni yuboradi va pin qilishga urinadi.',
+      '🧹 Tozalash — umumiy chat tarixini admin huquqlari doirasida tozalaydi.', '',
+      '↩️ Shaxsiy menyuga qaytish: /menu',
+    ].join('\n'),
+    keyboard: adminMenu(),
+  };
+}
+
+module.exports = { privateMenu, groupMenu, adminMenu, privateHome, groupHome, adminHome };
