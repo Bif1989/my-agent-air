@@ -6,7 +6,7 @@ function privateMenu() {
   return {
     inline: true,
     buttons: [
-      [{ action: { type: 'callback', label: '🌐 UMUMIY CHAT', payload: payload('open_market_chat') }, color: 'primary' }],
+      [{ action: { type: 'callback', label: '🌐 UMUMIY CHAT — E’LONLAR', payload: payload('open_market_chat') }, color: 'primary' }],
       [
         { action: { type: 'callback', label: '➕ TAKLIF BERISH', payload: payload('new_offer') }, color: 'primary' },
         { action: { type: 'callback', label: '🔎 SO‘ROV BERISH', payload: payload('new_search') }, color: 'primary' },
@@ -31,15 +31,7 @@ function groupMenu() {
   return {
     inline: true,
     buttons: [
-      [{ action: { type: 'open_link', label: '🤖 SHAXSIY BOT / KABINET', link: BOT_OPEN_URL }, color: 'primary' }],
-      [
-        { action: { type: 'callback', label: '➕ TAKLIF', payload: payload('new_offer') }, color: 'primary' },
-        { action: { type: 'callback', label: '🔎 SO‘ROV', payload: payload('new_search') }, color: 'primary' },
-      ],
-      [
-        { action: { type: 'callback', label: '🌐 TAKLIFLAR', payload: payload('offers') }, color: 'secondary' },
-        { action: { type: 'callback', label: '👥 SO‘ROVLAR', payload: payload('searches') }, color: 'secondary' },
-      ],
+      [{ action: { type: 'open_link', label: '➕ E’LON BERISH — SHAXSIY BOT', link: BOT_OPEN_URL }, color: 'primary' }],
     ],
   };
 }
@@ -47,9 +39,13 @@ function groupMenu() {
 function privateHome() {
   return {
     text: [
-      '🤖 AVIA MARKET — SHAXSIY BOT / KABINET', '',
-      'Taklif yoki so‘rovni shu yerdan yuboring.',
-      'E’lonlar agentlar ko‘radigan UMUMIY CHATga chiqariladi.', '',
+      '🔒 AVIA MARKET — SHAXSIY BOT / KABINET', '',
+      'Bu — sizning shaxsiy boshqaruv oynangiz.',
+      'Bu yerga yozgan oddiy xabaringiz UMUMIY CHATga avtomatik chiqmaydi.', '',
+      'E’lon berish tartibi:',
+      '1) “➕ TAKLIF BERISH” yoki “🔎 SO‘ROV BERISH”ni bosing.',
+      '2) Keyingi BITTA xabarda e’lon matnini yuboring.',
+      '3) Shundan keyingina e’lon UMUMIY CHATga chiqariladi.', '',
       '🛡 Bir xil e’lon 24 soat ichida qayta joylanmaydi.',
       '⏱ E’lonlar orasida 30 soniyalik himoya bor.',
     ].join('\n'),
@@ -61,9 +57,11 @@ function groupHome() {
   return {
     text: [
       '🌐 AVIA MARKET — UMUMIY CHAT', '',
-      'Aviakassa va agentlar uchun taklif va so‘rovlar bozori.',
-      'E’lon kiritish uchun tugmalardan foydalaning.', '',
-      '🤖 Shaxsiy ro‘yxatlar va statistika — SHAXSIY BOT / KABINET ichida.',
+      'Bu — HAMMAGA OCHIQ taklif va so‘rovlar bozori.',
+      'Bu chat e’lonlarni ko‘rish va kuzatish uchun.', '',
+      '➕ E’lon berish uchun pastdagi “SHAXSIY BOT” tugmasini bosing.',
+      '🔒 Shaxsiy botga yozgan oddiy xabaringiz bu chatda ko‘rinmaydi.',
+      '✅ Faqat TAKLIF yoki SO‘ROV rejimida yuborgan e’loningiz shu yerga chiqadi.',
     ].join('\n'),
     keyboard: groupMenu(),
   };
