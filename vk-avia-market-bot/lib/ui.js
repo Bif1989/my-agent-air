@@ -1,4 +1,6 @@
 const BOT_OPEN_URL = process.env.VK_BOT_OPEN_URL || 'https://vk.me/aviamarketbot';
+const MARKET_PEER_ID = Number(process.env.VK_PRIMARY_PEER_ID || 2000000001);
+const MARKET_CHAT_URL = process.env.VK_MARKET_CHAT_URL || `https://vk.ru/im/convo/${MARKET_PEER_ID}`;
 
 function payload(cmd) { return JSON.stringify({ cmd, v: 2 }); }
 
@@ -6,7 +8,7 @@ function privateMenu() {
   return {
     inline: true,
     buttons: [
-      [{ action: { type: 'callback', label: '🌐 UMUMIY CHAT — E’LONLAR', payload: payload('open_market_chat') }, color: 'primary' }],
+      [{ action: { type: 'open_link', label: '🌐 UMUMIY CHAT — E’LONLAR', link: MARKET_CHAT_URL } }],
       [
         { action: { type: 'callback', label: '➕ TAKLIF BERISH', payload: payload('new_offer') }, color: 'primary' },
         { action: { type: 'callback', label: '🔎 SO‘ROV BERISH', payload: payload('new_search') }, color: 'primary' },
