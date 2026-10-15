@@ -25,7 +25,10 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
       - run: npm test
       - run: npm run lint
-      - run: npm run build
+      - name: Build with Turnstile enabled for navigation smoke
+        env:
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: 1x00000000000000000000AA
+        run: npm run build
       - name: Install browser smoke dependencies
         run: |
           npm install --no-save playwright@1.56.1
