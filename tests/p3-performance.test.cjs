@@ -81,9 +81,7 @@ test('P3 deduplicates concurrent AI history outbox flushes per user', () => {
   assert.match(history, /outboxFlushes\.delete\(userId\)/);
 });
 
-test('P3 stays deploy-free until the combined batch is promoted', () => {
+test('P3 stays deploy-free until the combined batch is explicitly released', () => {
   const vercel = JSON.parse(read('vercel.json'));
-  assert.equal(vercel.git.deploymentEnabled.main, true);
-  assert.equal(vercel.git.deploymentEnabled['**'], false);
-  assert.ok(vercel.ignoreCommand.includes('git diff --quiet'));
+  assert.equal(vercel.git.deploymentEnabled, false);
 });
