@@ -46,13 +46,14 @@ assert(privateHomeText.includes('Shundan keyingina e’lon UMUMIY CHATga chiqari
 assert(groupHomeText.includes('UMUMIY CHAT'));
 assert(groupHomeText.includes('https://vk.me/aviamarketbot'));
 assert(groupHomeText.includes('SHAXSIY BOT'));
+assert(groupHomeText.includes('24 soat'));
 assert.strictEqual(groupHomeCard.keyboard, null);
 assert(!groupHomeText.includes('ADMIN BOT'));
 assert(adminHomeText.includes('faqat admin akkauntida'));
 assert(adminHomeText.includes('Alohida ADMIN BOT yo‘q'));
 assert(adminHomeText.includes('pin qiladi'));
 
-for (const name of ['health', 'setMode', 'createListing', 'finalizeListing', 'trackBotMessage', 'listCleanupTargets', 'markDeleted']) {
+for (const name of ['health', 'setMode', 'createListing', 'finalizeListing', 'trackBotMessage', 'listCleanupTargets', 'markDeleted', 'checkChatDuplicate']) {
   assert.strictEqual(typeof storage[name], 'function', `storage.${name} must be exported`);
 }
 
