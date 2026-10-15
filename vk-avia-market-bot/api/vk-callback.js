@@ -8,6 +8,7 @@ const VK_GROUP_ID = Number(process.env.VK_GROUP_ID || 0);
 const ADMIN_USER_ID = Number(process.env.VK_CLEANUP_USER_ID || 0);
 const CALLBACK_SECRET_HASH = String(process.env.VK_SECRET_SHA256 || '').trim().toLowerCase();
 const CALLBACK_URL = 'https://project-xj41n.vercel.app/api/vk-callback?v=2';
+const PRIVATE_BOT_TITLE = '🔒 AVIA MARKET — SHAXSIY BOT';
 
 function sha256(value) {
   return crypto.createHash('sha256').update(String(value || ''), 'utf8').digest('hex');
@@ -83,6 +84,14 @@ async function pushAdminMenu() {
   return { sent: true };
 }
 
+async function renamePrivateBot() {
+  const result = await vkApi('groups.edit', {
+    group_id: VK_GROUP_ID,
+    title: PRIVATE_BOT_TITLE,
+  });
+  return { renamed: Boolean(result), title: PRIVATE_BOT_TITLE };
+}
+
 function adminPrivateCommand(event) {
   if (event?.type !== 'message_new' || !ADMIN_USER_ID) return null;
   const msg = event?.object?.message || {};
@@ -141,10 +150,25 @@ module.exports = async function handler(req, res) {
       }
     }
 
+    if (String(req.query?.rename_bot || '') === '1') {
+      if (!protectedGetOk(req)) return json(res, 403, { ok: false, error: 'forbidden' });
+      try {
+        const result = await renamePrivateBot();
+        return json(res, 200, { ok: true, ...result });
+      } catch (error) {
+        return json(res, 500, {
+          ok: false,
+          error: 'rename_failed',
+          code: error?.code || null,
+          message: error?.message || String(error),
+        });
+      }
+    }
+
     return json(res, 200, {
       ok: true,
       service: 'vk-avia-market-bot',
-      version: '2.1.2',
+      version: '2.1.3',
       architecture: 'protected-edge-storage',
       duplicate_guard_hours: 24,
       rate_limit_seconds: 30,
@@ -152,6 +176,7 @@ module.exports = async function handler(req, res) {
       dynamic_confirmation: true,
       admin_ui: 'private-only',
       admin_push: true,
+      rename_bot: true,
       group_configured: VK_GROUP_ID > 0,
       security: CALLBACK_SECRET_HASH ? 'sha256' : 'legacy-secret',
     });
