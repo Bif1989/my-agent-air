@@ -172,9 +172,26 @@ async function getInviteLink(peerId) {
   }
 }
 
+async function getPinnedMessage(peerId) {
+  try {
+    const response = await vkApi('messages.getConversationsById', { peer_ids: Number(peerId), extended: 0 });
+    const item = Array.isArray(response?.items) ? response.items[0] : null;
+    return item?.chat_settings?.pinned_message || null;
+  } catch (error) {
+    console.warn('pinned_message_check_failed', { code: error?.code || null });
+    return null;
+  }
+}
+
 async function pinMessage(peerId, sendResult) {
   const ref = messageRef(sendResult);
+  const primaryPeerId = Number(process.env.VK_PRIMARY_PEER_ID || 0);
   try {
+    // Once the public chat has a persistent pinned CTA, diagnostics must not replace it.
+    if (primaryPeerId > 0 && Number(peerId) === primaryPeerId) {
+      const current = await getPinnedMessage(peerId);
+      if (current) return true;
+    }
     if (ref.conversation_message_id) {
       await vkApi('messages.pin', {
         peer_id: Number(peerId),
@@ -196,6 +213,9 @@ async function pinMessage(peerId, sendResult) {
 }
 
 async function unpinMessage(peerId) {
+  const primaryPeerId = Number(process.env.VK_PRIMARY_PEER_ID || 0);
+  // The primary market chat keeps one permanent pinned private-bot link.
+  if (primaryPeerId > 0 && Number(peerId) === primaryPeerId) return true;
   try {
     await vkApi('messages.unpin', { peer_id: Number(peerId) });
     return true;
@@ -215,6 +235,7 @@ module.exports = {
   getHistory,
   getUserName,
   getInviteLink,
+  getPinnedMessage,
   pinMessage,
   unpinMessage,
 };
