@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { parseListing, normalizeListingText, listingMarker, isForwardedMessage, formatStoredList, sendPrivateHome } = require('../lib/market');
+const { parseListing, normalizeListingText, listingMarker, isForwardedMessage, isGroupPeer, formatStoredList, sendPrivateHome, sendGroupMenu } = require('../lib/market');
 const { messageRef } = require('../lib/vk');
 const storage = require('../lib/storage');
 const { privateMenu, groupMenu, adminMenu, privateHome, groupHome, adminHome } = require('../lib/ui');
@@ -10,6 +10,9 @@ assert.strictEqual(listingMarker('search', 456), '#AM2_SEARCH_456');
 assert.strictEqual(isForwardedMessage({ fwd_messages: [{ id: 1 }] }), true, 'forwarded VK messages must be detected');
 assert.strictEqual(isForwardedMessage({ fwd_messages: [] }), false, 'empty forward list must not be blocked');
 assert.strictEqual(isForwardedMessage({ text: 'oddiy xabar' }), false, 'ordinary chat messages must remain allowed');
+assert.strictEqual(isGroupPeer(2000000001), true, 'primary VK conversation must be recognized');
+assert.strictEqual(isGroupPeer(2000000123), true, 'secondary VK conversations must be recognized');
+assert.strictEqual(isGroupPeer(123456789), false, 'private/user peers must not be treated as managed chats');
 
 const parsed = parseListing({
   text: '✈️ TAKLIF\n👤 [id123|Agent]\n🕒 14.10 21:00\n\nTAS–MOW 20 oktabr 220 USD\n\n#AviaMarket\n#AM2_OFFER_123',
@@ -41,26 +44,33 @@ assert(adminKeyboard.buttons[0][0].action.label.includes('QOIDALARNI'));
 assert(adminKeyboard.buttons[1][0].action.payload.includes('admin_cleanall'));
 
 const privateHomeText = privateHome().text;
-const groupHomeCard = groupHome();
-const groupHomeText = groupHomeCard.text;
+const primaryGroupHomeCard = groupHome();
+const primaryGroupHomeText = primaryGroupHomeCard.text;
+const secondaryGroupHomeText = groupHome({ isPrimary: false }).text;
 const adminHomeText = adminHome().text;
 assert(privateHomeText.includes('SHAXSIY BOT QOIDALARI'));
 assert(privateHomeText.includes('24 soat'));
 assert(privateHomeText.includes('30 soniya'));
 assert(privateHomeText.includes('avtomatik chiqmaydi'));
-assert(groupHomeText.includes('UMUMIY CHAT QOIDALARI'));
-assert(groupHomeText.includes('https://vk.me/aviamarketbot'));
-assert(groupHomeText.includes('SHAXSIY BOT'));
-assert(groupHomeText.includes('10+ belgilik'));
-assert(groupHomeText.includes('24 soat'));
-assert(groupHomeText.includes('pereslat (forward)'));
-assert(groupHomeText.includes('bot tomonidan o‘chiriladi'));
-assert.strictEqual(groupHomeCard.keyboard, null);
-assert(!groupHomeText.includes('ADMIN BOT'));
+assert(privateHomeText.includes('boshqa VK besedalarga'));
+assert(primaryGroupHomeText.includes('UMUMIY CHAT QOIDALARI'));
+assert(primaryGroupHomeText.includes('https://vk.me/aviamarketbot'));
+assert(primaryGroupHomeText.includes('SHAXSIY BOT'));
+assert(primaryGroupHomeText.includes('10+ belgilik'));
+assert(primaryGroupHomeText.includes('24 soat'));
+assert(primaryGroupHomeText.includes('pereslat (forward)'));
+assert(primaryGroupHomeText.includes('bot tomonidan o‘chiriladi'));
+assert(primaryGroupHomeText.includes('ASOSIY CHATga avtomatik'));
+assert(secondaryGroupHomeText.includes('qo‘shimcha chatda bot moderatsiya qiladi'));
+assert(secondaryGroupHomeText.includes('faqat ASOSIY AVIA MARKET chatiga'));
+assert.strictEqual(primaryGroupHomeCard.keyboard, null);
+assert(!primaryGroupHomeText.includes('ADMIN BOT'));
 assert(adminHomeText.includes('faqat admin akkauntida'));
 assert(adminHomeText.includes('Alohida ADMIN BOT yo‘q'));
-assert(adminHomeText.includes('eski zakreplyon'));
+assert(adminHomeText.includes('MULTI-CHAT REJIM'));
+assert(adminHomeText.includes('o‘sha chatning o‘zida /menu'));
 assert.strictEqual(typeof sendPrivateHome, 'function');
+assert.strictEqual(typeof sendGroupMenu, 'function');
 
 for (const name of ['health', 'setMode', 'createListing', 'finalizeListing', 'trackBotMessage', 'listCleanupTargets', 'markDeleted', 'checkChatDuplicate']) {
   assert.strictEqual(typeof storage[name], 'function', `storage.${name} must be exported`);
