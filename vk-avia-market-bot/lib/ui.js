@@ -8,7 +8,7 @@ function privateMenu() {
   return {
     inline: true,
     buttons: [
-      [{ action: { type: 'open_link', label: '🌐 UMUMIY CHAT — E’LONLAR', link: MARKET_CHAT_URL } }],
+      [{ action: { type: 'open_link', label: '🌐 UMUMIY CHAT', link: MARKET_CHAT_URL } }],
       [
         { action: { type: 'callback', label: '➕ TAKLIF BERISH', payload: payload('new_offer') }, color: 'primary' },
         { action: { type: 'callback', label: '🔎 SO‘ROV BERISH', payload: payload('new_search') }, color: 'primary' },
@@ -40,7 +40,7 @@ function adminMenu() {
     inline: true,
     buttons: [
       [{ action: { type: 'callback', label: '📌 ZAKREPLEN XABARNI YANGILASH', payload: payload('admin_pinmenu') }, color: 'primary' }],
-      [{ action: { type: 'callback', label: '🧹 UMUMIY CHATNI TOZALASH', payload: payload('admin_cleanall') }, color: 'negative' }],
+      [{ action: { type: 'callback', label: '🧹 BOT E’LONLARINI TOZALASH', payload: payload('admin_cleanall') }, color: 'negative' }],
     ],
   };
 }
@@ -66,12 +66,12 @@ function groupHome() {
   return {
     text: [
       '📌 AVIA MARKET — UMUMIY CHAT', '',
-      'Bu chat faqat TAKLIF va SO‘ROVLARNI ko‘rish uchun.',
-      'Oddiy yozishmalar avtomatik tozalanadi.', '',
-      '➕ Taklif yoki so‘rov joylash uchun SHAXSIY BOTga o‘ting:',
+      'Bu — ochiq umumiy suhbat.',
+      '✅ Barcha ishtirokchilar erkin yozishi va javob berishi mumkin.', '',
+      '✈️ Taklif va 🔎 So‘rovlarni tartibli joylash uchun SHAXSIY BOTdan foydalaning:',
       `🔒 ${BOT_OPEN_URL}`,
       '',
-      'Barcha e’lon berish knopkalari SHAXSIY BOT ichida.',
+      'Shaxsiy bot orqali berilgan e’lonlar shu chatga ham avtomatik chiqariladi.',
     ].join('\n'),
     keyboard: null,
   };
@@ -84,7 +84,7 @@ function adminHome() {
       'Bu bo‘lim faqat admin akkauntida ko‘rinadi.',
       'Alohida ADMIN BOT yo‘q — boshqaruv shu SHAXSIY BOT ichida.', '',
       '📌 Zakreplen xabar — UMUMIY CHATga SHAXSIY BOT havolasini yuboradi va pin qiladi.',
-      '🧹 Tozalash — bot kuzatgan umumiy chat xabarlarini tozalaydi va zakreplen xabarni qayta tiklaydi.', '',
+      '🧹 Bot e’lonlarini tozalash — faqat bot kuzatgan e’lon/xizmat xabarlarini tozalaydi; oddiy foydalanuvchi yozishmalariga tegmaydi.', '',
       '↩️ Shaxsiy menyuga qaytish: /menu',
     ].join('\n'),
     keyboard: adminMenu(),
