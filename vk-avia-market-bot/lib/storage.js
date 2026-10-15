@@ -91,6 +91,14 @@ async function setMode(userId, mode) {
   return callStorageSafe('set_mode', { user_id: Number(userId), mode: String(mode) });
 }
 
+async function getMode(userId) {
+  return callStorageSafe('get_mode', { user_id: Number(userId) });
+}
+
+async function clearMode(userId) {
+  return callStorageSafe('clear_mode', { user_id: Number(userId) });
+}
+
 async function createListing(userId, text) {
   return callStorage('create_listing', { user_id: Number(userId), text: String(text || '') });
 }
@@ -116,6 +124,37 @@ async function listRecent(kind = null, limit = 10) {
 
 async function stats(userId) {
   return callStorageSafe('stats', { user_id: Number(userId) });
+}
+
+async function getProfile(userId) {
+  return callStorageSafe('get_profile', { user_id: Number(userId) });
+}
+
+async function setProfile(userId, profile = {}) {
+  return callStorageSafe('set_profile', {
+    user_id: Number(userId),
+    company: profile?.company == null ? null : String(profile.company),
+    phone: profile?.phone == null ? null : String(profile.phone),
+    telegram: profile?.telegram == null ? null : String(profile.telegram),
+  });
+}
+
+async function getOwnListing(userId, listingId) {
+  return callStorageSafe('get_listing_owner', { user_id: Number(userId), listing_id: Number(listingId) });
+}
+
+async function updateOwnListing(userId, listingId, text, refs = {}) {
+  return callStorageSafe('update_own_listing', {
+    user_id: Number(userId),
+    listing_id: Number(listingId),
+    text: String(text || ''),
+    vk_message_id: refs?.message_id == null ? null : Number(refs.message_id),
+    vk_conversation_message_id: refs?.conversation_message_id == null ? null : Number(refs.conversation_message_id),
+  });
+}
+
+async function deleteOwnListing(userId, listingId) {
+  return callStorageSafe('delete_own_listing', { user_id: Number(userId), listing_id: Number(listingId) });
 }
 
 async function trackBotMessage(purpose, refs = {}) {
@@ -149,11 +188,18 @@ module.exports = {
   callStorage,
   health,
   setMode,
+  getMode,
+  clearMode,
   createListing,
   finalizeListing,
   listUser,
   listRecent,
   stats,
+  getProfile,
+  setProfile,
+  getOwnListing,
+  updateOwnListing,
+  deleteOwnListing,
   trackBotMessage,
   listCleanupTargets,
   markDeleted,
