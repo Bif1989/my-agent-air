@@ -26,27 +26,28 @@ const privateKeyboard = privateMenu();
 const groupKeyboard = groupMenu();
 const adminKeyboard = adminMenu();
 assert.strictEqual(privateKeyboard.buttons.length, 5, 'private keyboard must stay compact');
-assert.strictEqual(groupKeyboard.buttons.length, 1, 'public chat must have one clear entry point to the private bot');
-assert.strictEqual(groupKeyboard.buttons[0][0].action.type, 'open_link');
-assert(groupKeyboard.buttons[0][0].action.label.includes('SHAXSIY BOT'));
-assert.strictEqual(groupKeyboard.buttons[0][0].color, undefined, 'VK open_link buttons must not define color');
+assert.strictEqual(groupKeyboard, null, 'public chat must use a pinned plain-text bot link, not an inline keyboard');
 assert(privateKeyboard.buttons[0][0].action.label.includes('UMUMIY CHAT'));
 assert.strictEqual(adminKeyboard.buttons.length, 2, 'admin controls must stay in a separate compact card');
 assert(adminKeyboard.buttons[0][0].action.payload.includes('admin_pinmenu'));
+assert(adminKeyboard.buttons[0][0].action.label.includes('ZAKREPLEN'));
 assert(adminKeyboard.buttons[1][0].action.payload.includes('admin_cleanall'));
 
 const privateHomeText = privateHome().text;
-const groupHomeText = groupHome().text;
+const groupHomeCard = groupHome();
+const groupHomeText = groupHomeCard.text;
 const adminHomeText = adminHome().text;
 assert(privateHomeText.includes('SHAXSIY BOT / KABINET'));
 assert(privateHomeText.includes('avtomatik chiqmaydi'));
 assert(privateHomeText.includes('Shundan keyingina e’lon UMUMIY CHATga chiqariladi'));
 assert(groupHomeText.includes('UMUMIY CHAT'));
-assert(groupHomeText.includes('HAMMAGA OCHIQ'));
+assert(groupHomeText.includes('https://vk.me/aviamarketbot'));
 assert(groupHomeText.includes('SHAXSIY BOT'));
+assert.strictEqual(groupHomeCard.keyboard, null);
 assert(!groupHomeText.includes('ADMIN BOT'));
 assert(adminHomeText.includes('faqat admin akkauntida'));
 assert(adminHomeText.includes('Alohida ADMIN BOT yo‘q'));
+assert(adminHomeText.includes('pin qiladi'));
 
 for (const name of ['health', 'setMode', 'createListing', 'finalizeListing', 'trackBotMessage', 'listCleanupTargets', 'markDeleted']) {
   assert.strictEqual(typeof storage[name], 'function', `storage.${name} must be exported`);
