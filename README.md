@@ -58,7 +58,7 @@ For a **fresh Supabase database only**:
 
 Do **not** replay the baseline on production. Production's `supabase_migrations.schema_migrations` ledger remains the canonical record of what was actually applied there.
 
-P10 restored two historical migration files that were present in production history but missing from the repository: `20261005093623_add_ai_chat_history.sql` and `20261005104810_add_ai_chat_conversations.sql`. Later AI-history hardening migrations depend on these tables, so both files are required for a fresh rebuild.
+P10 restored cloud migrations that existed in production but were missing from Git recovery history, including the AI chat prerequisites, the VK aviation ingest schema/disable step, and the Click subscription payment-order foundation. The VK recovery migration intentionally omits the production-only secret hash; environment credentials must be configured separately.
 
 `supabase/tests/resume_security.sql` verifies access, profile requirements, expiry, money constraints, system-message protection and the core deal workflow. It rolls back its fixtures and queued notifications. Identity sequences may still advance during the test.
 
