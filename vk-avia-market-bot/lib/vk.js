@@ -4,7 +4,11 @@ function randomId() {
   return Math.floor(Math.random() * 2147483647);
 }
 
-async function fetchWithTimeout(url, options = {}, timeoutMs = 6000) {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 7000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -14,40 +18,72 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 6000) {
   }
 }
 
-async function vkApi(method, params = {}) {
+function retryableVkError(code, httpStatus) {
+  const numeric = Number(code || 0);
+  return numeric === 6 || numeric === 10 || Number(httpStatus) === 429 || Number(httpStatus) >= 500;
+}
+
+async function vkApi(method, params = {}, attempts = 3) {
   if (!process.env.VK_TOKEN) {
     const error = new Error('VK_TOKEN is not configured');
     error.code = 'config';
     throw error;
   }
-  const body = new URLSearchParams();
-  for (const [key, value] of Object.entries({ ...params, access_token: process.env.VK_TOKEN, v: VK_API_VERSION })) {
-    if (value !== undefined && value !== null) body.set(key, String(value));
-  }
-  let response;
-  try {
-    response = await fetchWithTimeout(`https://api.vk.com/method/${method}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body,
-    }, 6000);
-  } catch (cause) {
-    const error = new Error(`VK ${method} network timeout`);
-    error.code = 'network';
-    error.cause = cause;
-    throw error;
-  }
-  const data = await response.json().catch(() => null);
-  if (!response.ok || data?.error) {
+
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const body = new URLSearchParams();
+    for (const [key, value] of Object.entries({ ...params, access_token: process.env.VK_TOKEN, v: VK_API_VERSION })) {
+      if (value !== undefined && value !== null) body.set(key, String(value));
+    }
+
+    let response;
+    try {
+      response = await fetchWithTimeout(`https://api.vk.com/method/${method}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body,
+      }, 7000);
+    } catch (cause) {
+      const error = new Error(`VK ${method} network timeout`);
+      error.code = 'network';
+      error.cause = cause;
+      lastError = error;
+      if (attempt >= attempts) throw error;
+      await sleep(150 * attempt);
+      continue;
+    }
+
+    const data = await response.json().catch(() => null);
+    if (response.ok && !data?.error) return data?.response;
+
     const error = new Error(data?.error?.error_msg || `VK ${method} HTTP ${response.status}`);
     error.code = data?.error?.error_code || response.status;
-    throw error;
+    error.httpStatus = response.status;
+    lastError = error;
+    if (!retryableVkError(error.code, response.status) || attempt >= attempts) throw error;
+    await sleep(150 * attempt);
   }
-  return data?.response;
+  throw lastError;
+}
+
+function messageRef(result) {
+  if (typeof result === 'number') {
+    return { message_id: Number(result) || null, conversation_message_id: null };
+  }
+  return {
+    message_id: Number(result?.message_id || 0) || null,
+    conversation_message_id: Number(result?.conversation_message_id || 0) || null,
+  };
 }
 
 async function sendMessage(peerId, message, keyboard) {
-  const params = { peer_id: Number(peerId), random_id: randomId(), message: String(message).slice(0, 4000), disable_mentions: 1 };
+  const params = {
+    peer_id: Number(peerId),
+    random_id: randomId(),
+    message: String(message).slice(0, 4000),
+    disable_mentions: 1,
+  };
   if (keyboard) params.keyboard = JSON.stringify(keyboard);
   return vkApi('messages.send', params);
 }
@@ -71,12 +107,37 @@ async function answerEvent(obj, text) {
 async function deleteMessage(peerId, conversationMessageId) {
   if (!conversationMessageId) return false;
   try {
-    await vkApi('messages.delete', { peer_id: Number(peerId), cmids: Number(conversationMessageId), delete_for_all: 1 });
+    await vkApi('messages.delete', {
+      peer_id: Number(peerId),
+      cmids: Number(conversationMessageId),
+      delete_for_all: 1,
+    });
     return true;
   } catch (error) {
     console.warn('delete_message_failed', { code: error?.code || null });
     return false;
   }
+}
+
+async function deleteMessageRefs(peerId, refs = []) {
+  const valid = Array.isArray(refs) ? refs.filter(Boolean) : [];
+  const messageIds = valid.filter((ref) => Number(ref?.message_id || 0) > 0).map((ref) => Number(ref.message_id));
+  const cmids = valid.filter((ref) => !Number(ref?.message_id || 0) && Number(ref?.conversation_message_id || 0) > 0).map((ref) => Number(ref.conversation_message_id));
+
+  if (messageIds.length) {
+    await vkApi('messages.delete', {
+      message_ids: messageIds.join(','),
+      delete_for_all: 1,
+    });
+  }
+  if (cmids.length) {
+    await vkApi('messages.delete', {
+      peer_id: Number(peerId),
+      cmids: cmids.join(','),
+      delete_for_all: 1,
+    });
+  }
+  return { deleted: messageIds.length + cmids.length, message_ids: messageIds, cmids };
 }
 
 async function getHistory(peerId, count = 50, offset = 0) {
@@ -105,21 +166,27 @@ async function getInviteLink(peerId) {
   try {
     const response = await vkApi('messages.getInviteLink', { peer_id: Number(peerId), reset: 0 });
     return response?.link || null;
-  } catch {
+  } catch (error) {
+    console.warn('invite_link_failed', { code: error?.code || null });
     return null;
   }
 }
 
 async function pinMessage(peerId, sendResult) {
-  const cmid = Number(sendResult?.conversation_message_id || 0);
-  const messageId = typeof sendResult === 'number' ? Number(sendResult) : Number(sendResult?.message_id || 0);
+  const ref = messageRef(sendResult);
   try {
-    if (cmid) {
-      await vkApi('messages.pin', { peer_id: Number(peerId), conversation_message_id: cmid });
+    if (ref.conversation_message_id) {
+      await vkApi('messages.pin', {
+        peer_id: Number(peerId),
+        conversation_message_id: ref.conversation_message_id,
+      });
       return true;
     }
-    if (messageId) {
-      await vkApi('messages.pin', { peer_id: Number(peerId), message_id: messageId });
+    if (ref.message_id) {
+      await vkApi('messages.pin', {
+        peer_id: Number(peerId),
+        message_id: ref.message_id,
+      });
       return true;
     }
   } catch (error) {
@@ -128,4 +195,26 @@ async function pinMessage(peerId, sendResult) {
   return false;
 }
 
-module.exports = { vkApi, sendMessage, answerEvent, deleteMessage, getHistory, getUserName, getInviteLink, pinMessage };
+async function unpinMessage(peerId) {
+  try {
+    await vkApi('messages.unpin', { peer_id: Number(peerId) });
+    return true;
+  } catch (error) {
+    console.warn('unpin_message_failed', { code: error?.code || null });
+    return false;
+  }
+}
+
+module.exports = {
+  vkApi,
+  messageRef,
+  sendMessage,
+  answerEvent,
+  deleteMessage,
+  deleteMessageRefs,
+  getHistory,
+  getUserName,
+  getInviteLink,
+  pinMessage,
+  unpinMessage,
+};
