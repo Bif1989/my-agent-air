@@ -28,11 +28,7 @@ export default function TurnstileChallenge({
 }) {
   const host = useRef<HTMLDivElement | null>(null);
   const widgetId = useRef<string | null>(null);
-  const [scriptReady, setScriptReady] = useState(false);
-
-  useEffect(() => {
-    if (TURNSTILE_SITE_KEY && window.turnstile) setScriptReady(true);
-  }, []);
+  const [scriptReady, setScriptReady] = useState(() => typeof window !== "undefined" && Boolean(window.turnstile));
 
   useEffect(() => {
     if (!TURNSTILE_SITE_KEY || !scriptReady || !host.current || !window.turnstile || widgetId.current) return;
