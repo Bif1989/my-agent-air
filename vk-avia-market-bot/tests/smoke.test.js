@@ -23,6 +23,7 @@ assert.strictEqual(privateKeyboard.buttons.length, 5, 'private keyboard must sta
 assert.strictEqual(groupKeyboard.buttons.length, 1, 'public chat must have one clear entry point to the private bot');
 assert.strictEqual(groupKeyboard.buttons[0][0].action.type, 'open_link');
 assert(groupKeyboard.buttons[0][0].action.label.includes('SHAXSIY BOT'));
+assert.strictEqual(groupKeyboard.buttons[0][0].color, undefined, 'VK open_link buttons must not define color');
 assert(privateKeyboard.buttons[0][0].action.label.includes('UMUMIY CHAT'));
 assert.strictEqual(adminKeyboard.buttons.length, 2, 'admin controls must stay in a separate compact card');
 assert(adminKeyboard.buttons[0][0].action.payload.includes('admin_pinmenu'));
