@@ -90,8 +90,10 @@ module.exports = async function handler(req, res) {
     return json(res, 200, {
       ok: true,
       service: 'vk-avia-market-bot',
-      version: '2.0.1',
-      architecture: 'vk-history-source-of-truth',
+      version: '2.1.0',
+      architecture: 'protected-edge-storage',
+      duplicate_guard_hours: 24,
+      rate_limit_seconds: 30,
       fast_ack: true,
       dynamic_confirmation: true,
       group_configured: VK_GROUP_ID > 0,
