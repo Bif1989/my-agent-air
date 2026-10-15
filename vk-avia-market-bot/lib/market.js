@@ -1,4 +1,13 @@
-const { getHistory, getUserName, sendMessage, answerEvent, deleteMessage, pinMessage, vkApi } = require('./vk');
+const {
+  getUserName,
+  sendMessage,
+  answerEvent,
+  deleteMessage,
+  deleteMessageRefs,
+  pinMessage,
+  getInviteLink,
+  messageRef,
+} = require('./vk');
 const { privateMenu, privateHome, groupHome } = require('./ui');
 const storage = require('./storage');
 
@@ -21,9 +30,16 @@ function formatTime(value) {
   try {
     const date = typeof value === 'number' ? new Date(Number(value) * 1000) : new Date(value);
     return new Intl.DateTimeFormat('uz-UZ', {
-      timeZone: 'Asia/Tashkent', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+      timeZone: 'Asia/Tashkent',
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
     }).format(date);
-  } catch { return ''; }
+  } catch {
+    return '';
+  }
 }
 
 function parseListing(message) {
@@ -40,16 +56,25 @@ function parseListing(message) {
     if (/^#AviaMarket$/i.test(value) || /^#AM2_(OFFER|SEARCH)_\d+$/i.test(value)) return false;
     return true;
   }).join('\n').trim();
-  return { kind, userId, text: body, date: Number(message?.date || 0), cmid: Number(message?.conversation_message_id || 0) };
+  return {
+    kind,
+    userId,
+    text: body,
+    date: Number(message?.date || 0),
+    cmid: Number(message?.conversation_message_id || 0),
+  };
 }
 
 async function sendEntryPrompt(userId, mode) {
   await storage.setMode(userId, mode);
   const offer = mode === 'offer';
   await sendMessage(userId, [
-    offer ? '✈️ TAKLIF KIRITISH' : '🔎 SO‘ROV KIRITISH', '',
-    offer ? 'Taklifingizni keyingi BITTA xabarda yozing.' : 'So‘rovingizni keyingi BITTA xabarda yozing.', '',
-    offer ? 'Masalan: TAS–MOW 20 oktabr, HY, 4 ta joy, 220 USD, bagaj 20 kg.' : 'Masalan: TAS–MOW 20 oktabrga 3 ta joy kerak, bagaj bilan.', '',
+    offer ? '✈️ TAKLIF KIRITISH' : '🔎 SO‘ROV KIRITISH',
+    '',
+    offer ? 'Taklifingizni keyingi BITTA xabarda yozing.' : 'So‘rovingizni keyingi BITTA xabarda yozing.',
+    '',
+    offer ? 'Masalan: TAS–MOW 20 oktabr, HY, 4 ta joy, 220 USD, bagaj 20 kg.' : 'Masalan: TAS–MOW 20 oktabrga 3 ta joy kerak, bagaj bilan.',
+    '',
     '🛡 Bir xil e’lon 24 soat ichida qayta chiqmaydi.',
     '⏱ Yangi e’lonlar orasida kamida 30 soniya bo‘lishi kerak.',
   ].join('\n'), privateMenu());
@@ -69,11 +94,6 @@ async function publishListing(userId, kind, text) {
     '#AviaMarket',
     listingMarker(kind, userId),
   ].join('\n'));
-}
-
-function sentMessageId(result) {
-  if (typeof result === 'number') return result;
-  return Number(result?.message_id || result?.conversation_message_id || 0) || null;
 }
 
 function formatStoredList(title, items) {
@@ -101,7 +121,8 @@ async function sendList(userId, action) {
 async function sendStats(userId) {
   const data = await storage.stats(userId);
   await sendMessage(userId, [
-    '📊 AVIA MARKET — 7 KUNLIK STATISTIKA', '',
+    '📊 AVIA MARKET — 7 KUNLIK STATISTIKA',
+    '',
     `✈️ Takliflar: ${Number(data?.offers || 0)}`,
     `🔎 So‘rovlar: ${Number(data?.searches || 0)}`,
     `📦 Mening takliflarim: ${Number(data?.my_offers || 0)}`,
@@ -112,10 +133,12 @@ async function sendStats(userId) {
 async function sendCabinet(userId) {
   const data = await storage.stats(userId);
   await sendMessage(userId, [
-    '👤 AVIA MARKET — KABINET', '',
+    '👤 AVIA MARKET — KABINET',
+    '',
     `🆔 VK ID: ${userId}`,
     '📦 Tarif: Bepul',
-    '✅ Holat: Faol', '',
+    '✅ Holat: Faol',
+    '',
     `✈️ 7 kunda takliflarim: ${Number(data?.my_offers || 0)}`,
     `🔎 7 kunda so‘rovlarim: ${Number(data?.my_searches || 0)}`,
   ].join('\n'), privateMenu());
@@ -123,36 +146,93 @@ async function sendCabinet(userId) {
 
 async function sendMarketLink(userId) {
   const chatId = PRIMARY_PEER_ID - 2000000000;
-  const link = chatId > 0 ? `https://vk.ru/im?sel=c${chatId}` : 'https://vk.ru/im';
-  await sendMessage(userId, `🌐 AVIA MARKET — UMUMIY CHAT\n\n👉 ${link}`, privateMenu());
+  const directLink = chatId > 0 ? `https://vk.ru/im?sel=c${chatId}` : 'https://vk.ru/im';
+  const inviteLink = PRIMARY_PEER_ID ? await getInviteLink(PRIMARY_PEER_ID) : null;
+  const link = inviteLink || directLink;
+  const label = inviteLink ? 'Chatga kirish / qo‘shilish havolasi' : 'Umumiy chatni ochish';
+  await sendMessage(userId, `🌐 AVIA MARKET — UMUMIY CHAT\n\n${label}:\n👉 ${link}`, privateMenu());
+}
+
+async function rememberBotMessage(purpose, sent) {
+  const ref = messageRef(sent);
+  if (!ref.message_id && !ref.conversation_message_id) return ref;
+  try {
+    await storage.trackBotMessage(purpose, ref);
+  } catch (error) {
+    console.warn('track_bot_message_failed', { purpose, code: error?.code || null });
+  }
+  return ref;
 }
 
 async function sendGroupMenu({ pin = false } = {}) {
+  if (!PRIMARY_PEER_ID) throw new Error('VK_PRIMARY_PEER_ID is not configured');
   const home = groupHome();
   const sent = await sendMessage(PRIMARY_PEER_ID, home.text, home.keyboard);
-  return { pinned: pin ? await pinMessage(PRIMARY_PEER_ID, sent) : false };
+  const ref = await rememberBotMessage('menu', sent);
+  const pinned = pin ? await pinMessage(PRIMARY_PEER_ID, sent) : false;
+  return { sent, ref, pinned };
 }
 
 async function cleanChat(userId) {
   if (!isAdmin(userId)) return sendMessage(userId, '⛔ Bu amal faqat admin uchun.');
+  if (!PRIMARY_PEER_ID) return sendMessage(userId, '⚠️ Umumiy chat sozlanmagan.', privateMenu());
+
+  let targets;
   try {
-    const history = await getHistory(PRIMARY_PEER_ID, 200);
-    const cmids = history.map((item) => Number(item?.conversation_message_id || 0)).filter(Boolean);
-    let deleted = 0;
-    for (let i = 0; i < cmids.length; i += 25) {
-      const batch = cmids.slice(i, i + 25);
-      try {
-        await vkApi('messages.delete', { peer_id: PRIMARY_PEER_ID, cmids: batch.join(','), delete_for_all: 1 });
-        deleted += batch.length;
-      } catch (error) {
-        console.warn('clean_batch_failed', { code: error?.code || null });
-      }
-    }
-    return sendMessage(userId, `🧹 Tozalash yakunlandi.\n✅ O‘chirildi: ${deleted}`, privateMenu());
+    const result = await storage.listCleanupTargets(1000);
+    targets = Array.isArray(result?.items) ? result.items : [];
   } catch (error) {
-    console.warn('clean_history_unavailable', { code: error?.code || null });
-    return sendMessage(userId, '⚠️ VK umumiy chat tarixini o‘qishga ruxsat bermadi. Tozalash bajarilmadi.', privateMenu());
+    console.error('cleanup_targets_failed', { code: error?.code || null, message: error?.message || String(error) });
+    return sendMessage(userId, '⚠️ Tozalash ro‘yxatini olishda xato bo‘ldi. Keyinroq qayta urinib ko‘ring.', privateMenu());
   }
+
+  let deleted = 0;
+  const listingIds = [];
+  const botMessageIds = [];
+
+  for (let i = 0; i < targets.length; i += 25) {
+    const batch = targets.slice(i, i + 25);
+    const refs = batch.map((item) => ({
+      message_id: Number(item?.vk_message_id || 0) || null,
+      conversation_message_id: Number(item?.vk_conversation_message_id || 0) || null,
+    })).filter((ref) => ref.message_id || ref.conversation_message_id);
+    if (!refs.length) continue;
+
+    try {
+      const result = await deleteMessageRefs(PRIMARY_PEER_ID, refs);
+      deleted += Number(result?.deleted || refs.length);
+      for (const item of batch) {
+        if (item?.source === 'listing' && Number(item?.id || 0) > 0) listingIds.push(Number(item.id));
+        if (item?.source === 'bot' && Number(item?.id || 0) > 0) botMessageIds.push(Number(item.id));
+      }
+    } catch (error) {
+      console.warn('clean_batch_failed', { code: error?.code || null, size: batch.length });
+    }
+  }
+
+  if (listingIds.length || botMessageIds.length) {
+    try {
+      await storage.markDeleted(listingIds, botMessageIds);
+    } catch (error) {
+      console.error('cleanup_mark_deleted_failed', { code: error?.code || null });
+    }
+  }
+
+  let menuPinned = false;
+  try {
+    const menu = await sendGroupMenu({ pin: true });
+    menuPinned = Boolean(menu?.pinned);
+  } catch (error) {
+    console.warn('cleanup_menu_refresh_failed', { code: error?.code || null });
+  }
+
+  return sendMessage(userId, [
+    '🧹 UMUMIY CHAT TOZALANDI',
+    '',
+    `✅ Bot kuzatgan xabarlar o‘chirildi: ${deleted}`,
+    targets.length === 0 ? 'ℹ️ O‘chirish uchun saqlangan eski e’lonlar yo‘q edi.' : '',
+    menuPinned ? '📌 Yangi umumiy menyu yuborildi va pin qilindi.' : '📌 Yangi umumiy menyu yuborildi.',
+  ].filter(Boolean).join('\n'), privateMenu());
 }
 
 async function handleListingText(userId, text) {
@@ -186,16 +266,17 @@ async function handleListingText(userId, text) {
   const kind = created.kind === 'search' ? 'search' : 'offer';
   try {
     const sent = await publishListing(userId, kind, text);
+    const ref = messageRef(sent);
     try {
-      await storage.finalizeListing(created.id, userId, 'published', sentMessageId(sent));
+      await storage.finalizeListing(created.id, userId, 'published', ref, null);
     } catch (error) {
-      console.error('storage_finalize_failed', { id: created.id, code: error?.code || null });
+      console.error('storage_finalize_failed', { id: created.id, code: error?.code || null, message: error?.message || String(error) });
     }
     return sendMessage(userId, kind === 'offer' ? '✅ Taklif UMUMIY CHATga joylashtirildi.' : '✅ So‘rov UMUMIY CHATga joylashtirildi.', privateMenu());
   } catch (error) {
     console.error('publish_failed', { code: error?.code || null, message: error?.message || String(error) });
     await Promise.allSettled([
-      storage.finalizeListing(created.id, userId, 'failed', null, error?.code || 'vk_send_failed'),
+      storage.finalizeListing(created.id, userId, 'failed', {}, error?.code || 'vk_send_failed'),
       storage.setMode(userId, kind),
     ]);
     return sendMessage(userId, '⚠️ VK umumiy chatga yuborishni qabul qilmadi. Rejim saqlandi — shu xabarni qayta yuboring.', privateMenu()).catch(() => {});
@@ -226,7 +307,12 @@ async function handleGroupMessage(msg) {
   const fromId = Number(msg?.from_id || 0);
   const cmid = Number(msg?.conversation_message_id || 0);
   const command = normalizeCommand(msg?.text);
-  if (['/menu', 'menu'].includes(command)) return Promise.allSettled([sendGroupMenu({ pin: isAdmin(fromId) }), deleteMessage(peerId, cmid)]);
+  if (['/menu', 'menu'].includes(command)) {
+    return Promise.allSettled([
+      sendGroupMenu({ pin: isAdmin(fromId) }),
+      deleteMessage(peerId, cmid),
+    ]);
+  }
   if (STRICT_MARKET_CHAT && Number(msg?.out || 0) !== 1) await deleteMessage(peerId, cmid);
 }
 
@@ -246,17 +332,22 @@ async function handleCallback(obj) {
     }
   };
 
-  if (cmd === 'new_offer' || cmd === 'new_search') return run(() => sendEntryPrompt(userId, cmd === 'new_offer' ? 'offer' : 'search'), 'Davom etish uchun shaxsiy botni oching');
+  if (cmd === 'new_offer') return run(() => sendEntryPrompt(userId, 'offer'), 'Taklif matnini yuboring');
+  if (cmd === 'new_search') return run(() => sendEntryPrompt(userId, 'search'), 'So‘rov matnini yuboring');
   if (['offers', 'searches', 'my_offers', 'my_searches'].includes(cmd)) return run(() => sendList(userId, cmd), 'Natija shaxsiy botga yuborildi');
   if (cmd === 'stats') return run(() => sendStats(userId), 'Statistika shaxsiy botga yuborildi');
   if (cmd === 'cabinet') return run(() => sendCabinet(userId), 'Kabinet shaxsiy botga yuborildi');
   if (cmd === 'open_market_chat') return run(() => sendMarketLink(userId), 'Umumiy chat havolasi yuborildi');
-  if (cmd === 'admin_cleanall') return run(() => cleanChat(userId), 'Tozalash tekshirildi');
+  if (cmd === 'admin_cleanall') return run(() => cleanChat(userId), 'Tozalash yakunlandi');
   if (cmd === 'admin_pinmenu') {
     if (!isAdmin(userId)) return answerEvent(obj, 'Bu amal faqat admin uchun');
     return run(async () => {
       const result = await sendGroupMenu({ pin: true });
-      await sendMessage(userId, result.pinned ? '✅ Menyu yangilandi va pin qilindi.' : '⚠️ Menyu yangilandi, lekin VK pin qilishga ruxsat bermadi.', privateMenu());
+      await sendMessage(
+        userId,
+        result.pinned ? '✅ Menyu yangilandi va pin qilindi.' : '✅ Menyu yangilandi. VK pin qilishga ruxsat bermasa ham menyu chatga yuborildi.',
+        privateMenu(),
+      );
     }, 'Umumiy menyu yangilandi');
   }
   await answerEvent(obj, 'Noma’lum amal');
@@ -273,4 +364,12 @@ async function processEvent(event) {
   if (peerId > 0 && peerId === fromId) return handlePrivateMessage(msg);
 }
 
-module.exports = { processEvent, parseListing, normalizeListingText, listingMarker, formatStoredList };
+module.exports = {
+  processEvent,
+  parseListing,
+  normalizeListingText,
+  listingMarker,
+  formatStoredList,
+  sendGroupMenu,
+  cleanChat,
+};
