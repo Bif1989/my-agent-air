@@ -22,10 +22,11 @@ function privateMenu({ isAdmin = false } = {}) {
       { action: { type: 'callback', label: '📊 STATISTIKA', payload: payload('stats') }, color: 'secondary' },
     ],
   ];
-  if (isAdmin) {
-    buttons.push([{ action: { type: 'callback', label: '📌 MENYUNI YANGILASH', payload: payload('admin_pinmenu') }, color: 'positive' }]);
-    buttons.push([{ action: { type: 'callback', label: '🧹 CHATNI TOZALASH', payload: payload('admin_cleanall') }, color: 'negative' }]);
-  }
+
+  // VK inline keyboards reject oversized row counts. Admin actions remain
+  // available through /cleanall in private chat and /menu in the market chat.
+  // Keeping the same 5-row menu for every user makes the UI predictable.
+  void isAdmin;
   return { inline: true, buttons };
 }
 
@@ -52,6 +53,7 @@ function privateHome(isAdmin = false) {
       '🤖 AVIA MARKET — SHAXSIY BOT / KABINET', '',
       'Bu yerda taklif va so‘rov yuborasiz, o‘zingizning e’lonlaringiz va statistikani ko‘rasiz.', '',
       '🌐 Barcha agentlar ko‘radigan bozor esa alohida — UMUMIY CHAT.',
+      ...(isAdmin ? ['', '⚙️ Admin: /cleanall — chatni tozalash. Umumiy chatda /menu — menyuni yangilash.'] : []),
     ].join('\n'),
     keyboard: privateMenu({ isAdmin }),
   };
