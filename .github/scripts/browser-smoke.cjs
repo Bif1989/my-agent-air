@@ -16,6 +16,9 @@ async function checkProfile(browser, label, contextOptions) {
 
   let response = await page.goto(`${baseURL}/`, { waitUntil: 'domcontentloaded' });
   assert(response && response.status() < 400, `${label}: home did not load`);
+  assert.equal(response.headers()['x-content-type-options'], 'nosniff', `${label}: nosniff header missing`);
+  assert.match(response.headers()['content-security-policy'] || '', /object-src 'none'/, `${label}: CSP object-src hardening missing`);
+  assert.match(response.headers()['content-security-policy'] || '', /frame-ancestors 'self'/, `${label}: CSP frame-ancestors missing`);
   assert.match(await page.locator('body').innerText(), /MY AGENT AIR/i, `${label}: brand missing`);
 
   response = await page.goto(`${baseURL}/login`, { waitUntil: 'domcontentloaded' });
