@@ -19,7 +19,7 @@ const ADMIN_USER_ID = Number(process.env.VK_CLEANUP_USER_ID || 0);
 const CALLBACK_SECRET_HASH = String(process.env.VK_SECRET_SHA256 || '').trim().toLowerCase();
 const ADMIN_SECRET = String(process.env.VK_ADMIN_PUSH_SECRET || '');
 const CALLBACK_URL = 'https://project-xj41n.vercel.app/api/vk-callback?v=2';
-const PRIVATE_BOT_TITLE = '🔒 AVIA MARKET — SHAXSIY BOT';
+const PRIVATE_BOT_TITLE = 'AVIA MARKET — SHAXSIY BOT';
 
 function sha256(value) {
   return crypto.createHash('sha256').update(String(value || ''), 'utf8').digest('hex');
@@ -69,7 +69,6 @@ async function repairCallbackServer() {
     url: CALLBACK_URL,
     title: 'AviaMarket v2',
   });
-
   await vkApi('groups.setCallbackSettings', {
     group_id: VK_GROUP_ID,
     server_id: Number(server.id),
@@ -80,16 +79,9 @@ async function repairCallbackServer() {
     message_deny: 1,
   });
 
-  const after = await vkApi('groups.getCallbackServers', {
-    group_id: VK_GROUP_ID,
-    server_ids: Number(server.id),
-  });
+  const after = await vkApi('groups.getCallbackServers', { group_id: VK_GROUP_ID, server_ids: Number(server.id) });
   const current = Array.isArray(after?.items) ? after.items[0] : null;
-  return {
-    server_id: Number(server.id),
-    status: String(current?.status || 'unknown'),
-    url: String(current?.url || ''),
-  };
+  return { server_id: Number(server.id), status: String(current?.status || 'unknown'), url: String(current?.url || '') };
 }
 
 async function pushAdminMenu() {
@@ -102,11 +94,31 @@ async function pushAdminMenu() {
 }
 
 async function renamePrivateBot() {
-  const result = await vkApi('groups.edit', {
-    group_id: VK_GROUP_ID,
-    title: PRIVATE_BOT_TITLE,
-  });
+  const result = await vkApi('groups.edit', { group_id: VK_GROUP_ID, title: `🔒 ${PRIVATE_BOT_TITLE}` });
   return { renamed: Boolean(result), title: PRIVATE_BOT_TITLE };
+}
+
+async function discoverChats() {
+  const found = [];
+  let offset = 0;
+  for (let page = 0; page < 5; page += 1) {
+    const response = await vkApi('messages.getConversations', { count: 200, offset, filter: 'all', extended: 0 });
+    const items = Array.isArray(response?.items) ? response.items : [];
+    for (const item of items) {
+      const conversation = item?.conversation || {};
+      const peer = conversation?.peer || {};
+      if (String(peer?.type || '') !== 'chat') continue;
+      found.push({
+        peer_id: Number(peer?.id || 0),
+        local_id: Number(peer?.local_id || 0),
+        title: String(conversation?.chat_settings?.title || ''),
+        can_write: conversation?.can_write?.allowed !== false,
+      });
+    }
+    if (items.length < 200) break;
+    offset += items.length;
+  }
+  return found;
 }
 
 async function runSelfTest() {
@@ -137,11 +149,7 @@ async function runSelfTest() {
     if (!process.env.VK_TOKEN) missing.push('VK_TOKEN');
     if (!process.env.SUPABASE_URL) missing.push('SUPABASE_URL');
     if (!process.env.SUPABASE_BOT_SECRET) missing.push('SUPABASE_BOT_SECRET');
-    if (missing.length) {
-      const error = new Error(`Missing configuration: ${missing.join(', ')}`);
-      error.code = 'config';
-      throw error;
-    }
+    if (missing.length) { const error = new Error(`Missing configuration: ${missing.join(', ')}`); error.code = 'config'; throw error; }
     return { configured: true };
   });
 
@@ -149,67 +157,34 @@ async function runSelfTest() {
     const result = await storage.health();
     return { service: result?.service || null, version: result?.version || null };
   });
-
   await run('storage_read', async () => {
-    const [stats, cleanup] = await Promise.all([
-      storage.stats(ADMIN_USER_ID),
-      storage.listCleanupTargets(10),
-    ]);
-    return {
-      stats_ok: Boolean(stats?.ok),
-      cleanup_targets_ok: Boolean(cleanup?.ok),
-      cleanup_targets: Array.isArray(cleanup?.items) ? cleanup.items.length : null,
-    };
+    const [stats, cleanup] = await Promise.all([storage.stats(ADMIN_USER_ID), storage.listCleanupTargets(10)]);
+    return { stats_ok: Boolean(stats?.ok), cleanup_targets_ok: Boolean(cleanup?.ok), cleanup_targets: Array.isArray(cleanup?.items) ? cleanup.items.length : null };
   });
-
   await run('callback_server', async () => {
     const servers = await vkApi('groups.getCallbackServers', { group_id: VK_GROUP_ID });
     const items = Array.isArray(servers?.items) ? servers.items : [];
     const server = items.find((item) => String(item?.url || '').includes('/api/vk-callback')) || items[0];
-    if (!server?.id || String(server?.status || '') !== 'ok') {
-      const error = new Error(`Callback server status: ${server?.status || 'missing'}`);
-      error.code = 'callback_not_ok';
-      throw error;
-    }
+    if (!server?.id || String(server?.status || '') !== 'ok') { const error = new Error(`Callback server status: ${server?.status || 'missing'}`); error.code = 'callback_not_ok'; throw error; }
     return { status: String(server.status), url_ok: String(server.url || '').startsWith('https://project-xj41n.vercel.app/api/vk-callback') };
   });
-
   await run('community_identity', async () => {
     const response = await vkApi('groups.getById', { group_id: VK_GROUP_ID });
     const group = Array.isArray(response?.groups) ? response.groups[0] : Array.isArray(response) ? response[0] : response;
-    const title = String(group?.name || '');
-    if (title !== PRIVATE_BOT_TITLE) {
-      const error = new Error(`Unexpected bot title: ${title || 'unknown'}`);
-      error.code = 'title_mismatch';
-      throw error;
-    }
+    const title = String(group?.name || '').replace(/^🔒\s*/u, '').trim();
+    if (title !== PRIVATE_BOT_TITLE) { const error = new Error(`Unexpected bot title: ${title || 'unknown'}`); error.code = 'title_mismatch'; throw error; }
     return { title_ok: true };
   });
-
   await run('invite_link', async () => {
     const link = await getInviteLink(PRIMARY_PEER_ID);
-    if (!link) {
-      const error = new Error('VK did not return an invite link');
-      error.code = 'invite_unavailable';
-      throw error;
-    }
+    if (!link) { const error = new Error('VK did not return an invite link'); error.code = 'invite_unavailable'; throw error; }
     return { available: true };
   }, { required: false });
-
   await run('private_dm', async () => {
     const sent = await sendMessage(ADMIN_USER_ID, '🧪 AVIA MARKET TEXNIK TEST — SHAXSIY BOT\nBu xabar avtomatik test uchun yuborildi va o‘chiriladi.');
     const ref = messageRef(sent);
-    if (!ref.message_id && !ref.conversation_message_id) {
-      const error = new Error('DM send returned no message reference');
-      error.code = 'missing_message_ref';
-      throw error;
-    }
-    try {
-      await deleteMessageRefs(ADMIN_USER_ID, [ref]);
-    } catch (error) {
-      warnings.push('private_dm_cleanup');
-      checks.private_dm_cleanup = { ok: false, code: error?.code || null, message: error?.message || String(error) };
-    }
+    if (!ref.message_id && !ref.conversation_message_id) { const error = new Error('DM send returned no message reference'); error.code = 'missing_message_ref'; throw error; }
+    try { await deleteMessageRefs(ADMIN_USER_ID, [ref]); } catch (error) { warnings.push('private_dm_cleanup'); checks.private_dm_cleanup = { ok: false, code: error?.code || null, message: error?.message || String(error) }; }
     return { send_ok: true, cleanup_attempted: true, ref_type: ref.message_id ? 'message_id' : 'conversation_message_id' };
   });
 
@@ -218,11 +193,7 @@ async function runSelfTest() {
   await run('group_send', async () => {
     groupProbeSent = await sendMessage(PRIMARY_PEER_ID, '🧪 AVIA MARKET TEXNIK TEST — UMUMIY CHAT\nBu xabar avtomatik test uchun yuborildi va o‘chiriladi.');
     groupProbeRef = messageRef(groupProbeSent);
-    if (!groupProbeRef.message_id && !groupProbeRef.conversation_message_id) {
-      const error = new Error('Group send returned no message reference');
-      error.code = 'missing_message_ref';
-      throw error;
-    }
+    if (!groupProbeRef.message_id && !groupProbeRef.conversation_message_id) { const error = new Error('Group send returned no message reference'); error.code = 'missing_message_ref'; throw error; }
     await storage.trackBotMessage('selftest', groupProbeRef);
     return { send_ok: true, ref_type: groupProbeRef.message_id ? 'message_id' : 'conversation_message_id' };
   });
@@ -230,46 +201,26 @@ async function runSelfTest() {
   if (groupProbeSent) {
     await run('group_pin', async () => {
       const pinned = await pinMessage(PRIMARY_PEER_ID, groupProbeSent);
-      if (!pinned) {
-        const error = new Error('VK did not allow pinning the test message');
-        error.code = 'pin_unavailable';
-        throw error;
-      }
+      if (!pinned) { const error = new Error('VK did not allow pinning the test message'); error.code = 'pin_unavailable'; throw error; }
       return { pinned: true };
     }, { required: false });
-
     if (checks.group_pin?.ok) {
       await run('group_unpin', async () => {
         const unpinned = await unpinMessage(PRIMARY_PEER_ID);
-        if (!unpinned) {
-          const error = new Error('VK did not allow unpinning');
-          error.code = 'unpin_unavailable';
-          throw error;
-        }
+        if (!unpinned) { const error = new Error('VK did not allow unpinning'); error.code = 'unpin_unavailable'; throw error; }
         return { unpinned: true };
       }, { required: false });
     }
   }
-
   if (groupProbeRef) {
     await run('group_delete', async () => {
       const deleted = await deleteMessageRefs(PRIMARY_PEER_ID, [groupProbeRef]);
-      if (!Number(deleted?.deleted || 0)) {
-        const error = new Error('No group test message was deleted');
-        error.code = 'delete_failed';
-        throw error;
-      }
+      if (!Number(deleted?.deleted || 0)) { const error = new Error('No group test message was deleted'); error.code = 'delete_failed'; throw error; }
       return { deleted: Number(deleted.deleted) };
     });
   }
 
-  return {
-    ok: failures.length === 0,
-    version: '2.2.0',
-    failures,
-    warnings,
-    checks,
-  };
+  return { ok: failures.length === 0, version: '2.2.1', failures, warnings, checks };
 }
 
 function adminPrivateCommand(event) {
@@ -286,15 +237,8 @@ function adminPrivateCommand(event) {
 
 async function processEventWithAdminUi(event) {
   const adminCommand = adminPrivateCommand(event);
-  if (adminCommand === 'home') {
-    await pushAdminMenu();
-    return;
-  }
-  if (adminCommand === 'admin') {
-    const admin = adminHome();
-    await sendMessage(ADMIN_USER_ID, admin.text, admin.keyboard);
-    return;
-  }
+  if (adminCommand === 'home') { await pushAdminMenu(); return; }
+  if (adminCommand === 'admin') { const admin = adminHome(); await sendMessage(ADMIN_USER_ID, admin.text, admin.keyboard); return; }
   return processEvent(event);
 }
 
@@ -302,48 +246,34 @@ module.exports = async function handler(req, res) {
   if (req.method === 'GET') {
     if (String(req.query?.repair || '') === '1') {
       if (!protectedGetOk(req)) return json(res, 403, { ok: false, error: 'forbidden' });
-      try {
-        const result = await repairCallbackServer();
-        return json(res, 200, { ok: true, repair: result });
-      } catch (error) {
-        return json(res, 500, { ok: false, error: 'repair_failed', code: error?.code || null, message: error?.message || String(error) });
-      }
+      try { return json(res, 200, { ok: true, repair: await repairCallbackServer() }); }
+      catch (error) { return json(res, 500, { ok: false, error: 'repair_failed', code: error?.code || null, message: error?.message || String(error) }); }
     }
-
     if (String(req.query?.push_admin || '') === '1') {
       if (!protectedGetOk(req)) return json(res, 403, { ok: false, error: 'forbidden' });
-      try {
-        const result = await pushAdminMenu();
-        return json(res, 200, { ok: true, ...result });
-      } catch (error) {
-        return json(res, 500, { ok: false, error: 'admin_push_failed', code: error?.code || null, message: error?.message || String(error) });
-      }
+      try { return json(res, 200, { ok: true, ...(await pushAdminMenu()) }); }
+      catch (error) { return json(res, 500, { ok: false, error: 'admin_push_failed', code: error?.code || null, message: error?.message || String(error) }); }
     }
-
     if (String(req.query?.rename_bot || '') === '1') {
       if (!protectedGetOk(req)) return json(res, 403, { ok: false, error: 'forbidden' });
-      try {
-        const result = await renamePrivateBot();
-        return json(res, 200, { ok: true, ...result });
-      } catch (error) {
-        return json(res, 500, { ok: false, error: 'rename_failed', code: error?.code || null, message: error?.message || String(error) });
-      }
+      try { return json(res, 200, { ok: true, ...(await renamePrivateBot()) }); }
+      catch (error) { return json(res, 500, { ok: false, error: 'rename_failed', code: error?.code || null, message: error?.message || String(error) }); }
     }
-
+    if (String(req.query?.discover_chats || '') === '1') {
+      if (!protectedGetOk(req)) return json(res, 403, { ok: false, error: 'forbidden' });
+      try { return json(res, 200, { ok: true, current_peer_id: PRIMARY_PEER_ID, chats: await discoverChats() }); }
+      catch (error) { return json(res, 500, { ok: false, error: 'discover_failed', code: error?.code || null, message: error?.message || String(error) }); }
+    }
     if (String(req.query?.selftest || '') === '1') {
       if (!protectedGetOk(req)) return json(res, 403, { ok: false, error: 'forbidden' });
-      try {
-        const result = await runSelfTest();
-        return json(res, result.ok ? 200 : 503, result);
-      } catch (error) {
-        return json(res, 500, { ok: false, error: 'selftest_failed', code: error?.code || null, message: error?.message || String(error) });
-      }
+      try { const result = await runSelfTest(); return json(res, result.ok ? 200 : 503, result); }
+      catch (error) { return json(res, 500, { ok: false, error: 'selftest_failed', code: error?.code || null, message: error?.message || String(error) }); }
     }
 
     return json(res, 200, {
       ok: true,
       service: 'vk-avia-market-bot',
-      version: '2.2.0',
+      version: '2.2.1',
       architecture: 'protected-edge-storage',
       duplicate_guard_hours: 24,
       stale_pending_recovery_minutes: 5,
@@ -361,24 +291,14 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'method_not_allowed' });
   const event = req.body || {};
   if (Number(event.group_id || 0) !== VK_GROUP_ID) return text(res, 200, 'ok');
-
   if (event.type === 'confirmation') {
-    try {
-      return text(res, 200, await getConfirmationCode());
-    } catch (error) {
-      console.error('confirmation_code_failed', { code: error?.code || null, message: error?.message || String(error) });
-      return text(res, 200, process.env.VK_CONFIRMATION_STRING || '');
-    }
+    try { return text(res, 200, await getConfirmationCode()); }
+    catch (error) { console.error('confirmation_code_failed', { code: error?.code || null, message: error?.message || String(error) }); return text(res, 200, process.env.VK_CONFIRMATION_STRING || ''); }
   }
-
   if (!secretOk(event)) return json(res, 403, { ok: false, error: 'forbidden' });
 
   text(res, 200, 'ok');
   waitUntil(Promise.resolve(processEventWithAdminUi(event)).catch((error) => {
-    console.error('event_processing_failed', {
-      type: event?.type || null,
-      code: error?.code || null,
-      message: error?.message || String(error),
-    });
+    console.error('event_processing_failed', { type: event?.type || null, code: error?.code || null, message: error?.message || String(error) });
   }));
 };
