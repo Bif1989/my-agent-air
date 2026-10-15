@@ -67,7 +67,8 @@ function groupHome() {
     text: [
       '📌 AVIA MARKET — UMUMIY CHAT', '',
       'Bu — ochiq umumiy suhbat.',
-      '✅ Barcha ishtirokchilar erkin yozishi va javob berishi mumkin.', '',
+      '✅ Barcha ishtirokchilar erkin yozishi va javob berishi mumkin.',
+      '🛡 Bir foydalanuvchining bir xil uzun xabari 24 soat ichida faqat 1 marta qoladi.', '',
       '✈️ Taklif va 🔎 So‘rovlarni tartibli joylash uchun SHAXSIY BOTdan foydalaning:',
       `🔒 ${BOT_OPEN_URL}`,
       '',
