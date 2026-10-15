@@ -5,7 +5,7 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "X-DNS-Prefetch-Control", value: "off" },
   { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
-  { key: "Content-Security-Policy", value: "frame-ancestors 'self' https://vk.com https://*.vk.com https://vk.ru https://*.vk.ru; base-uri 'self'; form-action 'self'" },
+  { key: "Content-Security-Policy", value: "object-src 'none'; frame-ancestors 'self' https://vk.com https://*.vk.com https://vk.ru https://*.vk.ru; base-uri 'self'; form-action 'self'" },
   { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
   { key: "Permissions-Policy", value: "camera=(), geolocation=(), microphone=(self), payment=(), usb=()" },
   { key: "Strict-Transport-Security", value: "max-age=31536000" },
