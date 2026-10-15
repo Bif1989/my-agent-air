@@ -137,6 +137,14 @@ async function markDeleted(listingIds = [], botMessageIds = []) {
   });
 }
 
+async function checkChatDuplicate(userId, peerId, text) {
+  return callStorageSafe('check_chat_duplicate', {
+    user_id: Number(userId),
+    peer_id: Number(peerId),
+    text: String(text || ''),
+  });
+}
+
 module.exports = {
   callStorage,
   health,
@@ -149,4 +157,5 @@ module.exports = {
   trackBotMessage,
   listCleanupTargets,
   markDeleted,
+  checkChatDuplicate,
 };
