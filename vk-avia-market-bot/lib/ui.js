@@ -56,13 +56,18 @@ function privateHome() {
       '6️⃣ Bu yerga oddiy yozgan xabaringiz UMUMIY CHATga avtomatik chiqmaydi.', '',
       '✈️ E’lon berish:',
       '“➕ TAKLIF BERISH” yoki “🔎 SO‘ROV BERISH” → keyingi BITTA xabarda matnni yuboring.', '',
-      '🌐 UMUMIY CHAT tugmasi orqali ochiq suhbatga o‘tasiz.',
+      '🌐 UMUMIY CHAT tugmasi ASOSIY AVIA MARKET chatini ochadi.',
+      '🛡 Bot boshqa VK besedalarga admin qilib qo‘shilsa, ularda ham forward va takroriy xabarlarni nazorat qiladi.',
     ].join('\n'),
     keyboard: privateMenu(),
   };
 }
 
-function groupHome() {
+function groupHome({ isPrimary = true } = {}) {
+  const footer = isPrimary
+    ? 'Shaxsiy bot orqali berilgan Taklif/So‘rovlar shu ASOSIY CHATga avtomatik chiqariladi.'
+    : 'Bu qo‘shimcha chatda bot moderatsiya qiladi. Shaxsiy botdagi Taklif/So‘rovlar faqat ASOSIY AVIA MARKET chatiga avtomatik chiqariladi.';
+
   return {
     text: [
       '📌 AVIA MARKET — UMUMIY CHAT QOIDALARI', '',
@@ -76,7 +81,7 @@ function groupHome() {
       '🔒 SHAXSIY BOT:',
       BOT_OPEN_URL,
       '',
-      'Shaxsiy bot orqali berilgan Taklif/So‘rovlar shu chatga ham avtomatik chiqariladi.',
+      footer,
     ].join('\n'),
     keyboard: null,
   };
@@ -88,8 +93,10 @@ function adminHome() {
       '⚙️ AVIA MARKET — ADMIN BOSHQARUV', '',
       'Bu bo‘lim faqat admin akkauntida ko‘rinadi.',
       'Alohida ADMIN BOT yo‘q — boshqaruv shu SHAXSIY BOT ichida.', '',
-      '📌 Qoidalarni yangilash — UMUMIY CHATga yangi qoidalarni yuboradi va eski zakreplyon xabar o‘rniga pin qiladi.',
-      '🧹 Bot e’lonlarini tozalash — faqat bot kuzatgan e’lon/xizmat xabarlarini tozalaydi; oddiy foydalanuvchi yozishmalariga tegmaydi.', '',
+      '🛡 MULTI-CHAT REJIM: bot qo‘shilgan barcha VK besedalarda forward va 24 soatlik takroriy xabar nazorati ishlaydi.',
+      '📌 Qo‘shimcha chatda qoidani pin qilish uchun o‘sha chatning o‘zida /menu yozing.',
+      '📌 Qoidalarni yangilash — ASOSIY UMUMIY CHATga yangi qoidalarni yuboradi va eski zakreplyon xabar o‘rniga pin qiladi.',
+      '🧹 Bot e’lonlarini tozalash — faqat ASOSIY CHATdagi bot kuzatgan e’lon/xizmat xabarlarini tozalaydi; oddiy foydalanuvchi yozishmalariga tegmaydi.', '',
       '↩️ Shaxsiy menyuga qaytish: /menu',
     ].join('\n'),
     keyboard: adminMenu(),
