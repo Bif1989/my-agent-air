@@ -1,5 +1,7 @@
 const assert = require('assert');
 const { parseListing, normalizeListingText, listingMarker, formatStoredList } = require('../lib/market');
+const { messageRef } = require('../lib/vk');
+const storage = require('../lib/storage');
 const { privateMenu, groupMenu, adminMenu, privateHome, groupHome, adminHome } = require('../lib/ui');
 
 assert.strictEqual(normalizeListingText('  TAS   MOW  '), 'tas mow');
@@ -15,6 +17,10 @@ assert(parsed);
 assert.strictEqual(parsed.kind, 'offer');
 assert.strictEqual(parsed.userId, 123);
 assert.strictEqual(parsed.text, 'TAS–MOW 20 oktabr 220 USD');
+
+assert.deepStrictEqual(messageRef(77), { message_id: 77, conversation_message_id: null });
+assert.deepStrictEqual(messageRef({ message_id: 88, conversation_message_id: 99 }), { message_id: 88, conversation_message_id: 99 });
+assert.deepStrictEqual(messageRef({ conversation_message_id: 99 }), { message_id: null, conversation_message_id: 99 });
 
 const privateKeyboard = privateMenu();
 const groupKeyboard = groupMenu();
@@ -41,6 +47,10 @@ assert(groupHomeText.includes('SHAXSIY BOT'));
 assert(!groupHomeText.includes('ADMIN BOT'));
 assert(adminHomeText.includes('faqat admin akkauntida'));
 assert(adminHomeText.includes('Alohida ADMIN BOT yo‘q'));
+
+for (const name of ['health', 'setMode', 'createListing', 'finalizeListing', 'trackBotMessage', 'listCleanupTargets', 'markDeleted']) {
+  assert.strictEqual(typeof storage[name], 'function', `storage.${name} must be exported`);
+}
 
 const formatted = formatStoredList('TEST', [{ kind: 'offer', body: 'TAS–MOW 220 USD', created_at: '2026-10-15T00:00:00Z' }]);
 assert(formatted.includes('TAS–MOW 220 USD'));
