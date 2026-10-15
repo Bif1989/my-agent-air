@@ -19,7 +19,7 @@ const ADMIN_USER_ID = Number(process.env.VK_CLEANUP_USER_ID || 0);
 const CALLBACK_SECRET_HASH = String(process.env.VK_SECRET_SHA256 || '').trim().toLowerCase();
 const ADMIN_SECRET = String(process.env.VK_ADMIN_PUSH_SECRET || '');
 const CALLBACK_URL = 'https://project-xj41n.vercel.app/api/vk-callback?v=2';
-const PRIVATE_BOT_TITLE = 'AVIA MARKET — SHAXSIY BOT';
+const PRIVATE_BOT_TITLE = 'AVIA MARKET BOT';
 
 function sha256(value) {
   return crypto.createHash('sha256').update(String(value || ''), 'utf8').digest('hex');
@@ -86,7 +86,7 @@ async function pushAdminMenu() {
 }
 
 async function renamePrivateBot() {
-  const result = await vkApi('groups.edit', { group_id: VK_GROUP_ID, title: `🔒 ${PRIVATE_BOT_TITLE}` });
+  const result = await vkApi('groups.edit', { group_id: VK_GROUP_ID, title: PRIVATE_BOT_TITLE });
   return { renamed: Boolean(result), title: PRIVATE_BOT_TITLE };
 }
 
@@ -161,7 +161,7 @@ async function runSelfTest() {
   await run('community_identity', async () => {
     const response = await vkApi('groups.getById', { group_id: VK_GROUP_ID });
     const group = Array.isArray(response?.groups) ? response.groups[0] : Array.isArray(response) ? response[0] : response;
-    const title = String(group?.name || '').replace(/^🔒\s*/u, '').trim();
+    const title = String(group?.name || '').trim();
     if (title !== PRIVATE_BOT_TITLE) { const error = new Error(`Unexpected bot title: ${title || 'unknown'}`); error.code = 'title_mismatch'; throw error; }
     return { title_ok: true };
   });
