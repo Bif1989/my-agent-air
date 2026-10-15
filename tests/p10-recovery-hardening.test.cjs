@@ -48,3 +48,11 @@ test('P10 least-privilege rollout removes structural table privileges from brows
     'billing_payment_orders',
   ]) assert.match(sql, new RegExp(`public\\.${table}`));
 });
+
+test('P10 billing hardening covers both foreign-key indexes reported by advisors', () => {
+  const sql = read('supabase/p10/billing_indexes_review.sql');
+  assert.match(sql, /billing_payment_orders_plan_code_idx/);
+  assert.match(sql, /billing_payment_orders\(plan_code\)/);
+  assert.match(sql, /billing_payment_orders_subscription_id_idx/);
+  assert.match(sql, /billing_payment_orders\(subscription_id\)/);
+});
