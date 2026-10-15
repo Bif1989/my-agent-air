@@ -19,6 +19,11 @@ function secretOk(event) {
   return Boolean(process.env.VK_SECRET && event.secret === process.env.VK_SECRET);
 }
 
+function protectedGetOk(req) {
+  const key = String(req.query?.key || '').trim().toLowerCase();
+  return Boolean(CALLBACK_SECRET_HASH && key === CALLBACK_SECRET_HASH);
+}
+
 function text(res, status, value) {
   res.status(status).setHeader('content-type', 'text/plain; charset=utf-8');
   res.end(String(value));
@@ -69,6 +74,15 @@ async function repairCallbackServer() {
   };
 }
 
+async function pushAdminMenu() {
+  if (!ADMIN_USER_ID) throw new Error('admin_user_id_missing');
+  const home = privateHome();
+  const admin = adminHome();
+  await sendMessage(ADMIN_USER_ID, home.text, home.keyboard);
+  await sendMessage(ADMIN_USER_ID, admin.text, admin.keyboard);
+  return { sent: true };
+}
+
 function adminPrivateCommand(event) {
   if (event?.type !== 'message_new' || !ADMIN_USER_ID) return null;
   const msg = event?.object?.message || {};
@@ -84,10 +98,7 @@ function adminPrivateCommand(event) {
 async function processEventWithAdminUi(event) {
   const adminCommand = adminPrivateCommand(event);
   if (adminCommand === 'home') {
-    const home = privateHome();
-    const admin = adminHome();
-    await sendMessage(ADMIN_USER_ID, home.text, home.keyboard);
-    await sendMessage(ADMIN_USER_ID, admin.text, admin.keyboard);
+    await pushAdminMenu();
     return;
   }
   if (adminCommand === 'admin') {
@@ -101,10 +112,7 @@ async function processEventWithAdminUi(event) {
 module.exports = async function handler(req, res) {
   if (req.method === 'GET') {
     if (String(req.query?.repair || '') === '1') {
-      const key = String(req.query?.key || '').trim().toLowerCase();
-      if (!CALLBACK_SECRET_HASH || key !== CALLBACK_SECRET_HASH) {
-        return json(res, 403, { ok: false, error: 'forbidden' });
-      }
+      if (!protectedGetOk(req)) return json(res, 403, { ok: false, error: 'forbidden' });
       try {
         const result = await repairCallbackServer();
         return json(res, 200, { ok: true, repair: result });
@@ -118,16 +126,32 @@ module.exports = async function handler(req, res) {
       }
     }
 
+    if (String(req.query?.push_admin || '') === '1') {
+      if (!protectedGetOk(req)) return json(res, 403, { ok: false, error: 'forbidden' });
+      try {
+        const result = await pushAdminMenu();
+        return json(res, 200, { ok: true, ...result });
+      } catch (error) {
+        return json(res, 500, {
+          ok: false,
+          error: 'admin_push_failed',
+          code: error?.code || null,
+          message: error?.message || String(error),
+        });
+      }
+    }
+
     return json(res, 200, {
       ok: true,
       service: 'vk-avia-market-bot',
-      version: '2.1.1',
+      version: '2.1.2',
       architecture: 'protected-edge-storage',
       duplicate_guard_hours: 24,
       rate_limit_seconds: 30,
       fast_ack: true,
       dynamic_confirmation: true,
       admin_ui: 'private-only',
+      admin_push: true,
       group_configured: VK_GROUP_ID > 0,
       security: CALLBACK_SECRET_HASH ? 'sha256' : 'legacy-secret',
     });
