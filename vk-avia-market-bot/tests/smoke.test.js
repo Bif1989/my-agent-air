@@ -114,7 +114,9 @@ for (const name of [
   'health', 'setMode', 'getMode', 'clearMode', 'createListing', 'finalizeListing',
   'listUser', 'listRecent', 'stats', 'getProfile', 'setProfile', 'getOwnListing',
   'updateOwnListing', 'deleteOwnListing', 'trackBotMessage', 'listCleanupTargets',
-  'markDeleted', 'checkChatDuplicate',
+  'markDeleted', 'checkChatDuplicate', 'billingStatus', 'createClickTopup',
+  'prepareClickTopup', 'completeClickTopup', 'cancelClickTopup', 'buyTariff',
+  'billingHistory',
 ]) {
   assert.strictEqual(typeof storage[name], 'function', `storage.${name} must be exported`);
 }
