@@ -15,6 +15,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Deno-runtime Supabase Edge Functions, not part of the Next.js app.
     "supabase/**",
+    // Independent CommonJS Vercel app with its own npm test + syntax quality gate.
+    "vk-avia-market-bot/**",
   ]),
 ]);
 
