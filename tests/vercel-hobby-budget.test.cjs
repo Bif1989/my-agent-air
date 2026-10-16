@@ -28,6 +28,7 @@ test('Vercel Node API surface stays consolidated', () => {
     'app/api/ai/route.ts',
     'app/api/ai/transcribe/route.ts',
     'app/api/auth/[action]/route.ts',
+    'app/api/payments/click/[stage]/route.ts',
     'app/api/supplier-outreach/[action]/route.ts',
   ]);
 });
@@ -40,6 +41,9 @@ test('legacy per-action function routes stay removed', () => {
     'app/api/auth/signup/route.ts',
     'app/api/auth/update-password/route.ts',
     'app/api/auth/verify-signup/route.ts',
+    'app/api/payments/click/start/route.ts',
+    'app/api/payments/click/prepare/route.ts',
+    'app/api/payments/click/complete/route.ts',
     'app/api/supplier-outreach/send/route.ts',
     'app/api/supplier-outreach/send-sms/route.ts',
   ]) assert.equal(exists(route), false, `${route} would create another Vercel Function`);
@@ -100,6 +104,7 @@ test('Hobby uses one Tokyo function region close to the Supabase database', () =
 test('server functions keep bounded execution windows', () => {
   assert.ok(maxDuration('app/api/auth/[action]/route.ts') <= 20);
   assert.ok(maxDuration('app/api/supplier-outreach/[action]/route.ts') <= 15);
+  assert.ok(maxDuration('app/api/payments/click/[stage]/route.ts') <= 15);
   assert.ok(maxDuration('app/api/ai/transcribe/route.ts') <= 30);
   assert.ok(maxDuration('app/api/ai/route.ts') <= 60);
 });
