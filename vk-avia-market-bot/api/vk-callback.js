@@ -11,6 +11,7 @@ const {
   getInviteLink,
 } = require('../lib/vk');
 const storage = require('../lib/storage');
+const billing = require('../lib/billing');
 const { privateHome, groupHome, adminHome } = require('../lib/ui');
 
 const VK_GROUP_ID = Number(process.env.VK_GROUP_ID || 0);
@@ -139,8 +140,10 @@ async function runSelfTest() {
     if (!process.env.VK_TOKEN) missing.push('VK_TOKEN');
     if (!process.env.SUPABASE_URL) missing.push('SUPABASE_URL');
     if (!process.env.SUPABASE_BOT_SECRET) missing.push('SUPABASE_BOT_SECRET');
+    const click = billing.clickHealth();
+    if (click.enabled && !click.configured) missing.push('CLICK configuration');
     if (missing.length) { const error = new Error(`Missing configuration: ${missing.join(', ')}`); error.code = 'config'; throw error; }
-    return { configured: true };
+    return { configured: true, click_enabled: click.enabled, click_configured: click.configured };
   });
 
   await run('storage_health', async () => {
@@ -148,8 +151,18 @@ async function runSelfTest() {
     return { service: result?.service || null, version: result?.version || null };
   });
   await run('storage_read', async () => {
-    const [stats, cleanup] = await Promise.all([storage.stats(ADMIN_USER_ID), storage.listCleanupTargets(10)]);
-    return { stats_ok: Boolean(stats?.ok), cleanup_targets_ok: Boolean(cleanup?.ok), cleanup_targets: Array.isArray(cleanup?.items) ? cleanup.items.length : null };
+    const [stats, cleanup, bill] = await Promise.all([
+      storage.stats(ADMIN_USER_ID),
+      storage.listCleanupTargets(10),
+      storage.billingStatus(ADMIN_USER_ID),
+    ]);
+    return {
+      stats_ok: Boolean(stats?.ok),
+      cleanup_targets_ok: Boolean(cleanup?.ok),
+      cleanup_targets: Array.isArray(cleanup?.items) ? cleanup.items.length : null,
+      billing_ok: Boolean(bill?.ok),
+      monetization_enabled: Boolean(bill?.monetization_enabled),
+    };
   });
   await run('callback_server', async () => {
     const servers = await vkApi('groups.getCallbackServers', { group_id: VK_GROUP_ID });
@@ -218,7 +231,7 @@ async function runSelfTest() {
     });
   }
 
-  return { ok: failures.length === 0, version: '2.2.1', failures, warnings, checks };
+  return { ok: failures.length === 0, version: '2.3.0', failures, warnings, checks };
 }
 
 function adminPrivateCommand(event) {
@@ -241,6 +254,18 @@ async function processEventWithAdminUi(event) {
 }
 
 module.exports = async function handler(req, res) {
+  const clickStage = String(req.query?.click || '');
+  if (clickStage) {
+    if (!['prepare', 'complete'].includes(clickStage)) return json(res, 404, { ok: false, error: 'unknown_click_action' });
+    if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'method_not_allowed' });
+    try {
+      return json(res, 200, await billing.handleClickWebhook(req, clickStage));
+    } catch (error) {
+      console.error('click_callback_failed', { stage: clickStage, code: error?.code || null, message: error?.message || String(error) });
+      return json(res, 200, billing.clickError({}, -7));
+    }
+  }
+
   if (req.method === 'GET') {
     if (String(req.query?.repair || '') === '1') {
       if (!protectedGetOk(req)) return json(res, 403, { ok: false, error: 'forbidden' });
@@ -270,7 +295,7 @@ module.exports = async function handler(req, res) {
     return json(res, 200, {
       ok: true,
       service: 'vk-avia-market-bot',
-      version: '2.2.1',
+      version: '2.3.0',
       architecture: 'protected-edge-storage',
       duplicate_guard_hours: 24,
       stale_pending_recovery_minutes: 5,
@@ -280,6 +305,7 @@ module.exports = async function handler(req, res) {
       admin_ui: 'private-only',
       cleanup_strategy: 'tracked-message-refs',
       selftest: true,
+      billing: billing.clickHealth(),
       group_configured: VK_GROUP_ID > 0,
       security: CALLBACK_SECRET_HASH ? 'sha256-callback+separate-admin-key' : 'legacy-secret+separate-admin-key',
     });
@@ -293,7 +319,10 @@ module.exports = async function handler(req, res) {
   }
   if (!secretOk(event)) return json(res, 403, { ok: false, error: 'forbidden' });
   text(res, 200, 'ok');
-  waitUntil(Promise.resolve(processEventWithAdminUi(event)).catch((error) => {
+  waitUntil(Promise.resolve((async () => {
+    if (await billing.handleVkEvent(event)) return;
+    await processEventWithAdminUi(event);
+  })()).catch((error) => {
     console.error('event_processing_failed', { type: event?.type || null, code: error?.code || null, message: error?.message || String(error) });
   }));
 };

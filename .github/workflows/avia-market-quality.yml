@@ -1,0 +1,33 @@
+name: Avia Market Quality
+
+on:
+  pull_request:
+    branches: [vk-avia-market-bot]
+    paths:
+      - 'vk-avia-market-bot/**'
+      - '.github/workflows/avia-market-quality.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: vk-avia-market-bot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install exact direct dependency set
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+      - name: Tests
+        run: npm test
+      - name: Syntax checks
+        run: npm run check
