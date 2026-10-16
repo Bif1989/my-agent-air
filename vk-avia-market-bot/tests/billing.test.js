@@ -25,6 +25,9 @@ assert.deepStrictEqual(billing.parseProfileInput('BIF AVIA | +998 91 292 40 10 |
   telegram: '@bif89',
 });
 
+assert.strictEqual(billing.clickTopupReady({ click_topup_enabled: false }), false, 'DB release switch must keep top-ups hidden');
+assert.strictEqual(billing.clickTopupReady({ click_topup_enabled: true }), true, 'top-ups require both valid CLICK config and DB release switch');
+
 const prepare = {
   click_trans_id: '123456789',
   service_id: '113792',
