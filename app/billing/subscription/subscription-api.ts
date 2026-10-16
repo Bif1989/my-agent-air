@@ -1,5 +1,10 @@
 import { dedupeInFlight } from "@/lib/inflight-dedupe";
-import { authenticatedSupabaseFetch, getStoredSession } from "@/lib/supabase-auth";
+import {
+  authenticatedSupabaseFetch,
+  getStoredSession,
+  refreshSession,
+  sessionNeedsRefresh,
+} from "@/lib/supabase-auth";
 
 export type BillingSubscriptionStatus = {
   plan_code: string;
@@ -27,6 +32,12 @@ export type BillingSubscriptionRecord = {
   note: string | null;
   created_at: string;
   cancelled_at: string | null;
+};
+
+export type ClickPaymentStart = {
+  paymentUrl: string;
+  orderRef: string;
+  expiresAt: string;
 };
 
 function currentUserId() {
@@ -65,4 +76,48 @@ export function listMyBillingSubscriptions(limit = 50) {
     const response = await authenticatedSupabaseFetch(`billing_subscriptions?${params}`);
     return readJson<BillingSubscriptionRecord[]>(response);
   });
+}
+
+async function paymentSession() {
+  let session = getStoredSession();
+  if (!session) throw new Error("AUTH_SESSION_MISSING");
+  if (sessionNeedsRefresh(session)) {
+    session = await refreshSession();
+    if (!session) throw new Error("AUTH_SESSION_EXPIRED");
+  }
+  return session;
+}
+
+export async function startClickSubscriptionPayment(planCode = "monthly_unlimited") {
+  let session = await paymentSession();
+  const request = (accessToken: string) => fetch("/api/payments/click/start", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ planCode }),
+    cache: "no-store",
+    referrerPolicy: "no-referrer",
+  });
+
+  let response = await request(session.access_token);
+  if (response.status === 401) {
+    session = await refreshSession();
+    if (!session) throw new Error("AUTH_SESSION_EXPIRED");
+    response = await request(session.access_token);
+  }
+  const data = await response.json().catch(() => ({})) as Partial<ClickPaymentStart> & { error?: string };
+  if (!response.ok || !data.paymentUrl || !data.orderRef) {
+    const known: Record<string, string> = {
+      CLICK_DISABLED: "CLICK_PAYMENT_DISABLED",
+      CLICK_NOT_CONFIGURED: "CLICK_PAYMENT_UNAVAILABLE",
+      PLAN_UNAVAILABLE: "CLICK_PLAN_UNAVAILABLE",
+      ORDER_CREATE_FAILED: "CLICK_PAYMENT_UNAVAILABLE",
+      PAYMENT_TEMPORARILY_UNAVAILABLE: "CLICK_PAYMENT_UNAVAILABLE",
+    };
+    throw new Error(known[data.error || ""] || "CLICK_PAYMENT_UNAVAILABLE");
+  }
+  return data as ClickPaymentStart;
 }
