@@ -8,6 +8,7 @@ import { useUiSettings } from "@/lib/ui-settings";
 import {
   getBillingSubscriptionStatus,
   listMyBillingSubscriptions,
+  startClickSubscriptionPayment,
   type BillingSubscriptionRecord,
   type BillingSubscriptionStatus,
 } from "@/app/billing/subscription/subscription-api";
@@ -43,6 +44,8 @@ export default function BillingSubscriptionPage() {
   const [history, setHistory] = useState<BillingSubscriptionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [paying, setPaying] = useState(false);
+  const [paymentError, setPaymentError] = useState("");
   const t = (uz: string, ru: string) => isRu ? ru : uz;
 
   useEffect(() => {
@@ -73,6 +76,29 @@ export default function BillingSubscriptionPage() {
     }, 0);
     return () => { active = false; window.clearTimeout(timeoutId); };
   }, [session, isRu]);
+
+  async function payWithClick() {
+    setPaymentError("");
+    setPaying(true);
+    try {
+      const payment = await startClickSubscriptionPayment(status?.plan_code || "monthly_unlimited");
+      window.location.assign(payment.paymentUrl);
+    } catch (paymentFailure) {
+      const code = paymentFailure instanceof Error ? paymentFailure.message : "CLICK_PAYMENT_UNAVAILABLE";
+      if (code === "AUTH_SESSION_EXPIRED" || code === "AUTH_SESSION_MISSING") {
+        window.location.replace("/login");
+        return;
+      }
+      const messages: Record<string, [string, string]> = {
+        CLICK_PAYMENT_DISABLED: ["Click to‘lovi hali ishga tushirilmagan.", "Оплата Click пока не запущена."],
+        CLICK_PLAN_UNAVAILABLE: ["Unlimited tarifi hozir to‘lov uchun mavjud emas.", "Тариф Unlimited сейчас недоступен для оплаты."],
+        CLICK_PAYMENT_UNAVAILABLE: ["Click to‘lovini boshlashda vaqtinchalik xatolik. Qayta urinib ko‘ring.", "Временная ошибка запуска оплаты Click. Попробуйте ещё раз."],
+      };
+      const message = messages[code] || messages.CLICK_PAYMENT_UNAVAILABLE;
+      setPaymentError(isRu ? message[1] : message[0]);
+      setPaying(false);
+    }
+  }
 
   return <AppShell session={session} activePath="/deals">
     <div className="mx-auto max-w-5xl">
@@ -111,7 +137,13 @@ export default function BillingSubscriptionPage() {
             <div className="rounded-2xl bg-white p-4"><p className="text-xs font-semibold text-slate-400">{t("Tugaydi", "Окончание")}</p><p className="mt-2 text-sm font-semibold text-[#0b1f3a]">{formatDate(status.subscription_ends_at, isRu)}</p></div>
             <div className="rounded-2xl bg-white p-4"><p className="text-xs font-semibold text-slate-400">{t("Qoldi", "Осталось")}</p><p className="mt-2 text-xl font-bold text-emerald-700">{status.days_remaining} {t("kun", "дн.")}</p></div>
           </div> : <div className="mt-6 rounded-2xl border border-dashed border-blue-200 bg-blue-50/50 p-5 text-sm leading-6 text-slate-600">
-            {status.plan_is_active && status.plan_price_amount ? t("Tarif mavjud. Hozircha abonent to‘lovi administrator tomonidan tasdiqlanib faollashtiriladi. Keyinchalik Click/Payme online to‘lovi shu tarifga ulanadi.", "Тариф доступен. Сейчас абонентская плата подтверждается и активируется администратором. Позже к этому тарифу будет подключена онлайн-оплата Click/Payme.") : t("Oylik Unlimited tarifining narxi hali administrator tomonidan yoqilmagan.", "Цена тарифа Monthly Unlimited пока не активирована администратором.")}
+            {status.plan_is_active && status.plan_price_amount ? <>
+              <p>{t("Tarifni Click orqali xavfsiz to‘lab, avtomatik faollashtirishingiz mumkin.", "Тариф можно безопасно оплатить через Click и активировать автоматически.")}</p>
+              <button type="button" onClick={payWithClick} disabled={paying} className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-blue-600 px-5 py-2.5 font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
+                {paying ? t("Click ochilmoqda…", "Открываем Click…") : t(`${money(status.plan_price_amount, status.currency)} — Click orqali to‘lash`, `${money(status.plan_price_amount, status.currency)} — оплатить через Click`)}
+              </button>
+              {paymentError && <p role="alert" className="mt-3 text-sm font-medium text-red-700">{paymentError}</p>}
+            </> : t("Oylik Unlimited tarifining narxi hali administrator tomonidan yoqilmagan.", "Цена тарифа Monthly Unlimited пока не активирована администратором.")}
           </div>}
 
           <p className="mt-5 text-xs leading-5 text-slate-500">{t("Abonent sotib olish oldingi per-deal qarzdorlikni o‘chirmaydi. Abonent muddati tugagach tizim avtomatik ravishda odatiy per-deal tarifga qaytadi.", "Покупка абонемента не списывает предыдущую задолженность по сделкам. После окончания срока система автоматически возвращается к обычному тарифу за сделку.")}</p>
