@@ -1,4 +1,5 @@
 const BOT_OPEN_URL = process.env.VK_BOT_OPEN_URL || 'https://vk.me/aviamarketbot';
+const MARKET_CHAT_URL = process.env.VK_MARKET_CHAT_URL || 'https://vk.me/join/9Dn9taRYkLOBOpxp7ussbi/P6NICNIX98ZY=';
 
 function payload(cmd, extra = {}) { return JSON.stringify({ cmd, v: 2, ...extra }); }
 
@@ -6,7 +7,7 @@ function privateMenu() {
   return {
     inline: true,
     buttons: [
-      [{ action: { type: 'callback', label: '🌐 UMUMIY CHAT', payload: payload('open_market_chat') }, color: 'primary' }],
+      [{ action: { type: 'open_link', label: '🌐 UMUMIY CHAT', link: MARKET_CHAT_URL } }],
       [
         { action: { type: 'callback', label: '➕ TAKLIF BERISH', payload: payload('new_offer') }, color: 'primary' },
         { action: { type: 'callback', label: '🔎 SO‘ROV BERISH', payload: payload('new_search') }, color: 'primary' },
@@ -93,7 +94,7 @@ function privateHome() {
       '7️⃣ Spam, flood, haqorat, firibgarlik va mavzuga aloqasiz reklama taqiqlanadi.', '',
       '✈️ E’lon berish:',
       '“➕ TAKLIF BERISH” yoki “🔎 SO‘ROV BERISH” → keyingi BITTA xabarda matnni yuboring.', '',
-      '🌐 UMUMIY CHAT tugmasi ASOSIY AVIA MARKET chatining universal havolasini yuboradi.',
+      '🌐 UMUMIY CHAT tugmasi ASOSIY AVIA MARKET chatini to‘g‘ridan-to‘g‘ri ochadi.',
       '🛡 Bot boshqa VK besedalarga admin qilib qo‘shilsa, ularda ham forward va takroriy xabarlarni nazorat qiladi.',
     ].join('\n'),
     keyboard: privateMenu(),
