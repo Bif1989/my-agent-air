@@ -184,6 +184,54 @@ async function checkChatDuplicate(userId, peerId, text) {
   });
 }
 
+async function billingStatus(userId) {
+  return callStorageSafe('billing_status', { user_id: Number(userId) });
+}
+
+async function createClickTopup(userId, amount) {
+  return callStorage('create_click_topup', { user_id: Number(userId), amount: Number(amount) });
+}
+
+async function prepareClickTopup(orderRef, clickTransId, clickPaydocId, amount) {
+  return callStorage('prepare_click_topup', {
+    order_ref: String(orderRef || ''),
+    click_trans_id: String(clickTransId || ''),
+    click_paydoc_id: String(clickPaydocId || ''),
+    amount: Number(amount),
+  });
+}
+
+async function completeClickTopup(orderRef, clickTransId, clickPaydocId, merchantPrepareId, amount) {
+  return callStorage('complete_click_topup', {
+    order_ref: String(orderRef || ''),
+    click_trans_id: String(clickTransId || ''),
+    click_paydoc_id: String(clickPaydocId || ''),
+    merchant_prepare_id: Number(merchantPrepareId),
+    amount: Number(amount),
+  });
+}
+
+async function cancelClickTopup(orderRef, clickTransId, providerError = 0, providerErrorNote = '') {
+  return callStorageSafe('cancel_click_topup', {
+    order_ref: String(orderRef || ''),
+    click_trans_id: clickTransId == null ? null : String(clickTransId),
+    provider_error: Number(providerError || 0),
+    provider_error_note: String(providerErrorNote || '').slice(0, 500),
+  });
+}
+
+async function buyTariff(userId, planCode, purchaseKey) {
+  return callStorage('buy_tariff', {
+    user_id: Number(userId),
+    plan_code: String(planCode || ''),
+    purchase_key: String(purchaseKey || ''),
+  });
+}
+
+async function billingHistory(userId, limit = 10) {
+  return callStorageSafe('billing_history', { user_id: Number(userId), limit: Number(limit) || 10 });
+}
+
 module.exports = {
   callStorage,
   health,
@@ -204,4 +252,11 @@ module.exports = {
   listCleanupTargets,
   markDeleted,
   checkChatDuplicate,
+  billingStatus,
+  createClickTopup,
+  prepareClickTopup,
+  completeClickTopup,
+  cancelClickTopup,
+  buyTariff,
+  billingHistory,
 };
