@@ -82,8 +82,9 @@ async function paymentSession() {
   let session = getStoredSession();
   if (!session) throw new Error("AUTH_SESSION_MISSING");
   if (sessionNeedsRefresh(session)) {
-    session = await refreshSession();
-    if (!session) throw new Error("AUTH_SESSION_EXPIRED");
+    const refreshed = await refreshSession();
+    if (!refreshed) throw new Error("AUTH_SESSION_EXPIRED");
+    session = refreshed;
   }
   return session;
 }
@@ -104,8 +105,9 @@ export async function startClickSubscriptionPayment(planCode = "monthly_unlimite
 
   let response = await request(session.access_token);
   if (response.status === 401) {
-    session = await refreshSession();
-    if (!session) throw new Error("AUTH_SESSION_EXPIRED");
+    const refreshed = await refreshSession();
+    if (!refreshed) throw new Error("AUTH_SESSION_EXPIRED");
+    session = refreshed;
     response = await request(session.access_token);
   }
   const data = await response.json().catch(() => ({})) as Partial<ClickPaymentStart> & { error?: string };
