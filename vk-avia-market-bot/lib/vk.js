@@ -181,13 +181,25 @@ async function getUserName(userId) {
   }
 }
 
+function configuredInviteLink() {
+  const value = String(process.env.VK_MARKET_CHAT_URL || '').trim();
+  if (!value) return null;
+  return /^https:\/\/(?:vk\.me|vk\.ru|vk\.com)\/join\//i.test(value) ? value : null;
+}
+
 async function getInviteLink(peerId) {
+  const configured = configuredInviteLink();
   try {
     const response = await vkApi('messages.getInviteLink', { peer_id: Number(peerId), reset: 0 });
-    return response?.link || null;
+    if (response?.link) return response.link;
+    if (configured) return configured;
+    const error = new Error('VK did not return a universal invite link');
+    error.code = 'invite_unavailable';
+    throw error;
   } catch (error) {
+    if (configured) return configured;
     console.warn('invite_link_failed', { code: error?.code || null });
-    return null;
+    throw error;
   }
 }
 
