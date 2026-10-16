@@ -25,6 +25,12 @@ type ClickRpcResult = {
   merchant_confirm_id?: number;
 };
 
+type PaymentOrder = {
+  order_ref: string;
+  amount: number;
+  expires_at: string;
+};
+
 function env(name: string) {
   return (process.env[name] || "").trim();
 }
@@ -47,6 +53,17 @@ function serviceClient() {
   return createClient(SUPABASE_URL, secretKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
+}
+
+function requestIsCrossSite(request: NextRequest) {
+  if (request.headers.get("sec-fetch-site") === "cross-site") return true;
+  const origin = request.headers.get("origin");
+  if (!origin) return false;
+  try {
+    return new URL(origin).host !== request.nextUrl.host;
+  } catch {
+    return true;
+  }
 }
 
 async function verifyUser(request: NextRequest) {
@@ -83,8 +100,55 @@ async function readSmallJson(request: NextRequest) {
   }
 }
 
+async function pendingOrderForUser(
+  supabase: ReturnType<typeof serviceClient>,
+  userId: string,
+  planCode: string,
+  amount: number,
+) {
+  const { data, error } = await supabase
+    .from("billing_payment_orders")
+    .select("order_ref,amount,expires_at")
+    .eq("user_id", userId)
+    .eq("provider", "click")
+    .eq("purpose", "subscription")
+    .eq("plan_code", planCode)
+    .eq("amount", amount)
+    .eq("status", "pending")
+    .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data as PaymentOrder | null;
+}
+
+async function createPaymentOrder(
+  supabase: ReturnType<typeof serviceClient>,
+  userId: string,
+  planCode: string,
+  amount: number,
+) {
+  const { data, error } = await supabase
+    .from("billing_payment_orders")
+    .insert({
+      user_id: userId,
+      provider: "click",
+      purpose: "subscription",
+      plan_code: planCode,
+      amount,
+      currency: "UZS",
+      status: "pending",
+    })
+    .select("order_ref,amount,expires_at")
+    .single();
+  if (error || !data?.order_ref) throw error || new Error("ORDER_CREATE_FAILED");
+  return data as PaymentOrder;
+}
+
 async function startPayment(request: NextRequest) {
   const config = clickConfig();
+  if (requestIsCrossSite(request)) return NextResponse.json({ error: "CROSS_SITE_REQUEST" }, { status: 403 });
   if (!config.enabled) return NextResponse.json({ error: "CLICK_DISABLED" }, { status: 503 });
   if (!config.serviceId || !config.merchantId || !config.secretKey) {
     return NextResponse.json({ error: "CLICK_NOT_CONFIGURED" }, { status: 503 });
@@ -108,20 +172,11 @@ async function startPayment(request: NextRequest) {
     return NextResponse.json({ error: "PLAN_UNAVAILABLE" }, { status: 409 });
   }
 
-  const { data: order, error: orderError } = await supabase
-    .from("billing_payment_orders")
-    .insert({
-      user_id: user.id,
-      provider: "click",
-      purpose: "subscription",
-      plan_code: plan.code,
-      amount: priceAmount,
-      currency: "UZS",
-      status: "pending",
-    })
-    .select("order_ref,amount,expires_at")
-    .single();
-  if (orderError || !order?.order_ref) {
+  let order: PaymentOrder;
+  try {
+    order = await pendingOrderForUser(supabase, user.id, plan.code, priceAmount)
+      || await createPaymentOrder(supabase, user.id, plan.code, priceAmount);
+  } catch {
     return NextResponse.json({ error: "ORDER_CREATE_FAILED" }, { status: 503 });
   }
 
