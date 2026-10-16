@@ -6,6 +6,8 @@
     "deploymentEnabled": false
   },
   "functions": {
-    "api/vk-callback.js": { "maxDuration": 30 }
+    "api/vk-callback.js": { "maxDuration": 30 },
+    "api/click-prepare.js": { "maxDuration": 15 },
+    "api/click-complete.js": { "maxDuration": 15 }
   }
 }
