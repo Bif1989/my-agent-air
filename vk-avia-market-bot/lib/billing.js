@@ -20,11 +20,16 @@ function callbackButton(label, cmd, color = 'secondary', extra = {}) {
   return { action: { type: 'callback', label, payload: payload(cmd, extra) }, color };
 }
 
+function clickTopupReady(status = {}) {
+  return Boolean(CLICK_ENABLED && clickConfigured() && status?.click_topup_enabled);
+}
+
 function billingKeyboard(status = {}) {
   const plan = status?.plan || {};
-  const rows = [
-    [callbackButton('💳 BALANS TO‘LDIRISH', 'billing_topup', 'primary')],
-  ];
+  const rows = [];
+  if (clickTopupReady(status)) {
+    rows.push([callbackButton('💳 BALANS TO‘LDIRISH', 'billing_topup', 'primary')]);
+  }
   if (status?.monetization_enabled && plan?.is_active && Number(plan?.price_amount || 0) > 0) {
     rows.push([callbackButton('⭐ PRO TARIFNI OLISH', 'billing_buy', 'positive')]);
   }
@@ -143,10 +148,10 @@ function buildClickPaymentUrl({ orderRef, amount }) {
 async function safeBillingStatus(userId) {
   try {
     const status = await storage.billingStatus(userId);
-    return status?.ok ? status : { ok: false, balance: 0, plan: {}, monetization_enabled: false, subscription_active: false };
+    return status?.ok ? status : { ok: false, balance: 0, plan: {}, monetization_enabled: false, click_topup_enabled: false, subscription_active: false };
   } catch (error) {
     console.warn('billing_status_failed', { userId, code: error?.code || null });
-    return { ok: false, balance: 0, plan: {}, monetization_enabled: false, subscription_active: false };
+    return { ok: false, balance: 0, plan: {}, monetization_enabled: false, click_topup_enabled: false, subscription_active: false };
   }
 }
 
@@ -165,7 +170,7 @@ async function sendCabinet(userId) {
     : planReady
       ? `⭐ Tarif: ${plan?.name || 'AVIA MARKET PRO'} / ${Number(plan?.duration_days || 30)} kun — ${money(price)}`
       : '🆓 Tarif: hozircha bepul rejim';
-  const clickLine = CLICK_ENABLED && clickConfigured()
+  const clickLine = clickTopupReady(billing)
     ? '💳 Click orqali balans to‘ldirish: faol'
     : '💳 Click orqali balans to‘ldirish: tayyorlanmoqda';
   const text = [
@@ -189,7 +194,8 @@ async function sendCabinet(userId) {
 }
 
 async function sendTopupPrompt(userId) {
-  if (!CLICK_ENABLED || !clickConfigured()) {
+  const billing = await safeBillingStatus(userId);
+  if (!clickTopupReady(billing)) {
     await sendMessage(userId, [
       '💳 BALANS TO‘LDIRISH',
       '',
@@ -211,7 +217,8 @@ async function sendTopupPrompt(userId) {
 }
 
 async function handleTopupText(userId, text) {
-  if (!CLICK_ENABLED || !clickConfigured()) {
+  const billing = await safeBillingStatus(userId);
+  if (!clickTopupReady(billing)) {
     await storage.clearMode(userId).catch(() => null);
     await sendMessage(userId, '💳 Click orqali to‘lov hozircha yoqilmagan.', simpleBackKeyboard());
     return true;
@@ -288,9 +295,12 @@ async function buyTariff(userId, eventId, peerId, payloadValue) {
       return;
     }
     if (result?.status === 'insufficient_balance') {
+      const billing = await safeBillingStatus(userId);
       await sendMessage(userId, `❗ Balans yetarli emas.\nBalans: ${money(result?.balance || 0)}\nKerak: ${money(result?.required || 0)}`, {
         inline: true,
-        buttons: [[callbackButton('💳 BALANS TO‘LDIRISH', 'billing_topup', 'primary')], [callbackButton('↩️ KABINET', 'cabinet')]],
+        buttons: clickTopupReady(billing)
+          ? [[callbackButton('💳 BALANS TO‘LDIRISH', 'billing_topup', 'primary')], [callbackButton('↩️ KABINET', 'cabinet')]]
+          : [[callbackButton('↩️ KABINET', 'cabinet')]],
       });
       return;
     }
@@ -363,7 +373,7 @@ async function handleMessageEvent(obj) {
   }
   if (cmd === 'billing_topup') {
     await sendTopupPrompt(userId);
-    await answerEvent(obj, CLICK_ENABLED ? 'Summani yuboring' : 'Click hali yoqilmagan');
+    await answerEvent(obj, 'Balans bo‘limi');
     return true;
   }
   if (cmd === 'billing_history') {
@@ -557,6 +567,7 @@ module.exports = {
   clickConfigured,
   clickError,
   clickHealth,
+  clickTopupReady,
   expectedClickSignature,
   handleClickWebhook,
   handleVkEvent,
