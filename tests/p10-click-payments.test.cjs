@@ -74,10 +74,14 @@ test('CLICK payment URL uses server order reference and configured merchant valu
   assert.equal(url.searchParams.get('transaction_param'), 'maa_0123456789abcdef0123456789abcdef');
 });
 
-test('CLICK route stays server-only and reuses existing billing RPCs', () => {
+test('CLICK route stays server-only, same-origin on start, and reuses existing billing primitives', () => {
   const route = fs.readFileSync(path.join(root, 'app/api/payments/click/[stage]/route.ts'), 'utf8');
   assert.match(route, /process\.env\[name\]/);
   assert.doesNotMatch(route, /NEXT_PUBLIC_CLICK/);
+  assert.match(route, /requestIsCrossSite/);
+  assert.match(route, /sec-fetch-site/);
+  assert.match(route, /pendingOrderForUser/);
+  assert.match(route, /status", "pending"/);
   assert.match(route, /prepare_billing_click_order/);
   assert.match(route, /complete_billing_click_order/);
   assert.match(route, /cancel_billing_click_order/);
