@@ -47,8 +47,11 @@ export default function RegisterPage() {
   const captchaRequired = Boolean(TURNSTILE_SITE_KEY);
 
   useEffect(() => {
-    const code = new URLSearchParams(window.location.search).get("ref")?.trim().toUpperCase() || "";
-    if (/^[A-Z0-9]{10,24}$/.test(code)) setReferralCode(code);
+    const timer = window.setTimeout(() => {
+      const code = new URLSearchParams(window.location.search).get("ref")?.trim().toUpperCase() || "";
+      if (/^[A-Z0-9]{10,24}$/.test(code)) setReferralCode(code);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
