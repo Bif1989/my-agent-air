@@ -12,7 +12,7 @@ function date(value: string | null) { return value ? new Intl.DateTimeFormat("uz
 function statusLabel(status: string) { return status === "qualified" ? "Tasdiqlangan" : status === "pending" ? "Kutilmoqda" : "Rad etilgan"; }
 
 export default function AdminReferralsPage() {
-  const [session, setSession] = useState<AuthSession | null>(null);
+  const [session] = useState<AuthSession | null>(() => getStoredSession());
   const [data, setData] = useState<AdminReferralDashboard | null>(null);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<"leaders" | "referrals" | "rewards">("leaders");
@@ -22,7 +22,6 @@ export default function AdminReferralsPage() {
   useEffect(() => {
     const stored = getStoredSession();
     if (!stored) { window.location.replace("/login?next=/admin/referrals"); return; }
-    setSession(stored);
     getCurrentProfile().then((profile) => {
       if (profile?.role !== "admin") { window.location.replace("/dashboard"); return null; }
       return getAdminReferralDashboard();
