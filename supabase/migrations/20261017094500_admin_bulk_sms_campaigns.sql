@@ -52,9 +52,12 @@ begin
     raise exception 'invalid_batch_size';
   end if;
 
-  -- Recover a claim only if a previous server request died well beyond its 30s runtime window.
+  -- If a server request died after provider delivery but before the DB update,
+  -- the delivery result is ambiguous. Never auto-send that phone again.
   update public.admin_sms_recipients
-  set status = 'pending', updated_at = now()
+  set status = 'failed',
+      failure_reason = coalesce(failure_reason, 'stale_processing_unknown_delivery'),
+      updated_at = now()
   where campaign_id = p_campaign_id
     and status = 'processing'
     and updated_at < now() - interval '2 minutes';
