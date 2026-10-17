@@ -20,7 +20,7 @@ export type AdminSmsRecipient = {
   id: string;
   campaign_id: string;
   phone: string;
-  status: "pending" | "sent" | "failed" | "skipped";
+  status: "pending" | "processing" | "sent" | "failed" | "skipped";
   provider_message_id: string | null;
   failure_reason: string | null;
   attempts: number;
