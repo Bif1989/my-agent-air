@@ -1,10 +1,11 @@
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase-config";
 import type { AssistantDraft } from "@/lib/request-assistant";
 
-const MAX_MATCHES = 5;
-const MAX_SEARCH_TERMS = 6;
+const MAX_MATCHES = 6;
+const MAX_SEARCH_TERMS = 9;
+const SEARCH_LIMIT = 12;
 
-export type AiTourPostMatch = {
+export type AiFeedPostMatch = {
   id: string;
   category: string;
   title: string | null;
@@ -18,25 +19,42 @@ export type AiTourPostMatch = {
   created_at: string;
 };
 
-type FeedSearchRow = AiTourPostMatch & {
+// Kept as a compatibility alias so the AI route does not need a second function surface.
+export type AiTourPostMatch = AiFeedPostMatch;
+
+type FeedSearchRow = AiFeedPostMatch & {
   body: string;
   status: string;
   expires_at: string | null;
 };
 
-type TourRequest = AssistantDraft & { category?: string };
+type ServiceRequest = AssistantDraft & { category?: string };
 
 type SearchArgs = {
-  requests: TourRequest[];
+  requests: ServiceRequest[];
   message: string;
   authorization: string;
   signal: AbortSignal;
 };
 
+type CategoryRule = { feedCategories: string[]; terms: string[] };
+
+const FEED_CATEGORIES = new Set(["aviachipta", "tur_paket", "mehmonxona", "transfer", "viza", "umra", "hamkorlik", "boshqa"]);
+
+const CATEGORY_RULES: Record<string, CategoryRule> = {
+  Aviachipta: { feedCategories: ["aviachipta"], terms: ["aviachipta", "авиабилет", "flight", "bilet"] },
+  "Tur paket": { feedCategories: ["tur_paket"], terms: ["tur paket", "тур", "tour", "турпакет"] },
+  Mehmonxona: { feedCategories: ["mehmonxona"], terms: ["mehmonxona", "отель", "hotel", "гостиница"] },
+  Transfer: { feedCategories: ["transfer"], terms: ["transfer", "трансфер", "transport", "транспорт"] },
+  Gid: { feedCategories: ["boshqa", "hamkorlik"], terms: ["gid", "гид", "guide", "экскурсовод"] },
+  Viza: { feedCategories: ["viza"], terms: ["viza", "виза", "visa"] },
+  Boshqa: { feedCategories: ["boshqa", "hamkorlik"], terms: ["xizmat", "услуга", "service"] },
+};
+
 const STOP_WORDS = new Set([
-  "tur", "turi", "turpaket", "paket", "kerak", "qidir", "qidirib", "top", "topib", "ber", "bering", "uchun", "bormi", "bor", "sayohat", "xohlayman", "xoxlayman",
-  "tour", "package", "need", "find", "show", "want", "trip",
-  "тур", "пакет", "нужен", "нужна", "нужно", "найди", "найти", "покажи", "хочу", "поездка", "есть", "для",
+  "kerak", "qidir", "qidirib", "top", "topib", "ber", "bering", "uchun", "bormi", "bor", "xohlayman", "xoxlayman", "iltimos", "menga", "bizga", "tilida",
+  "need", "find", "show", "want", "please", "for", "with", "from", "the", "a", "an",
+  "нужен", "нужна", "нужно", "нужны", "найди", "найти", "покажи", "хочу", "есть", "для", "мне", "нам", "пожалуйста", "на", "в", "с", "из",
 ]);
 
 const DESTINATION_ALIASES: Array<{ keys: string[]; terms: string[] }> = [
@@ -51,6 +69,18 @@ const DESTINATION_ALIASES: Array<{ keys: string[]; terms: string[] }> = [
   { keys: ["ozarbayjon", "azerbaijan", "азербайджан", "baku", "баку"], terms: ["Azerbaijan", "Ozarbayjon", "Азербайджан", "Baku"] },
 ];
 
+const LANGUAGE_ALIASES: Array<{ keys: string[]; terms: string[] }> = [
+  { keys: ["ruscha", "rus tili", "russian", "русск"], terms: ["русский", "русскоязычный", "Russian", "ruscha"] },
+  { keys: ["ingliz", "english", "англ"], terms: ["English", "английский", "ingliz"] },
+  { keys: ["uzbek", "o'zbek", "ozbek", "узбек"], terms: ["o'zbek", "Uzbek", "узбекский"] },
+  { keys: ["turk", "turkish", "турец"], terms: ["Turkish", "турецкий", "turk"] },
+];
+
+const CYRILLIC_TO_LATIN: Record<string, string> = {
+  а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "yo", ж: "zh", з: "z", и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f", х: "h", ц: "ts", ч: "ch", ш: "sh", щ: "sh", ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
+  қ: "q", ғ: "g", ҳ: "h", ў: "o",
+};
+
 function normalize(value: string) {
   return value
     .toLowerCase()
@@ -58,6 +88,20 @@ function normalize(value: string) {
     .replace(/[^\p{L}\p{N}\s'-]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function latinComparable(value: string) {
+  return normalize(value)
+    .split("")
+    .map((char) => CYRILLIC_TO_LATIN[char] ?? char)
+    .join("")
+    .replace(/[^a-z0-9\s'-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function consonantSkeleton(value: string) {
+  return latinComparable(value).replace(/[aeiouy'\s-]/g, "");
 }
 
 function stripUzbekCaseSuffix(word: string) {
@@ -70,52 +114,132 @@ function stripUzbekCaseSuffix(word: string) {
 function addTerm(target: string[], seen: Set<string>, value: string) {
   const cleaned = value.trim().replace(/\s+/g, " ").slice(0, 48);
   const key = normalize(cleaned);
-  if (!cleaned || key.length < 3 || seen.has(key)) return;
+  if (!cleaned || key.length < 2 || seen.has(key)) return;
   seen.add(key);
   target.push(cleaned);
 }
 
-export function buildTourPostSearchTerms(destination: string, message: string) {
+function collectText(value: unknown, depth = 0): string[] {
+  if (depth > 3 || value === null || value === undefined) return [];
+  if (typeof value === "string") return value.trim() ? [value.trim()] : [];
+  if (Array.isArray(value)) return value.flatMap((item) => collectText(item, depth + 1));
+  if (typeof value === "object") return Object.values(value as Record<string, unknown>).flatMap((item) => collectText(item, depth + 1));
+  return [];
+}
+
+function inferredCategories(message: string) {
+  const haystack = normalize(message);
+  return Object.entries(CATEGORY_RULES)
+    .filter(([, rule]) => rule.terms.some((term) => haystack.includes(normalize(term))))
+    .map(([category]) => category);
+}
+
+function requestCategories(requests: ServiceRequest[], message: string) {
+  const categories = new Set(requests.map((item) => String(item.category || "").trim()).filter(Boolean));
+  for (const category of inferredCategories(message)) categories.add(category);
+  return [...categories];
+}
+
+function requestLocations(requests: ServiceRequest[]) {
+  const locations: string[] = [];
+  const seen = new Set<string>();
+  for (const request of requests) {
+    for (const value of [request.destination, request.origin]) {
+      if (typeof value !== "string" || !value.trim()) continue;
+      const key = normalize(value);
+      if (!seen.has(key)) { seen.add(key); locations.push(value.trim()); }
+    }
+  }
+  return locations.slice(0, 8);
+}
+
+export function buildAiFeedPostSearchTerms(requests: ServiceRequest[], message: string) {
   const terms: string[] = [];
   const seen = new Set<string>();
-  addTerm(terms, seen, destination);
+  const categories = requestCategories(requests, message);
+  const locations = requestLocations(requests);
 
-  const normalizedMessage = normalize(message);
-  for (const raw of normalizedMessage.match(/[\p{L}\p{N}]+/gu) || []) {
+  for (const location of locations) addTerm(terms, seen, location);
+
+  for (const category of categories) {
+    const rule = CATEGORY_RULES[category];
+    if (!rule) continue;
+    for (const term of rule.terms.slice(0, 2)) addTerm(terms, seen, term);
+  }
+
+  const combinedText = [message, ...requests.flatMap((request) => collectText(request))].join(" ");
+  const normalizedCombined = normalize(combinedText);
+  for (const group of LANGUAGE_ALIASES) {
+    if (!group.keys.some((key) => normalizedCombined.includes(normalize(key)))) continue;
+    for (const term of group.terms.slice(0, 2)) addTerm(terms, seen, term);
+  }
+
+  for (const group of DESTINATION_ALIASES) {
+    if (!group.keys.some((key) => normalizedCombined.includes(normalize(key)))) continue;
+    for (const term of group.terms.slice(0, 2)) addTerm(terms, seen, term);
+  }
+
+  for (const raw of normalizedCombined.match(/[\p{L}\p{N}]+/gu) || []) {
     const word = stripUzbekCaseSuffix(raw);
     if (word.length < 3 || STOP_WORDS.has(word)) continue;
     addTerm(terms, seen, word);
-    if (terms.length >= 3) break;
-  }
-
-  const aliasHaystack = `${normalize(destination)} ${normalizedMessage}`;
-  for (const group of DESTINATION_ALIASES) {
-    if (!group.keys.some((key) => aliasHaystack.includes(key))) continue;
-    for (const term of group.terms) addTerm(terms, seen, term);
+    if (terms.length >= MAX_SEARCH_TERMS) break;
   }
 
   return terms.slice(0, MAX_SEARCH_TERMS);
 }
 
-function scoreRow(row: FeedSearchRow, terms: string[]) {
+// Compatibility helper used by the previous tour-only regression tests and callers.
+export function buildTourPostSearchTerms(destination: string, message: string) {
+  return buildAiFeedPostSearchTerms([{ category: "Tur paket", destination }], message);
+}
+
+function locationScore(row: FeedSearchRow, locations: string[]) {
+  if (!locations.length) return 0;
+  const rowText = [row.destination, row.origin, row.title, row.body].filter(Boolean).join(" ");
+  const comparableRow = latinComparable(rowText);
+  const skeletonRow = consonantSkeleton(rowText);
+  let best = 0;
+  for (const location of locations) {
+    const comparable = latinComparable(location);
+    const skeleton = consonantSkeleton(location);
+    if (comparable.length >= 3 && comparableRow.includes(comparable)) best = Math.max(best, 9);
+    else if (skeleton.length >= 3 && skeletonRow.includes(skeleton)) best = Math.max(best, 5);
+  }
+  return best;
+}
+
+function scoreRow(row: FeedSearchRow, terms: string[], categories: string[], locations: string[]) {
   const destination = normalize(row.destination || "");
+  const origin = normalize(row.origin || "");
   const title = normalize(row.title || "");
   const body = normalize(row.body || "");
   let score = row.author_is_verified ? 1 : 0;
   if (row.price !== null && row.price !== undefined) score += 0.25;
+
+  for (const category of categories) {
+    const rule = CATEGORY_RULES[category];
+    if (!rule) continue;
+    if (rule.feedCategories.includes(row.category)) score += 6;
+    if (rule.terms.some((term) => title.includes(normalize(term)))) score += 4;
+    else if (rule.terms.some((term) => body.includes(normalize(term)))) score += 2;
+  }
+
+  score += locationScore(row, locations);
+
   for (const rawTerm of terms) {
     const term = normalize(rawTerm);
     if (!term) continue;
-    if (destination === term) score += 8;
-    else if (destination && (destination.includes(term) || term.includes(destination))) score += 5;
-    if (title.includes(term)) score += 3;
+    if (destination === term || origin === term) score += 6;
+    else if ((destination && destination.includes(term)) || (origin && origin.includes(term))) score += 4;
+    if (title.includes(term)) score += 2.5;
     if (body.includes(term)) score += 1;
   }
   return score;
 }
 
-function sanitizeRow(row: FeedSearchRow): AiTourPostMatch | null {
-  if (!row || typeof row.id !== "string" || row.category !== "tur_paket" || row.status !== "active") return null;
+function sanitizeRow(row: FeedSearchRow): AiFeedPostMatch | null {
+  if (!row || typeof row.id !== "string" || !FEED_CATEGORIES.has(row.category) || row.status !== "active") return null;
   if (row.expires_at) {
     const expiry = Date.parse(row.expires_at);
     if (Number.isFinite(expiry) && expiry <= Date.now()) return null;
@@ -136,23 +260,19 @@ function sanitizeRow(row: FeedSearchRow): AiTourPostMatch | null {
   };
 }
 
-export async function findAiTourPostMatches({ requests, message, authorization, signal }: SearchArgs) {
-  const tourRequests = requests.filter((item) => item.category === "Tur paket" && typeof item.destination === "string" && item.destination.trim());
-  if (!tourRequests.length) return [] as AiTourPostMatch[];
+export async function findAiFeedPostMatches({ requests, message, authorization, signal }: SearchArgs) {
+  const categories = requestCategories(requests, message);
+  if (!categories.length && !requests.length) return [] as AiFeedPostMatch[];
 
-  const terms: string[] = [];
-  const seenTerms = new Set<string>();
-  for (const draft of tourRequests) {
-    for (const term of buildTourPostSearchTerms(draft.destination || "", message)) addTerm(terms, seenTerms, term);
-    if (terms.length >= MAX_SEARCH_TERMS) break;
-  }
-  if (!terms.length) return [] as AiTourPostMatch[];
+  const terms = buildAiFeedPostSearchTerms(requests, message);
+  if (!terms.length) return [] as AiFeedPostMatch[];
+  const locations = requestLocations(requests);
 
   const results = await Promise.allSettled(terms.map(async (term) => {
     const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/list_feed_posts`, {
       method: "POST",
       headers: { apikey: SUPABASE_KEY, Authorization: authorization, "Content-Type": "application/json" },
-      body: JSON.stringify({ p_category: "tur_paket", p_post_type: null, p_search: term, p_limit: 8, p_offset: 0 }),
+      body: JSON.stringify({ p_category: null, p_post_type: null, p_search: term, p_limit: SEARCH_LIMIT, p_offset: 0 }),
       cache: "no-store",
       signal,
     });
@@ -165,9 +285,9 @@ export async function findAiTourPostMatches({ requests, message, authorization, 
   for (const result of results) {
     if (result.status !== "fulfilled") continue;
     for (const row of result.value) {
-      const sanitized = sanitizeRow(row);
-      if (!sanitized) continue;
-      const score = scoreRow(row, terms);
+      if (!sanitizeRow(row)) continue;
+      const score = scoreRow(row, terms, categories, locations);
+      if (score <= 0) continue;
       const existing = ranked.get(row.id);
       if (!existing || score > existing.score) ranked.set(row.id, { row, score });
     }
@@ -176,6 +296,9 @@ export async function findAiTourPostMatches({ requests, message, authorization, 
   return [...ranked.values()]
     .sort((a, b) => b.score - a.score || Date.parse(b.row.created_at || "") - Date.parse(a.row.created_at || ""))
     .map(({ row }) => sanitizeRow(row))
-    .filter((row): row is AiTourPostMatch => Boolean(row))
+    .filter((row): row is AiFeedPostMatch => Boolean(row))
     .slice(0, MAX_MATCHES);
 }
+
+// Compatibility export: the existing AI route calls this name, but matching is now all-service.
+export const findAiTourPostMatches = findAiFeedPostMatches;
