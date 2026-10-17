@@ -59,14 +59,14 @@ export default function AppShell({ children, session, activePath = "" }: { child
   const isDashboard = activePath === "/dashboard";
 
   const navigation = isRu ? [
-    ["AI центр", "/dashboard"], ["Посты", "/feed"], ["Запросы", "/requests"], ["Агенты", "/agents"], ["Сделки", "/deals"], ["Чат", "/messenger"],
+    ["AI центр", "/dashboard"], ["Посты", "/feed"], ["Запросы", "/requests"], ["Агенты", "/agents"], ["Сделки", "/deals"], ["Чат", "/messenger"], ["Связь с админом", "/support"],
   ] as const : [
-    ["AI markaz", "/dashboard"], ["Postlar", "/feed"], ["So‘rovlar va takliflar", "/requests"], ["Agentlar", "/agents"], ["Bitimlar", "/deals"], ["Chat", "/messenger"],
+    ["AI markaz", "/dashboard"], ["Postlar", "/feed"], ["So‘rovlar va takliflar", "/requests"], ["Agentlar", "/agents"], ["Bitimlar", "/deals"], ["Chat", "/messenger"], ["Admin bilan aloqa", "/support"],
   ] as const;
   const mobileNavigation = isRu ? [
-    ["AI", "/dashboard", "✦"], ["Запрос", "/requests", "↔"], ["Агент", "/agents", "◎"], ["Сделка", "/deals", "◇"], ["Чат", "/messenger", "◌"], ["Счёт и тариф", "/profile", "◉"],
+    ["AI", "/dashboard", "✦"], ["Запрос", "/requests", "↔"], ["Агент", "/agents", "◎"], ["Сделка", "/deals", "◇"], ["Чат", "/messenger", "◌"], ["Админ", "/support", "✉"], ["Счёт", "/profile", "◉"],
   ] as const : [
-    ["AI", "/dashboard", "✦"], ["So‘rov", "/requests", "↔"], ["Agent", "/agents", "◎"], ["Bitim", "/deals", "◇"], ["Chat", "/messenger", "◌"], ["Hisob va tarif", "/profile", "◉"],
+    ["AI", "/dashboard", "✦"], ["So‘rov", "/requests", "↔"], ["Agent", "/agents", "◎"], ["Bitim", "/deals", "◇"], ["Chat", "/messenger", "◌"], ["Aloqa", "/support", "✉"], ["Hisob", "/profile", "◉"],
   ] as const;
 
   useEffect(() => { pathnameRef.current = pathname; }, [pathname]);
@@ -261,7 +261,7 @@ export default function AppShell({ children, session, activePath = "" }: { child
         </main>
       </div>
 
-      <nav aria-label={isRu ? "Мобильная навигация" : "Mobil asosiy navigatsiya"} className="fixed inset-x-0 bottom-0 z-50 grid h-20 grid-cols-6 border-t border-slate-200 bg-white/95 px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden dark:bg-slate-950/95">
+      <nav aria-label={isRu ? "Мобильная навигация" : "Mobil asosiy navigatsiya"} className="fixed inset-x-0 bottom-0 z-50 grid h-20 grid-cols-7 border-t border-slate-200 bg-white/95 px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden dark:bg-slate-950/95">
         {mobileNavigation.map(([label, href, icon]) => {
           const active = activePath === href || (href === "/deals" && activePath === "/messages");
           const badge = href === "/deals" ? unreadMessages : href === "/messenger" ? unreadMessenger : 0;
