@@ -317,6 +317,11 @@ export async function POST(request: NextRequest) {
   if (campaignError || !campaign) return json({ code: "NOT_FOUND", message: "Kampaniya topilmadi." }, 404);
   if (campaign.status === "cancelled") return json({ code: "CAMPAIGN_CANCELLED", message: "Kampaniya bekor qilingan." }, 409);
 
+  const eskizEmail = process.env.ESKIZ_EMAIL?.trim() || "";
+  const eskizPassword = process.env.ESKIZ_PASSWORD?.trim() || "";
+  const eskizFrom = process.env.ESKIZ_FROM?.trim() || "4546";
+  if (!eskizEmail || !eskizPassword) return json({ code: "SMS_NOT_CONFIGURED", message: "ESKIZ sozlamalari topilmadi." }, 503);
+
   const { data: recipients, error: recipientsError } = await admin.rpc("claim_admin_sms_batch", {
     p_campaign_id: campaignId,
     p_limit: BATCH_SIZE,
@@ -327,11 +332,6 @@ export async function POST(request: NextRequest) {
     return synced ? json({ ...synced, batch_processed: 0 }) : json({ code: "STATUS_UPDATE_FAILED", message: "Kampaniya holatini yangilab bo‘lmadi." }, 500);
   }
 
-  const eskizEmail = process.env.ESKIZ_EMAIL?.trim() || "";
-  const eskizPassword = process.env.ESKIZ_PASSWORD?.trim() || "";
-  const eskizFrom = process.env.ESKIZ_FROM?.trim() || "4546";
-  if (!eskizEmail || !eskizPassword) return json({ code: "SMS_NOT_CONFIGURED", message: "ESKIZ sozlamalari topilmadi." }, 503);
-
   if (campaign.status === "draft") {
     await admin.from("admin_sms_campaigns").update({ status: "sending", started_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", campaignId);
   }
@@ -340,7 +340,10 @@ export async function POST(request: NextRequest) {
   try {
     eskizToken = await getEskizToken(eskizEmail, eskizPassword);
   } catch (error) {
-    await admin.from("admin_sms_recipients").update({ status: "pending", updated_at: new Date().toISOString() }).eq("campaign_id", campaignId).eq("status", "processing");
+    const claimedIds = (recipients as RecipientRow[]).map((row) => row.id);
+    if (claimedIds.length) {
+      await admin.from("admin_sms_recipients").update({ status: "pending", updated_at: new Date().toISOString() }).in("id", claimedIds).eq("status", "processing");
+    }
     console.error("Admin bulk SMS Eskiz auth failed", { campaignId, reason: error instanceof Error ? error.message : "unknown" });
     return json({ code: "SMS_AUTH_FAILED", message: "ESKIZ bilan ulanishda xatolik." }, 502);
   }
