@@ -5,8 +5,12 @@
   "git": {
     "deploymentEnabled": false
   },
+  "rewrites": [
+    { "source": "/api/vk-callback", "destination": "/api/vk-callback-billing" }
+  ],
   "functions": {
     "api/vk-callback.js": { "maxDuration": 30 },
+    "api/vk-callback-billing.js": { "maxDuration": 30 },
     "api/click-prepare.js": { "maxDuration": 15 },
     "api/click-complete.js": { "maxDuration": 15 }
   }

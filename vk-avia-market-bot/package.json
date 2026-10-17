@@ -3,8 +3,8 @@
   "version": "2.3.0",
   "private": true,
   "scripts": {
-    "test": "node tests/smoke.test.js && node tests/click.test.js",
-    "check": "node --check api/vk-callback.js && node --check api/click-prepare.js && node --check api/click-complete.js && node --check lib/vk.js && node --check lib/ui.js && node --check lib/storage.js && node --check lib/market.js && node --check lib/click.js"
+    "test": "node tests/smoke.test.js && node tests/click.test.js && node tests/billing.test.js",
+    "check": "node --check api/vk-callback.js && node --check api/vk-callback-billing.js && node --check api/click-prepare.js && node --check api/click-complete.js && node --check lib/vk.js && node --check lib/ui.js && node --check lib/storage.js && node --check lib/market.js && node --check lib/billing.js && node --check lib/click.js"
   },
   "dependencies": {
     "@vercel/functions": "3.9.11"
