@@ -68,6 +68,16 @@ test('P10 least-privilege rollout removes structural table privileges from brows
   ]) assert.match(sql, new RegExp(`public\\.${table}`));
 });
 
+test('P10 closeout removes structural wallet privileges and prevents the postgres default ACL regression', () => {
+  const sql = read('supabase/migrations/20261017081851_p10_closeout_default_privilege_hardening.sql');
+  for (const table of ['billing_settings', 'billing_wallets', 'billing_wallet_ledger']) {
+    assert.match(sql, new RegExp(`public\\.${table}`));
+  }
+  for (const privilege of ['truncate', 'trigger', 'references']) assert.match(sql, new RegExp(privilege, 'i'));
+  assert.match(sql, /alter default privileges for role postgres in schema public/i);
+  assert.match(sql, /from anon, authenticated/i);
+});
+
 test('P10 billing hardening covers both foreign-key indexes reported by advisors', () => {
   const sql = read('supabase/p10/billing_indexes_review.sql');
   assert.match(sql, /billing_payment_orders_plan_code_idx/);
