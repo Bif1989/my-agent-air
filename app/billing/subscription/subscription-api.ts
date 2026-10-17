@@ -27,7 +27,7 @@ export type BillingSubscriptionRecord = {
   currency: "UZS";
   starts_at: string;
   ends_at: string;
-  method: "cash" | "bank_transfer" | "click" | "payme" | "other";
+  method: "cash" | "bank_transfer" | "click" | "payme" | "wallet" | "other";
   reference: string | null;
   note: string | null;
   created_at: string;
@@ -38,6 +38,19 @@ export type ClickPaymentStart = {
   paymentUrl: string;
   orderRef: string;
   expiresAt: string;
+};
+
+export type WalletSubscriptionPurchase = {
+  ok: boolean;
+  reason?: string;
+  subscription_id?: string;
+  charged_amount?: number;
+  balance_after?: number;
+  balance?: number;
+  required_amount?: number;
+  missing_amount?: number;
+  starts_at?: string;
+  ends_at?: string;
 };
 
 function currentUserId() {
@@ -76,6 +89,29 @@ export function listMyBillingSubscriptions(limit = 50) {
     const response = await authenticatedSupabaseFetch(`billing_subscriptions?${params}`);
     return readJson<BillingSubscriptionRecord[]>(response);
   });
+}
+
+export async function purchaseSubscriptionFromWallet(planCode = "monthly_unlimited") {
+  const response = await authenticatedSupabaseFetch("rpc/purchase_billing_subscription_from_wallet", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ p_plan_code: planCode }),
+  });
+  const result = await readJson<WalletSubscriptionPurchase>(response);
+  if (!result.ok) {
+    const known: Record<string, string> = {
+      insufficient_balance: "WALLET_INSUFFICIENT_BALANCE",
+      wallet_disabled: "WALLET_MODE_DISABLED",
+      plan_unavailable: "WALLET_PLAN_UNAVAILABLE",
+      invalid_plan: "WALLET_PLAN_UNAVAILABLE",
+      account_not_active: "WALLET_ACCOUNT_NOT_ACTIVE",
+      currency_mismatch: "WALLET_PURCHASE_FAILED",
+    };
+    const error = new Error(known[result.reason || ""] || "WALLET_PURCHASE_FAILED") as Error & { details?: WalletSubscriptionPurchase };
+    error.details = result;
+    throw error;
+  }
+  return result;
 }
 
 async function paymentSession() {
