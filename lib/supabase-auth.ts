@@ -120,14 +120,8 @@ export function saveSession(data: AuthResponse) {
     throw new Error("Session yaratilmadi. Emailingizni tasdiqlash talab qilinishi mumkin.");
   }
   const subject = accessTokenSubject(data.access_token);
-  if (!subject || subject !== data.user.id) {
-    throw new Error("Session ma’lumotlari mos kelmadi. Qayta kirib ko‘ring.");
-  }
-  const session: AuthSession = {
-    access_token: data.access_token,
-    refresh_token: data.refresh_token,
-    user: { id: data.user.id, email: data.user.email },
-  };
+  if (!subject || subject !== data.user.id) throw new Error("Session ma’lumotlari mos kelmadi. Qayta kirib ko‘ring.");
+  const session: AuthSession = { access_token: data.access_token, refresh_token: data.refresh_token, user: { id: data.user.id, email: data.user.email } };
   if (!isBrowser()) return;
   const raw = JSON.stringify(session);
   localStorage.setItem(SESSION_STORAGE_KEY, raw);
@@ -149,30 +143,15 @@ export function clearSession() {
 export function getStoredSession(): AuthSession | null {
   if (!isBrowser()) return null;
   cleanupLegacyToken();
-  // Still read the raw value every time so account changes from another tab are observed immediately.
   const storedSession = localStorage.getItem(SESSION_STORAGE_KEY);
   if (storedSession === cachedSessionRaw) return cachedSession;
-  if (!storedSession) {
-    cachedSessionRaw = null;
-    cachedSession = null;
-    return null;
-  }
+  if (!storedSession) { cachedSessionRaw = null; cachedSession = null; return null; }
   try {
     const session = JSON.parse(storedSession) as Partial<AuthSession> & { user?: Partial<SupabaseUser> };
-    if (!session.access_token || !session.refresh_token || !session.user?.id) {
-      clearSession();
-      return null;
-    }
+    if (!session.access_token || !session.refresh_token || !session.user?.id) { clearSession(); return null; }
     const subject = accessTokenSubject(session.access_token);
-    if (!subject || subject !== session.user.id) {
-      clearSession();
-      return null;
-    }
-    const validated: AuthSession = {
-      access_token: session.access_token,
-      refresh_token: session.refresh_token,
-      user: { id: session.user.id, email: session.user.email },
-    };
+    if (!subject || subject !== session.user.id) { clearSession(); return null; }
+    const validated: AuthSession = { access_token: session.access_token, refresh_token: session.refresh_token, user: { id: session.user.id, email: session.user.email } };
     cachedSessionRaw = storedSession;
     cachedSession = validated;
     return validated;
@@ -187,7 +166,6 @@ async function performRefresh(): Promise<AuthSession | null> {
   if (!session) return null;
   try {
     const data = await authRequest("token?grant_type=refresh_token", { refresh_token: session.refresh_token });
-    // A logout, account switch or refresh in another tab must win over an older response.
     const current = getStoredSession();
     if (!current || current.refresh_token !== session.refresh_token) return current;
     saveSession({ ...data, user: data.user || session.user });
@@ -199,7 +177,6 @@ async function performRefresh(): Promise<AuthSession | null> {
       clearSession();
       return null;
     }
-    // Keep the session during network outages and server errors so a retry can recover.
     throw new Error("Ulanish vaqtincha uzildi. Internetni tekshirib, qayta urinib ko‘ring.");
   }
 }
@@ -212,9 +189,7 @@ export async function refreshSession(): Promise<AuthSession | null> {
     if (current?.refresh_token !== previous?.refresh_token) return Promise.resolve(current);
     return performRefresh();
   };
-  const task = async () => typeof navigator !== "undefined" && navigator.locks
-    ? await navigator.locks.request("my-agent-air:refresh-session", run)
-    : await run();
+  const task = async () => typeof navigator !== "undefined" && navigator.locks ? await navigator.locks.request("my-agent-air:refresh-session", run) : await run();
   refreshInFlight = task().finally(() => { refreshInFlight = null; });
   return refreshInFlight;
 }
@@ -237,12 +212,7 @@ export async function authenticatedSupabaseFetch(path: string, init: RequestInit
     ...init,
     cache: "no-store",
     referrerPolicy: "no-referrer",
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${accessToken}`,
-      Accept: "application/json",
-      ...Object.fromEntries(new Headers(init.headers).entries()),
-    },
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}`, Accept: "application/json", ...Object.fromEntries(new Headers(init.headers).entries()) },
   });
 
   let response = await request(session.access_token);
@@ -261,6 +231,7 @@ export async function authenticatedSupabaseFetch(path: string, init: RequestInit
       request_not_open: "Bu so‘rov endi ochiq emas.",
       offer_not_pending: "Bu taklif allaqachon ko‘rib chiqilgan.",
       invalid_status_transition: "Bitim holatini shu bosqichga o‘zgartirib bo‘lmaydi.",
+      billing_insufficient_balance: "Bitimni yakunlash uchun balans yetarli emas. Balansingizni to‘ldiring. Agar hamkor tomonda ham mablag‘ yetarli bo‘lmasa, u ham o‘z balansini to‘ldirishi kerak.",
       system_message_forbidden: "Tizim xabarini yuborishga ruxsat yo‘q.",
       profile_incomplete: "Avval kompaniya, shahar va aloqa ma’lumotlarini to‘ldiring.",
     };
@@ -283,11 +254,7 @@ export async function consumeRecoveryLink(href: string) {
     data = await authRequest("verify", { type: "recovery", token_hash: url.searchParams.get("token_hash") });
   } else if (hash.get("type") === "recovery" && hash.get("access_token") && hash.get("refresh_token")) {
     const accessToken = hash.get("access_token")!;
-    const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
-      referrerPolicy: "no-referrer",
-    });
+    const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` }, cache: "no-store", referrerPolicy: "no-referrer" });
     if (!response.ok) throw new Error("Tiklash havolasi eskirgan. Yangi havola so‘rang.");
     data = { access_token: accessToken, refresh_token: hash.get("refresh_token")!, user: await response.json() as SupabaseUser };
   } else {
@@ -304,9 +271,7 @@ export async function updatePassword(password: string) {
   const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
     method: "PUT",
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ password }),
-    cache: "no-store",
-    referrerPolicy: "no-referrer",
+    body: JSON.stringify({ password }), cache: "no-store", referrerPolicy: "no-referrer",
   });
   if (!response.ok) throw new Error(response.status === 401 ? "Tiklash havolasi eskirgan. Yangi havola so‘rang." : "Parolni yangilab bo‘lmadi. Boshqa parol bilan qayta urinib ko‘ring.");
 }
@@ -314,14 +279,7 @@ export async function updatePassword(password: string) {
 export async function signOut() {
   const session = getStoredSession();
   try {
-    if (session) {
-      await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
-        method: "POST",
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${session.access_token}` },
-        cache: "no-store",
-        referrerPolicy: "no-referrer",
-      });
-    }
+    if (session) await fetch(`${SUPABASE_URL}/auth/v1/logout`, { method: "POST", headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${session.access_token}` }, cache: "no-store" });
   } finally {
     clearSession();
   }

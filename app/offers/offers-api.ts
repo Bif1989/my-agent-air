@@ -2,9 +2,9 @@ import { dedupeInFlight } from "@/lib/inflight-dedupe";
 import { authenticatedSupabaseFetch, getStoredSession } from "@/lib/supabase-auth";
 import type { RequestRecord } from "@/app/requests/requests-api";
 
-const REQUEST_FIELDS = "id,created_by,origin,destination,travel_date,category,status,service_details";
+const REQUEST_FIELDS = "id,created_by,acting_role,origin,destination,travel_date,category,status,service_details";
 const PROFILE_FIELDS = "id,full_name,company_name,city,is_verified";
-const OFFER_FIELDS = `id,request_id,agent_id,price,currency,airline,baggage,comment,status,created_at,agent:profiles!offers_agent_id_fkey(${PROFILE_FIELDS}),request:requests!offers_request_id_fkey!inner(${REQUEST_FIELDS})`;
+const OFFER_FIELDS = `id,request_id,agent_id,acting_role,price,currency,airline,baggage,comment,status,created_at,agent:profiles!offers_agent_id_fkey(${PROFILE_FIELDS}),request:requests!offers_request_id_fkey!inner(${REQUEST_FIELDS})`;
 
 export type OfferStatus = "pending" | "accepted" | "rejected" | "withdrawn";
 
@@ -16,12 +16,13 @@ export type OfferAgent = {
   is_verified: boolean | null;
 };
 
-export type OfferRequest = Pick<RequestRecord, "id" | "created_by" | "origin" | "destination" | "travel_date" | "category" | "status" | "service_details">;
+export type OfferRequest = Pick<RequestRecord, "id" | "created_by" | "acting_role" | "origin" | "destination" | "travel_date" | "category" | "status" | "service_details">;
 
 export type OfferRecord = {
   id: string;
   request_id: string;
   agent_id: string;
+  acting_role: string | null;
   price: number | null;
   currency: string;
   airline: string | null;
@@ -34,6 +35,7 @@ export type OfferRecord = {
 };
 
 export type OfferPayload = {
+  acting_role?: string | null;
   price: number;
   currency: string;
   airline: string | null;

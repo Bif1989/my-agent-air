@@ -74,17 +74,33 @@ test('CLICK payment URL uses server order reference and configured merchant valu
   assert.equal(url.searchParams.get('transaction_param'), 'maa_0123456789abcdef0123456789abcdef');
 });
 
-test('CLICK route stays server-only, same-origin on start, and reuses existing billing primitives', () => {
+test('CLICK route stays server-only and supports both subscription and wallet top-up orders', () => {
   const route = fs.readFileSync(path.join(root, 'app/api/payments/click/[stage]/route.ts'), 'utf8');
   assert.match(route, /process\.env\[name\]/);
   assert.doesNotMatch(route, /NEXT_PUBLIC_CLICK/);
   assert.match(route, /requestIsCrossSite/);
   assert.match(route, /sec-fetch-site/);
-  assert.match(route, /pendingOrderForUser/);
-  assert.match(route, /status", "pending"/);
+  assert.match(route, /pendingSubscriptionOrder/);
+  assert.match(route, /pendingWalletOrder/);
+  assert.match(route, /purpose: PaymentPurpose/);
+  assert.match(route, /wallet_topup/);
+  assert.match(route, /billing_settings/);
+  assert.match(route, /wallet_mode_enabled/);
+  assert.match(route, /wallet_topup_min/);
+  assert.match(route, /wallet_topup_max/);
+  assert.match(route, /plan_code: planCode/);
   assert.match(route, /prepare_billing_click_order/);
   assert.match(route, /complete_billing_click_order/);
   assert.match(route, /cancel_billing_click_order/);
   assert.match(route, /CLICK_ENABLED/);
   assert.match(route, /verifyClickSignature/);
+  assert.match(route, /CLICK_WALLET_RETURN_URL/);
+});
+
+test('wallet top-up cannot be exposed before the database release switch is enabled', () => {
+  const route = fs.readFileSync(path.join(root, 'app/api/payments/click/[stage]/route.ts'), 'utf8');
+  assert.match(route, /if \(!settings\.wallet_mode_enabled\).*WALLET_MODE_DISABLED/);
+  assert.match(route, /Number\.isSafeInteger\(amount\)/);
+  assert.match(route, /amount < settings\.wallet_topup_min/);
+  assert.match(route, /amount > settings\.wallet_topup_max/);
 });

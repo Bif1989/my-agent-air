@@ -9,7 +9,7 @@ function read(relativePath) {
 
 const migrationPath = 'supabase/migrations/20261010135500_p5_deal_fee_ledger.sql';
 
-test('P5 gives each user five free completed deals per Tashkent month', () => {
+test('P5 historical migration gave each user five free completed deals per Tashkent month', () => {
   const sql = read(migrationPath);
   assert.match(sql, /monthly_sequence <= 5 then 0/);
   assert.match(sql, /date_trunc\('month', timezone\('Asia\/Tashkent'/);
@@ -19,7 +19,7 @@ test('P5 gives each user five free completed deals per Tashkent month', () => {
   assert.match(sql, /on conflict \(deal_id, user_id\) do nothing/);
 });
 
-test('P5 role prices match the agreed per-deal tariff', () => {
+test('P5 historical role prices match the agreed per-deal tariff', () => {
   const sql = read(migrationPath);
   assert.match(sql, /when 'turoperator' then 7000/);
   assert.match(sql, /when 'mehmonxona' then 10000/);
@@ -49,15 +49,17 @@ test('P5 billing ledger is read-only to authenticated clients and protected by R
   assert.doesNotMatch(sql, /grant .*delete.*deal_fees to authenticated/i);
 });
 
-test('P5 billing UI exposes monthly usage and tariff without calling an external payment gateway', () => {
+test('billing UI keeps P5 fee history while the wallet successor adds lifetime quota and CLICK top-up', () => {
   const api = read('app/billing/billing-api.ts');
   const page = read('app/billing/page.tsx');
   const deals = read('app/deals/page.tsx');
   assert.match(api, /rpc\/get_billing_summary/);
+  assert.match(api, /rpc\/get_billing_wallet_status/);
   assert.match(api, /deal_fees\?/);
-  assert.match(page, /dastlabki 5 ta muvaffaqiyatli bitim bepul/);
-  assert.match(page, /ROLE_PRICES/);
+  assert.match(page, /Har bir akkauntga jami 5 ta bepul/);
+  assert.match(page, /Bu limit har oy yangilanmaydi/);
+  assert.match(page, /Click bilan to‘ldirish/);
   assert.match(page, /outstanding_amount/);
   assert.match(deals, /href="\/billing"/);
-  assert.doesNotMatch(api, /https?:\/\/|click\.uz|payme\.uz|stripe/i);
+  assert.doesNotMatch(api, /click\.uz|payme\.uz|stripe/i);
 });

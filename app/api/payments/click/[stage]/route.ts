@@ -17,18 +17,28 @@ export const maxDuration = 15;
 
 const ORDER_REF_RE = /^maa_[0-9a-f]{32}$/;
 const START_BODY_LIMIT = 2_048;
+type PaymentPurpose = "subscription" | "wallet_topup";
 
 type ClickRpcResult = {
   ok?: boolean;
   reason?: string;
   merchant_prepare_id?: number;
   merchant_confirm_id?: number;
+  subscription_id?: string;
+  wallet_ledger_id?: string;
+  balance?: number;
 };
 
 type PaymentOrder = {
   order_ref: string;
   amount: number;
   expires_at: string;
+};
+
+type BillingSettings = {
+  wallet_mode_enabled: boolean;
+  wallet_topup_min: number;
+  wallet_topup_max: number;
 };
 
 function env(name: string) {
@@ -43,7 +53,8 @@ function clickConfig() {
     merchantUserId: env("CLICK_MERCHANT_USER_ID"),
     secretKey: env("CLICK_SECRET_KEY"),
     paymentUrl: env("CLICK_PAYMENT_URL") || "https://my.click.uz/services/pay",
-    returnUrl: env("CLICK_RETURN_URL") || "https://agent.bifavia.uz/billing/subscription?payment=click",
+    subscriptionReturnUrl: env("CLICK_RETURN_URL") || "https://agent.bifavia.uz/billing/subscription?payment=click",
+    walletReturnUrl: env("CLICK_WALLET_RETURN_URL") || "https://agent.bifavia.uz/billing?payment=click",
   };
 }
 
@@ -100,7 +111,7 @@ async function readSmallJson(request: NextRequest) {
   }
 }
 
-async function pendingOrderForUser(
+async function pendingSubscriptionOrder(
   supabase: ReturnType<typeof serviceClient>,
   userId: string,
   planCode: string,
@@ -123,18 +134,43 @@ async function pendingOrderForUser(
   return data as PaymentOrder | null;
 }
 
+async function pendingWalletOrder(
+  supabase: ReturnType<typeof serviceClient>,
+  userId: string,
+  amount: number,
+) {
+  const twoMinutesAgo = new Date(Date.now() - 120_000).toISOString();
+  const { data, error } = await supabase
+    .from("billing_payment_orders")
+    .select("order_ref,amount,expires_at")
+    .eq("user_id", userId)
+    .eq("provider", "click")
+    .eq("purpose", "wallet_topup")
+    .is("plan_code", null)
+    .eq("amount", amount)
+    .eq("status", "pending")
+    .gt("expires_at", new Date().toISOString())
+    .gte("created_at", twoMinutesAgo)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data as PaymentOrder | null;
+}
+
 async function createPaymentOrder(
   supabase: ReturnType<typeof serviceClient>,
   userId: string,
-  planCode: string,
+  purpose: PaymentPurpose,
   amount: number,
+  planCode: string | null,
 ) {
   const { data, error } = await supabase
     .from("billing_payment_orders")
     .insert({
       user_id: userId,
       provider: "click",
-      purpose: "subscription",
+      purpose,
       plan_code: planCode,
       amount,
       currency: "UZS",
@@ -146,21 +182,25 @@ async function createPaymentOrder(
   return data as PaymentOrder;
 }
 
-async function startPayment(request: NextRequest) {
-  const config = clickConfig();
-  if (requestIsCrossSite(request)) return NextResponse.json({ error: "CROSS_SITE_REQUEST" }, { status: 403 });
-  if (!config.enabled) return NextResponse.json({ error: "CLICK_DISABLED" }, { status: 503 });
-  if (!config.serviceId || !config.merchantId || !config.secretKey) {
-    return NextResponse.json({ error: "CLICK_NOT_CONFIGURED" }, { status: 503 });
-  }
+async function getBillingSettings(supabase: ReturnType<typeof serviceClient>) {
+  const { data, error } = await supabase
+    .from("billing_settings")
+    .select("wallet_mode_enabled,wallet_topup_min,wallet_topup_max")
+    .eq("id", 1)
+    .maybeSingle();
+  if (error || !data) throw error || new Error("BILLING_SETTINGS_MISSING");
+  return data as BillingSettings;
+}
 
-  const user = await verifyUser(request);
-  if (!user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  const body = await readSmallJson(request);
-  const planCode = typeof body?.planCode === "string" ? body.planCode.trim() : "monthly_unlimited";
+async function startSubscriptionPayment(
+  supabase: ReturnType<typeof serviceClient>,
+  userId: string,
+  body: Record<string, unknown>,
+  config: ReturnType<typeof clickConfig>,
+) {
+  const planCode = typeof body.planCode === "string" ? body.planCode.trim() : "monthly_unlimited";
   if (!/^[a-z0-9_]{1,64}$/.test(planCode)) return NextResponse.json({ error: "INVALID_PLAN" }, { status: 400 });
 
-  const supabase = serviceClient();
   const { data: plan, error: planError } = await supabase
     .from("billing_subscription_plans")
     .select("code,price_amount,currency,is_active")
@@ -174,8 +214,8 @@ async function startPayment(request: NextRequest) {
 
   let order: PaymentOrder;
   try {
-    order = await pendingOrderForUser(supabase, user.id, plan.code, priceAmount)
-      || await createPaymentOrder(supabase, user.id, plan.code, priceAmount);
+    order = await pendingSubscriptionOrder(supabase, userId, plan.code, priceAmount)
+      || await createPaymentOrder(supabase, userId, "subscription", priceAmount, plan.code);
   } catch {
     return NextResponse.json({ error: "ORDER_CREATE_FAILED" }, { status: 503 });
   }
@@ -187,10 +227,69 @@ async function startPayment(request: NextRequest) {
     merchantUserId: config.merchantUserId,
     orderRef: order.order_ref,
     amount: order.amount,
-    returnUrl: config.returnUrl,
+    returnUrl: config.subscriptionReturnUrl,
   });
+  return NextResponse.json({ paymentUrl, orderRef: order.order_ref, expiresAt: order.expires_at, purpose: "subscription" }, { headers: { "Cache-Control": "no-store" } });
+}
 
-  return NextResponse.json({ paymentUrl, orderRef: order.order_ref, expiresAt: order.expires_at }, { headers: { "Cache-Control": "no-store" } });
+async function startWalletTopup(
+  supabase: ReturnType<typeof serviceClient>,
+  userId: string,
+  body: Record<string, unknown>,
+  config: ReturnType<typeof clickConfig>,
+) {
+  let settings: BillingSettings;
+  try {
+    settings = await getBillingSettings(supabase);
+  } catch {
+    return NextResponse.json({ error: "PAYMENT_TEMPORARILY_UNAVAILABLE" }, { status: 503 });
+  }
+  if (!settings.wallet_mode_enabled) return NextResponse.json({ error: "WALLET_MODE_DISABLED" }, { status: 409 });
+
+  const amount = typeof body.amount === "number" ? body.amount : Number(body.amount);
+  if (!Number.isSafeInteger(amount) || amount < settings.wallet_topup_min || amount > settings.wallet_topup_max) {
+    return NextResponse.json({
+      error: "INVALID_TOPUP_AMOUNT",
+      minAmount: settings.wallet_topup_min,
+      maxAmount: settings.wallet_topup_max,
+    }, { status: 400 });
+  }
+
+  let order: PaymentOrder;
+  try {
+    order = await pendingWalletOrder(supabase, userId, amount)
+      || await createPaymentOrder(supabase, userId, "wallet_topup", amount, null);
+  } catch {
+    return NextResponse.json({ error: "ORDER_CREATE_FAILED" }, { status: 503 });
+  }
+
+  const paymentUrl = buildClickPaymentUrl({
+    paymentUrl: config.paymentUrl,
+    serviceId: config.serviceId,
+    merchantId: config.merchantId,
+    merchantUserId: config.merchantUserId,
+    orderRef: order.order_ref,
+    amount: order.amount,
+    returnUrl: config.walletReturnUrl,
+  });
+  return NextResponse.json({ paymentUrl, orderRef: order.order_ref, expiresAt: order.expires_at, purpose: "wallet_topup", amount: order.amount }, { headers: { "Cache-Control": "no-store" } });
+}
+
+async function startPayment(request: NextRequest) {
+  const config = clickConfig();
+  if (requestIsCrossSite(request)) return NextResponse.json({ error: "CROSS_SITE_REQUEST" }, { status: 403 });
+  if (!config.enabled) return NextResponse.json({ error: "CLICK_DISABLED" }, { status: 503 });
+  if (!config.serviceId || !config.merchantId || !config.secretKey) return NextResponse.json({ error: "CLICK_NOT_CONFIGURED" }, { status: 503 });
+
+  const user = await verifyUser(request);
+  if (!user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const body = await readSmallJson(request);
+  if (!body) return NextResponse.json({ error: "INVALID_REQUEST" }, { status: 400 });
+  const purpose: PaymentPurpose = body.purpose === "wallet_topup" ? "wallet_topup" : "subscription";
+  const supabase = serviceClient();
+  return purpose === "wallet_topup"
+    ? startWalletTopup(supabase, user.id, body, config)
+    : startSubscriptionPayment(supabase, user.id, body, config);
 }
 
 function rpcErrorCode(reason: string | undefined, stage: "prepare" | "complete") {
@@ -208,12 +307,7 @@ function rpcErrorCode(reason: string | undefined, stage: "prepare" | "complete")
 }
 
 function validCallbackBasics(fields: ClickCallbackFields, expectedAction: "0" | "1", serviceId: string) {
-  return fields.action === expectedAction &&
-    fields.service_id === serviceId &&
-    ORDER_REF_RE.test(fields.merchant_trans_id) &&
-    isDecimalInteger(fields.click_trans_id) &&
-    isDecimalInteger(fields.click_paydoc_id) &&
-    /^-?\d{1,6}$/.test(fields.error);
+  return fields.action === expectedAction && fields.service_id === serviceId && ORDER_REF_RE.test(fields.merchant_trans_id) && isDecimalInteger(fields.click_trans_id) && isDecimalInteger(fields.click_paydoc_id) && /^-?\d{1,6}$/.test(fields.error);
 }
 
 async function cancelOrder(fields: ClickCallbackFields) {
@@ -243,15 +337,8 @@ async function prepare(fields: ClickCallbackFields) {
   });
   if (error) return clickError(fields, -7);
   const result = data as ClickRpcResult | null;
-  if (!result?.ok || !Number.isSafeInteger(result.merchant_prepare_id)) {
-    return clickError(fields, rpcErrorCode(result?.reason, "prepare"));
-  }
-  return {
-    ...clickResponseBase(fields),
-    merchant_prepare_id: result.merchant_prepare_id,
-    error: 0,
-    error_note: "Success",
-  };
+  if (!result?.ok || !Number.isSafeInteger(result.merchant_prepare_id)) return clickError(fields, rpcErrorCode(result?.reason, "prepare"));
+  return { ...clickResponseBase(fields), merchant_prepare_id: result.merchant_prepare_id, error: 0, error_note: "Success" };
 }
 
 async function complete(fields: ClickCallbackFields) {
@@ -284,15 +371,8 @@ async function complete(fields: ClickCallbackFields) {
   });
   if (error) return clickError(fields, -7);
   const result = data as ClickRpcResult | null;
-  if (!result?.ok || !Number.isSafeInteger(result.merchant_confirm_id)) {
-    return clickError(fields, rpcErrorCode(result?.reason, "complete"));
-  }
-  return {
-    ...clickResponseBase(fields),
-    merchant_confirm_id: result.merchant_confirm_id,
-    error: 0,
-    error_note: "Success",
-  };
+  if (!result?.ok || !Number.isSafeInteger(result.merchant_confirm_id)) return clickError(fields, rpcErrorCode(result?.reason, "complete"));
+  return { ...clickResponseBase(fields), merchant_confirm_id: result.merchant_confirm_id, error: 0, error_note: "Success" };
 }
 
 async function callback(request: NextRequest, stage: "prepare" | "complete") {
