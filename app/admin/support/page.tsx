@@ -12,7 +12,7 @@ function formatDate(value: string | null) {
 }
 
 export default function AdminSupportPage() {
-  const [session, setSession] = useState<AuthSession | null>(null);
+  const [session] = useState<AuthSession | null>(() => getStoredSession());
   const [threads, setThreads] = useState<AdminSupportThread[]>([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"" | "open" | "closed">("");
@@ -28,7 +28,6 @@ export default function AdminSupportPage() {
   useEffect(() => {
     const stored = getStoredSession();
     if (!stored) { window.location.replace("/login?next=/admin/support"); return; }
-    setSession(stored);
     getCurrentProfile().then((profile) => {
       if (profile?.role !== "admin") { window.location.replace("/dashboard"); return; }
       return reload();
