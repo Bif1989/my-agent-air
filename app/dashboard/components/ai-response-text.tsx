@@ -1,10 +1,12 @@
 "use client";
 
-type SectionKind = "clarification" | "note" | "suggestion" | "warning";
+import Link from "next/link";
+
+type SectionKind = "clarification" | "note" | "suggestion" | "warning" | "offer";
 
 type Section = { kind: SectionKind; text: string };
 
-const markerPattern = /\[\[(clarification|note|suggestion|warning)\]\]([\s\S]*?)\[\[\/\1\]\]/gi;
+const markerPattern = /\[\[(clarification|note|suggestion|warning|offer)\]\]([\s\S]*?)\[\[\/\1\]\]/gi;
 
 function normalizeLegacySections(text: string) {
   const hasStructuredClarification = /\[\[clarification\]\]/i.test(text);
@@ -47,6 +49,12 @@ function parseSections(input: string) {
 }
 
 function sectionMeta(kind: SectionKind, isRu: boolean) {
+  if (kind === "offer") return {
+    label: isRu ? "Подходящие турпакеты на платформе" : "Platformadagi mos tur paketlar",
+    icon: "↗",
+    className: "border-violet-200 bg-violet-50 text-violet-950 dark:border-violet-800/70 dark:bg-violet-950/30 dark:text-violet-100",
+    labelClass: "text-violet-700 dark:text-violet-300",
+  };
   if (kind === "clarification") return {
     label: isRu ? "Нужно уточнить" : "Aniqlashtirish kerak",
     icon: "?",
@@ -79,6 +87,17 @@ function sectionItems(text: string) {
     .map((line) => line.replace(/^\s*[•*\-–—]+\s*/, "").trim())
     .filter(Boolean);
   return lines.length ? lines : [text.trim()].filter(Boolean);
+}
+
+function offerItems(text: string) {
+  return text.split("\n").map((line) => {
+    const separator = line.lastIndexOf("|||");
+    if (separator < 1) return null;
+    const label = line.slice(0, separator).trim();
+    const href = line.slice(separator + 3).trim();
+    if (!label || !/^\/feed\/[0-9a-f-]{36}$/i.test(href)) return null;
+    return { label, href };
+  }).filter((item): item is { label: string; href: string } => Boolean(item));
 }
 
 function sectionTemplate(kind: "clarification" | "suggestion", text: string, isRu: boolean) {
@@ -118,6 +137,7 @@ export function AiResponseText({ text, isRu }: { text: string; isRu: boolean }) 
       {sections.map((section, index) => {
         const meta = sectionMeta(section.kind, isRu);
         const interactive = section.kind === "clarification" || section.kind === "suggestion";
+        const offers = section.kind === "offer" ? offerItems(section.text) : [];
         const content = (
           <>
             <div className={`mb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.08em] ${meta.labelClass}`}>
@@ -125,7 +145,15 @@ export function AiResponseText({ text, isRu }: { text: string; isRu: boolean }) 
               <span>{meta.label}</span>
               {interactive && <span className="ml-auto normal-case tracking-normal opacity-70">{isRu ? "Нажмите, чтобы заполнить" : "Bosib to‘ldiring"}</span>}
             </div>
-            <div className="whitespace-pre-wrap text-[12px] leading-5 sm:text-[13px]">{section.text}</div>
+            {section.kind === "offer" ? (
+              <div className="mt-2 space-y-2">
+                {offers.map((offer) => (
+                  <Link key={offer.href} href={offer.href} className="flex items-center justify-between gap-3 rounded-lg border border-violet-200 bg-white/80 px-3 py-2 text-[12px] font-semibold leading-5 text-violet-900 transition hover:border-violet-400 hover:bg-white dark:border-violet-800 dark:bg-slate-900/70 dark:text-violet-100">
+                    <span>{offer.label}</span><span className="shrink-0 text-violet-500">→</span>
+                  </Link>
+                ))}
+              </div>
+            ) : <div className="whitespace-pre-wrap text-[12px] leading-5 sm:text-[13px]">{section.text}</div>}
           </>
         );
 
