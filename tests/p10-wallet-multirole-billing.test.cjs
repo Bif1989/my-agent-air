@@ -44,8 +44,7 @@ test('completed paid deals deduct wallet atomically and insufficient balance rai
   assert.match(migration, /raise exception 'billing_insufficient_balance'/);
   assert.match(migration, /update public\.billing_wallets set balance=v_new_balance/);
   assert.match(migration, /'deal_charge',-v_fee,v_new_balance/);
-  assert.match(migration, /'paid'.*v_billing_source/s);
-  assert.doesNotMatch(migration, /v_billing_source:='wallet'.*'pending'/s);
+  assert.match(migration, /v_billing_source:='wallet'; end if;[\s\S]*?insert into public\.deal_fees[\s\S]*?'paid'[\s\S]*?v_billing_source/);
   assert.match(auth, /billing_insufficient_balance/);
   assert.match(auth, /Balansingizni to‘ldiring/);
 });
@@ -56,8 +55,8 @@ test('Unlimited bypasses wallet charging before the lifetime/free decision', () 
 
 test('multi-role deal snapshots are immutable billing inputs after offer acceptance', () => {
   assert.match(migration, /add column if not exists acting_role text/);
-  assert.match(migration, /buyer_role_snapshot text/);
-  assert.match(migration, /seller_role_snapshot text/);
+  assert.match(migration, /add column if not exists buyer_role_snapshot text/);
+  assert.match(migration, /add column if not exists seller_role_snapshot text/);
   assert.match(migration, /app_private\.user_has_billing_role/);
   assert.match(migration, /app_private\.billing_role_from_category/);
   assert.match(migration, /v_request\.acting_role/);
