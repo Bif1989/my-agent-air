@@ -1,5 +1,6 @@
 import { dedupeInFlight } from "@/lib/inflight-dedupe";
 import { authenticatedSupabaseFetch, getStoredSession } from "@/lib/supabase-auth";
+import { billingRoleOption, normalizeBillingRole, rolesFromServiceText, type BillingRole, type BillingRoleOption } from "@/lib/billing-roles";
 
 export type BillingSummary = {
   agent_type: string;
@@ -16,8 +17,35 @@ export type BillingSummary = {
   next_fee_amount: number;
 };
 
+export type BillingWalletStatus = {
+  wallet_mode_enabled: boolean;
+  balance: number;
+  currency: "UZS";
+  low_balance_warning: number;
+  topup_min: number;
+  topup_max: number;
+  free_limit: number;
+  completed_count: number;
+  free_remaining: number;
+  subscription_active: boolean;
+};
+
+export type WalletLedgerKind = "click_topup" | "deal_charge" | "refund" | "admin_credit" | "admin_debit";
+export type BillingWalletLedgerRecord = {
+  id: string;
+  user_id: string;
+  kind: WalletLedgerKind;
+  amount_delta: number;
+  balance_after: number;
+  currency: "UZS";
+  payment_order_id: string | null;
+  deal_fee_id: string | null;
+  note: string | null;
+  created_at: string;
+};
+
 export type DealFeeStatus = "free" | "pending" | "paid" | "waived";
-export type DealFeeBillingSource = "free_quota" | "per_deal" | "subscription";
+export type DealFeeBillingSource = "free_quota" | "per_deal" | "subscription" | "wallet";
 
 export type DealFeeRecord = {
   id: string;
@@ -27,6 +55,7 @@ export type DealFeeRecord = {
   fee_amount: number;
   currency: "UZS";
   monthly_sequence: number;
+  lifetime_sequence: number;
   status: DealFeeStatus;
   billing_source: DealFeeBillingSource;
   period_start: string;
@@ -57,12 +86,11 @@ export type BillingSettlementRecord = {
   note: string | null;
   recorded_by: string;
   created_at: string;
-  items: Array<{
-    id: string;
-    fee_id: string;
-    amount: number;
-  }> | null;
+  items: Array<{ id: string; fee_id: string; amount: number }> | null;
 };
+
+type ProfileBillingFields = { agent_type: string | null; services: string[] | null };
+type CapabilityBillingFields = { capability_type: string };
 
 async function readJson<T>(response: Response) {
   return response.json() as Promise<T>;
@@ -87,17 +115,59 @@ export function getBillingSummary() {
   });
 }
 
+export function getBillingWalletStatus() {
+  const userId = currentUserId();
+  return dedupeInFlight("billing:wallet-status", userId, async () => {
+    const response = await authenticatedSupabaseFetch("rpc/get_billing_wallet_status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const rows = await readJson<BillingWalletStatus[]>(response);
+    return rows[0] || null;
+  });
+}
+
+export function listMyWalletLedger(limit = 50) {
+  const userId = currentUserId();
+  const safeLimit = Math.min(100, Math.max(1, limit));
+  return dedupeInFlight("billing:wallet-ledger", `${userId}:${safeLimit}`, async () => {
+    const params = new URLSearchParams({
+      select: "id,user_id,kind,amount_delta,balance_after,currency,payment_order_id,deal_fee_id,note,created_at",
+      user_id: `eq.${userId}`,
+      order: "created_at.desc,id.desc",
+      limit: String(safeLimit),
+    });
+    const response = await authenticatedSupabaseFetch(`billing_wallet_ledger?${params}`);
+    return readJson<BillingWalletLedgerRecord[]>(response);
+  });
+}
+
+export function getMyBillingRoles() {
+  const userId = currentUserId();
+  return dedupeInFlight("billing:roles", userId, async () => {
+    const [profileResponse, capabilityResponse] = await Promise.all([
+      authenticatedSupabaseFetch(`profiles?select=agent_type,services&id=eq.${encodeURIComponent(userId)}&limit=1`),
+      authenticatedSupabaseFetch(`supplier_capabilities?select=capability_type&profile_id=eq.${encodeURIComponent(userId)}&is_active=eq.true`),
+    ]);
+    const profiles = await readJson<ProfileBillingFields[]>(profileResponse);
+    const capabilities = await readJson<CapabilityBillingFields[]>(capabilityResponse);
+    const primary = normalizeBillingRole(profiles[0]?.agent_type);
+    const roles = new Set<BillingRole>([primary]);
+    for (const capability of capabilities) roles.add(normalizeBillingRole(capability.capability_type));
+    for (const service of profiles[0]?.services || []) for (const role of rolesFromServiceText(service)) roles.add(role);
+    return [...roles]
+      .map((role): BillingRoleOption => billingRoleOption(role, role === primary))
+      .sort((a, b) => Number(Boolean(b.isPrimary)) - Number(Boolean(a.isPrimary)) || a.uz.localeCompare(b.uz));
+  });
+}
+
 export function listMyDealFees(limit = 50) {
   const userId = currentUserId();
   const safeLimit = Math.min(100, Math.max(1, limit));
   return dedupeInFlight("billing:fees", `${userId}:${safeLimit}`, async () => {
-    const select = "id,deal_id,user_id,role_snapshot,fee_amount,currency,monthly_sequence,status,billing_source,period_start,deal_completed_at,created_at,paid_at,deal:deals!deal_fees_deal_id_fkey(id,request_id,request:requests!deals_request_id_fkey(id,category,origin,destination,travel_date))";
-    const params = new URLSearchParams({
-      select,
-      user_id: `eq.${userId}`,
-      order: "deal_completed_at.desc,id.desc",
-      limit: String(safeLimit),
-    });
+    const select = "id,deal_id,user_id,role_snapshot,fee_amount,currency,monthly_sequence,lifetime_sequence,status,billing_source,period_start,deal_completed_at,created_at,paid_at,deal:deals!deal_fees_deal_id_fkey(id,request_id,request:requests!deals_request_id_fkey(id,category,origin,destination,travel_date))";
+    const params = new URLSearchParams({ select, user_id: `eq.${userId}`, order: "deal_completed_at.desc,id.desc", limit: String(safeLimit) });
     const response = await authenticatedSupabaseFetch(`deal_fees?${params}`);
     return readJson<DealFeeRecord[]>(response);
   });
@@ -108,12 +178,7 @@ export function listMyBillingSettlements(limit = 50) {
   const safeLimit = Math.min(100, Math.max(1, limit));
   return dedupeInFlight("billing:settlements", `${userId}:${safeLimit}`, async () => {
     const select = "id,user_id,kind,amount,currency,method,reference,note,recorded_by,created_at,items:billing_settlement_items(id,fee_id,amount)";
-    const params = new URLSearchParams({
-      select,
-      user_id: `eq.${userId}`,
-      order: "created_at.desc,id.desc",
-      limit: String(safeLimit),
-    });
+    const params = new URLSearchParams({ select, user_id: `eq.${userId}`, order: "created_at.desc,id.desc", limit: String(safeLimit) });
     const response = await authenticatedSupabaseFetch(`billing_settlements?${params}`);
     return readJson<BillingSettlementRecord[]>(response);
   });
