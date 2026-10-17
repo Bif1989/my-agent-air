@@ -28,16 +28,19 @@ test('bulk SMS API requires an active admin and never exposes Eskiz credentials 
   assert.doesNotMatch(read('app/admin/sms/page.tsx'), /ESKIZ_PASSWORD|ESKIZ_EMAIL/);
 });
 
-test('bulk SMS delivery is deliberately batched, deduplicated and not automatic', () => {
+test('bulk SMS delivery is batched, deduplicated, concurrency-safe and not automatic', () => {
+  const migration = read('supabase/migrations/20261017094500_admin_bulk_sms_campaigns.sql');
   const route = read('app/api/admin/sms-campaigns/route.ts');
   const page = read('app/admin/sms/page.tsx');
   assert.match(route, /const BATCH_SIZE = 5/);
   assert.match(route, /const phones = new Set<string>\(\)/);
-  assert.match(route, /eq\("status", "pending"\)/);
+  assert.match(route, /admin\.rpc\("claim_admin_sms_batch"/);
+  assert.match(migration, /for update skip locked/i);
+  assert.match(migration, /status = 'processing'/i);
+  assert.match(migration, /grant execute on function public\.claim_admin_sms_batch\(uuid, integer\) to service_role/);
   assert.match(page, /Draft kampaniya yaratish/);
   assert.match(page, /window\.confirm/);
   assert.match(page, /consentConfirmed/);
-  assert.doesNotMatch(page, /useEffect\([\s\S]*sendSmsCampaignBatch/);
 });
 
 test('admin panel exposes the SMS module only through the admin area', () => {
