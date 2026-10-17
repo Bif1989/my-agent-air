@@ -16,10 +16,14 @@ function mockProvider(result, allowance = { allowed: true }) {
     calls.push({ url, options });
     if (url.endsWith('/auth/v1/user')) return Response.json({ id: 'test-actor', is_anonymous: false });
     if (url.endsWith('/rpc/consume_ai_assistant_quota')) return Response.json(allowance);
+    if (url.endsWith('/rpc/list_feed_posts')) return Response.json([]);
     assert.equal(url, 'https://api.openai.com/v1/responses');
     return Response.json(result);
   };
   return calls;
+}
+function providerCall(calls) {
+  return [...calls].reverse().find((call) => call.url === 'https://api.openai.com/v1/responses');
 }
 const hotel = { category: 'Mehmonxona', origin: '', destination: 'Samarqand', travel_date: '2099-11-12', adults: 2, children: 1, infants: 0, budget: 120, currency: 'USD', description: 'Tinch xona', service_details: { kind: 'Mehmonxona', check_out: '2099-11-15', rooms: '1', child_ages: '7', budget_basis: 'per_room_night', meal_plan: 'breakfast' }, missing: [] };
 function completed(drafts = [hotel]) { return { status: 'completed', output: [{ content: [{ type: 'output_text', text: JSON.stringify({ message: 'Qoralama tayyor.', action: 'none', requests: drafts, clarifications: [], notes: [], suggestions: [], warnings: [] }) }] }] }; }
@@ -35,7 +39,7 @@ test('AI form endpoint uses the shared strict schema, preserves form context and
   assert.equal(body.requests[0].budget, 120);
   assert.equal(body.requests[0].service_details.budget_basis, 'per_room_night');
   assert.deepEqual(body.requests[0].missing, []);
-  const upstream = JSON.parse(calls.at(-1).options.body);
+  const upstream = JSON.parse(providerCall(calls).options.body);
   assert.equal(upstream.store, false);
   assert.equal(upstream.text.format.strict, true);
   assert.equal(upstream.text.format.schema.properties.requests.items.properties.service_details.anyOf.length, 7);
@@ -77,7 +81,7 @@ test('a large multi-draft history entry is kept whole rather than truncated mid-
   const history = 'Prepared drafts: ' + JSON.stringify(Array.from({ length: 12 }, () => ({ ...hotel, description: 'Tinch xona. '.repeat(30) })));
   assert.ok(history.length > 5000);
   assert.equal((await POST(request({ message: 'Nonushta qo‘shing', history: [{ role: 'assistant', content: history }] }))).status, 200);
-  assert.ok(JSON.parse(calls.at(-1).options.body).input.some(item => item.content === history));
+  assert.ok(JSON.parse(providerCall(calls).options.body).input.some(item => item.content === history));
 });
 test('AI input budgets old history and noisy dashboard context before the paid call', async () => {
   const calls = mockProvider(completed());
@@ -85,7 +89,7 @@ test('AI input budgets old history and noisy dashboard context before the paid c
   const stats = Object.fromEntries(Array.from({ length: 40 }, (_, index) => [`metric${index}`, index]));
   const res = await POST(request({ message: 'Davom et', history, context: { stats, path: '/' + 'a'.repeat(500) } }));
   assert.equal(res.status, 200);
-  const upstream = JSON.parse(calls.at(-1).options.body);
+  const upstream = JSON.parse(providerCall(calls).options.body);
   const keptHistory = upstream.input.filter(item => typeof item.content === 'string' && item.content.startsWith('history-'));
   assert.equal(keptHistory.length, 10);
   assert.ok(keptHistory.reduce((sum, item) => sum + item.content.length, 0) <= 32000);
