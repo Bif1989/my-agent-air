@@ -50,7 +50,7 @@ function parseSections(input: string) {
 
 function sectionMeta(kind: SectionKind, isRu: boolean) {
   if (kind === "offer") return {
-    label: isRu ? "Подходящие турпакеты на платформе" : "Platformadagi mos tur paketlar",
+    label: isRu ? "Подходящие предложения на платформе" : "Platformadagi mos takliflar",
     icon: "↗",
     className: "border-violet-200 bg-violet-50 text-violet-950 dark:border-violet-800/70 dark:bg-violet-950/30 dark:text-violet-100",
     labelClass: "text-violet-700 dark:text-violet-300",
