@@ -42,7 +42,7 @@ type CampaignMutationResponse = {
 
 type ApiError = { message?: string; code?: string };
 
-async function apiFetch(path: string, init: RequestInit = {}) {
+async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   let session = getStoredSession();
   if (!session) throw new Error("Qayta kiring.");
   if (sessionNeedsRefresh(session)) {
@@ -68,39 +68,39 @@ async function apiFetch(path: string, init: RequestInit = {}) {
     response = await run(session.access_token);
   }
 
-  const data = await response.json().catch(() => ({})) as ApiError;
+  const data = await response.json().catch(() => ({})) as T & ApiError;
   if (!response.ok) throw new Error(data.message || "SMS kampaniyasi amalida xatolik yuz berdi.");
   return data;
 }
 
-export async function listSmsCampaigns() {
-  return apiFetch("/api/admin/sms-campaigns") as Promise<CampaignListResponse>;
+export function listSmsCampaigns() {
+  return apiFetch<CampaignListResponse>("/api/admin/sms-campaigns");
 }
 
-export async function getSmsCampaign(id: string) {
-  return apiFetch(`/api/admin/sms-campaigns?id=${encodeURIComponent(id)}`) as Promise<CampaignDetailResponse>;
+export function getSmsCampaign(id: string) {
+  return apiFetch<CampaignDetailResponse>(`/api/admin/sms-campaigns?id=${encodeURIComponent(id)}`);
 }
 
-export async function createSmsCampaign(input: { name: string; message: string; recipients: string[] }) {
-  return apiFetch("/api/admin/sms-campaigns", {
+export function createSmsCampaign(input: { name: string; message: string; recipients: string[] }) {
+  return apiFetch<CampaignMutationResponse>("/api/admin/sms-campaigns", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "create", ...input }),
-  }) as Promise<CampaignMutationResponse>;
+  });
 }
 
-export async function sendSmsCampaignBatch(campaignId: string) {
-  return apiFetch("/api/admin/sms-campaigns", {
+export function sendSmsCampaignBatch(campaignId: string) {
+  return apiFetch<CampaignMutationResponse>("/api/admin/sms-campaigns", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "send_batch", campaign_id: campaignId }),
-  }) as Promise<CampaignMutationResponse>;
+  });
 }
 
-export async function retryFailedSms(campaignId: string) {
-  return apiFetch("/api/admin/sms-campaigns", {
+export function retryFailedSms(campaignId: string) {
+  return apiFetch<CampaignMutationResponse>("/api/admin/sms-campaigns", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "retry_failed", campaign_id: campaignId }),
-  }) as Promise<CampaignMutationResponse>;
+  });
 }
