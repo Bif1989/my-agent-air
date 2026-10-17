@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { readBoundedJson } from "@/lib/server/bounded-json";
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase-config";
 
@@ -11,7 +11,7 @@ const ESKIZ_TIMEOUT_MS = 6_000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MOBILE_PREFIXES = new Set(["33", "50", "55", "77", "88", "90", "91", "93", "94", "95", "97", "98", "99"]);
 
-type AdminClient = ReturnType<typeof createClient>;
+type AdminClient = SupabaseClient;
 type AdminContext = { admin: AdminClient; userId: string };
 type CampaignRow = {
   id: string;
