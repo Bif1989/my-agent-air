@@ -8,7 +8,7 @@ import { getOrCreateSupportChat, getSupportContact, type SupportContact } from "
 
 export default function SupportPage() {
   const router = useRouter();
-  const [session, setSession] = useState<AuthSession | null>(null);
+  const [session] = useState<AuthSession | null>(() => getStoredSession());
   const [contact, setContact] = useState<SupportContact | null>(null);
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
@@ -17,7 +17,6 @@ export default function SupportPage() {
   useEffect(() => {
     const stored = getStoredSession();
     if (!stored) { window.location.replace("/login?next=/support"); return; }
-    setSession(stored);
     getSupportContact().then(setContact).catch(() => setError("Administrator aloqa ma’lumotlarini yuklab bo‘lmadi.")).finally(() => setLoading(false));
   }, []);
 
