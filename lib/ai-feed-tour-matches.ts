@@ -107,7 +107,7 @@ function scoreRow(row: FeedSearchRow, terms: string[]) {
     const term = normalize(rawTerm);
     if (!term) continue;
     if (destination === term) score += 8;
-    else if (destination.includes(term) || term.includes(destination)) score += 5;
+    else if (destination && (destination.includes(term) || term.includes(destination))) score += 5;
     if (title.includes(term)) score += 3;
     if (body.includes(term)) score += 1;
   }
