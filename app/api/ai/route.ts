@@ -5,7 +5,7 @@ import { AI_SERVICE_DETAILS_SCHEMA, AI_SERVICE_FIELDS_CONTEXT, aiRequestToDraft 
 import { readRequestDraft, type AssistantDraft } from "@/lib/request-assistant";
 import { requestIssues } from "@/lib/service-request";
 import { UZBEKISTAN_TOURISM_AI_CONTEXT } from "@/lib/uzbekistan-tourism";
-import { findAiTourPostMatches } from "@/lib/ai-feed-tour-matches";
+import { findAiTourPostMatches, type AiTourPostMatch } from "@/lib/ai-feed-tour-matches";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -108,6 +108,25 @@ function composeStructuredMessage(base: string, parsed: ParsedAiReply, locale: "
 
   const main = base.trim() || (locale === "ru" ? "Понял задачу." : "Vazifani tushundim.");
   return sections.length ? `${main}\n\n${sections.join("\n\n")}` : main;
+}
+
+function safeOfferLabel(value: string) {
+  return value.replace(/\[\[|\]\]|\|\|\|/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function composePostMatchSection(matches: AiTourPostMatch[], locale: "uz" | "ru") {
+  if (!matches.length) return "";
+  const lines = matches.map((match) => {
+    const company = safeOfferLabel(match.author_company_name || match.author_full_name || (locale === "ru" ? "Туркомпания" : "Tur firma"));
+    const offer = safeOfferLabel(match.title || match.destination || (locale === "ru" ? "Турпакет" : "Tur paket"));
+    const price = match.price !== null
+      ? `${match.price.toLocaleString(locale === "ru" ? "ru-RU" : "uz-UZ")} ${safeOfferLabel(match.currency)}`
+      : "";
+    const verified = match.author_is_verified ? " ✓" : "";
+    const label = [`${company}${verified}`, offer, price].filter(Boolean).join(" · ").slice(0, 220);
+    return `${label}|||/feed/${match.id}`;
+  });
+  return `[[offer]]${lines.join("\n")}[[/offer]]`;
 }
 
 function sanitizeDraft(value: unknown, locale: "uz" | "ru"): AiRequestDraft | null {
@@ -327,8 +346,10 @@ async function handlePost(request: NextRequest, signal: AbortSignal) {
     authorization: request.headers.get("authorization")!,
     signal,
   });
+  const structuredMessage = composeStructuredMessage(baseMessage, parsed, locale);
+  const postSection = composePostMatchSection(postMatches, locale);
   return NextResponse.json({
-    message: composeStructuredMessage(baseMessage, parsed, locale),
+    message: postSection ? `${structuredMessage}\n\n${postSection}` : structuredMessage,
     action,
     requests,
     post_matches: postMatches,
