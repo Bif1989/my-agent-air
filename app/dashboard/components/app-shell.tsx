@@ -58,16 +58,48 @@ export default function AppShell({ children, session, activePath = "" }: { child
   const activeFloatingRoom = useRef<string | null>(null);
   const isDashboard = activePath === "/dashboard";
 
+  const inAiSection = pathname === "/dashboard" || pathname === "/feed" || pathname.startsWith("/feed/");
+  const inChatSection = pathname === "/support" || pathname === "/messenger" || pathname.startsWith("/messenger/");
+  const inCabinetSection = pathname === "/deals" || pathname.startsWith("/deals/") || pathname.startsWith("/messages/") || pathname === "/billing" || pathname.startsWith("/billing/") || pathname === "/profile" || pathname === "/referral" || pathname.startsWith("/referral/") || pathname === "/admin" || pathname.startsWith("/admin/");
+
   const navigation = isRu ? [
-    ["AI центр", "/dashboard"], ["Посты", "/feed"], ["Запросы", "/requests"], ["Агенты", "/agents"], ["Сделки", "/deals"], ["Чат", "/messenger"], ["Связь с админом", "/support"],
+    ["AI центр", "/dashboard"], ["Запросы", "/requests"], ["Агенты", "/agents"], ["Чат", "/messenger"], ["Кабинет", "/deals"],
   ] as const : [
-    ["AI markaz", "/dashboard"], ["Postlar", "/feed"], ["So‘rovlar va takliflar", "/requests"], ["Agentlar", "/agents"], ["Bitimlar", "/deals"], ["Chat", "/messenger"], ["Admin bilan aloqa", "/support"],
+    ["AI markaz", "/dashboard"], ["So‘rovlar", "/requests"], ["Agentlar", "/agents"], ["Chat", "/messenger"], ["Kabinet", "/deals"],
   ] as const;
   const mobileNavigation = isRu ? [
-    ["AI", "/dashboard", "✦"], ["Запрос", "/requests", "↔"], ["Агент", "/agents", "◎"], ["Сделка", "/deals", "◇"], ["Чат", "/messenger", "◌"], ["Админ", "/support", "✉"], ["Счёт", "/profile", "◉"],
+    ["AI", "/dashboard", "✦"], ["Запрос", "/requests", "↔"], ["Агент", "/agents", "◎"], ["Чат", "/messenger", "◌"], ["Кабинет", "/deals", "◉"],
   ] as const : [
-    ["AI", "/dashboard", "✦"], ["So‘rov", "/requests", "↔"], ["Agent", "/agents", "◎"], ["Bitim", "/deals", "◇"], ["Chat", "/messenger", "◌"], ["Aloqa", "/support", "✉"], ["Hisob", "/profile", "◉"],
+    ["AI", "/dashboard", "✦"], ["So‘rov", "/requests", "↔"], ["Agent", "/agents", "◎"], ["Chat", "/messenger", "◌"], ["Kabinet", "/deals", "◉"],
   ] as const;
+
+  const mainNavActive = (href: string) => {
+    if (href === "/dashboard") return inAiSection;
+    if (href === "/requests") return pathname === "/requests" || pathname.startsWith("/requests/");
+    if (href === "/agents") return pathname === "/agents" || pathname.startsWith("/agents/");
+    if (href === "/messenger") return inChatSection;
+    if (href === "/deals") return inCabinetSection;
+    return pathname === href;
+  };
+
+  const sectionTabs: Array<{ label: string; href: string; active: boolean }> = inAiSection
+    ? [
+        { label: isRu ? "AI центр" : "AI markaz", href: "/dashboard", active: pathname === "/dashboard" },
+        { label: isRu ? "Посты" : "Postlar", href: "/feed", active: pathname === "/feed" || pathname.startsWith("/feed/") },
+      ]
+    : inChatSection
+      ? [
+          { label: isRu ? "Чаты" : "Chatlar", href: "/messenger", active: pathname === "/messenger" || pathname.startsWith("/messenger/") },
+          { label: isRu ? "Связь с администратором" : "Admin bilan aloqa", href: "/support", active: pathname === "/support" },
+        ]
+      : inCabinetSection
+        ? [
+            { label: isRu ? "Сделки" : "Bitimlar", href: "/deals", active: pathname === "/deals" || pathname.startsWith("/deals/") || pathname.startsWith("/messages/") },
+            { label: isRu ? "Счёт и тариф" : "Hisob va tarif", href: "/billing", active: pathname === "/billing" || pathname.startsWith("/billing/") },
+            { label: isRu ? "Профиль" : "Profil", href: "/profile", active: pathname === "/profile" || pathname === "/referral" || pathname.startsWith("/referral/") },
+            ...(role === "admin" ? [{ label: isRu ? "Админ" : "Admin", href: "/admin", active: pathname === "/admin" || pathname.startsWith("/admin/") }] : []),
+          ]
+        : [];
 
   useEffect(() => { pathnameRef.current = pathname; }, [pathname]);
 
@@ -126,7 +158,6 @@ export default function AppShell({ children, session, activePath = "" }: { child
     };
   }, []);
 
-  const visibleNavigation = role === "admin" ? [...navigation, ["Admin", "/admin"] as const] : navigation;
   const accountReady = accountActive && registrationStatus === "active";
 
   useEffect(() => {
@@ -221,20 +252,18 @@ export default function AppShell({ children, session, activePath = "" }: { child
       <aside className="hidden w-56 shrink-0 flex-col bg-[#0b1f3a] px-4 py-5 text-white lg:flex">
         <Link href="/dashboard" className="flex items-center gap-2.5 px-2 text-sm font-semibold tracking-wide focus:outline-none focus:ring-2 focus:ring-cyan-300"><BrandMark /> MY AGENT AIR</Link>
         <nav aria-label={isRu ? "Основная навигация" : "Asosiy navigatsiya"} className="mt-8 space-y-1">
-          {visibleNavigation.map(([label, href]) => (
-            <Link key={href} href={href} className={`flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-cyan-300 ${(activePath === href || (href === "/deals" && activePath === "/messages")) ? "bg-blue-600 text-white shadow-lg shadow-blue-950/30" : "text-blue-100 hover:bg-white/10 hover:text-white"}`}>
+          {navigation.map(([label, href]) => {
+            const active = mainNavActive(href);
+            const badge = href === "/deals" ? unreadMessages : href === "/messenger" ? unreadMessenger : 0;
+            return <Link key={href} href={href} className={`flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-cyan-300 ${active ? "bg-blue-600 text-white shadow-lg shadow-blue-950/30" : "text-blue-100 hover:bg-white/10 hover:text-white"}`}>
               <span>{label}</span>
-              {href === "/deals" && unreadMessages > 0 && <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold text-white">{unreadMessages > 99 ? "99+" : unreadMessages}</span>}
-              {href === "/messenger" && unreadMessenger > 0 && <span className="rounded-full bg-cyan-300 px-2 py-0.5 text-[10px] font-bold text-[#0b1f3a]">{unreadMessenger > 99 ? "99+" : unreadMessenger}</span>}
-            </Link>
-          ))}
+              {badge > 0 && <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${href === "/messenger" ? "bg-cyan-300 text-[#0b1f3a]" : "bg-rose-500 text-white"}`}>{badge > 99 ? "99+" : badge}</span>}
+            </Link>;
+          })}
         </nav>
         <div className="mt-5 px-1">
           <UiControls inverse />
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <Link href="/profile" className="rounded-xl border border-white/15 px-3 py-2.5 text-center text-xs font-medium text-blue-100 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-300">{isRu ? "Счёт и тариф" : "Hisob va tarif"}</Link>
-            <button type="button" onClick={handleLogout} disabled={isSigningOut} aria-label={isRu ? "Выйти" : "Chiqish"} className="rounded-xl border border-white/15 px-3 py-2.5 text-center text-xs font-medium text-blue-100 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-300 disabled:opacity-60">{isSigningOut ? (isRu ? "Выход..." : "Chiqilmoqda...") : (isRu ? "Выйти" : "Chiqish")}</button>
-          </div>
+          <button type="button" onClick={handleLogout} disabled={isSigningOut} aria-label={isRu ? "Выйти" : "Chiqish"} className="mt-3 w-full rounded-xl border border-white/15 px-3 py-2.5 text-center text-xs font-medium text-blue-100 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-300 disabled:opacity-60">{isSigningOut ? (isRu ? "Выход..." : "Chiqilmoqda...") : (isRu ? "Выйти" : "Chiqish")}</button>
         </div>
         <div className="mt-auto border-t border-white/10 pt-4">
           <p className="truncate px-2 text-sm font-semibold">{profileName || currentSession.user.email || (isRu ? "Пользователь" : "Foydalanuvchi")}</p>
@@ -247,12 +276,14 @@ export default function AppShell({ children, session, activePath = "" }: { child
           <Link href="/dashboard" className="flex items-center gap-2 text-sm font-bold tracking-wide"><BrandMark /> MY AGENT AIR</Link>
           <div className="flex items-center gap-1.5">
             <UiControls compact />
-            <Link href="/profile" className="hidden rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 sm:block">{isRu ? "Счёт" : "Hisob"}</Link>
             <button type="button" onClick={handleLogout} disabled={isSigningOut} aria-label={isRu ? "Выйти" : "Chiqish"} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-600">{isRu ? "Выход" : "Chiqish"}</button>
           </div>
         </header>
 
         <main className={`mx-auto w-full max-w-[1500px] ${isDashboard ? "px-2 py-2 sm:px-4 sm:py-3 lg:px-6 lg:py-5" : "px-4 py-5 sm:px-8 sm:py-8"}`}>
+          {sectionTabs.length > 0 && <nav aria-label={isRu ? "Навигация раздела" : "Bo‘lim navigatsiyasi"} className="mb-4 flex gap-1 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+            {sectionTabs.map((tab) => <Link key={tab.href} href={tab.href} className={`shrink-0 rounded-xl px-3.5 py-2 text-xs font-semibold transition sm:text-sm ${tab.active ? "bg-[#0b1f3a] text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 hover:text-[#0b1f3a]"}`}>{tab.label}</Link>)}
+          </nav>}
           {(!accountActive || registrationStatus === "suspended") && <div role="alert" className="mb-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 sm:mb-4 sm:p-4 sm:text-sm">{isRu ? "Ваш аккаунт заблокирован. Новые действия ограничены." : "Hisobingiz bloklangan. Yangi amallar cheklangan."}</div>}
           {registrationStatus === "pending_email" && <div role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{isRu ? "Подтвердите email, чтобы продолжить регистрацию." : "Registratsiyani davom ettirish uchun emailingizni tasdiqlang."}</div>}
           {registrationStatus === "incomplete" && activePath !== "/profile" && <div role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{isRu ? "Чтобы начать работу с партнёрами, завершите профиль." : `Hamkorlikni boshlash uchun profilingizni yakunlang${missingFields.length ? `: ${missingFields.join(", ")}` : ""}.`} <Link href="/profile?complete=1" className="font-semibold underline">{isRu ? "Заполнить профиль →" : "Profilni to‘ldirish →"}</Link></div>}
@@ -261,9 +292,9 @@ export default function AppShell({ children, session, activePath = "" }: { child
         </main>
       </div>
 
-      <nav aria-label={isRu ? "Мобильная навигация" : "Mobil asosiy navigatsiya"} className="fixed inset-x-0 bottom-0 z-50 grid h-20 grid-cols-7 border-t border-slate-200 bg-white/95 px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden dark:bg-slate-950/95">
+      <nav aria-label={isRu ? "Мобильная навигация" : "Mobil asosiy navigatsiya"} className="fixed inset-x-0 bottom-0 z-50 grid h-20 grid-cols-5 border-t border-slate-200 bg-white/95 px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden dark:bg-slate-950/95">
         {mobileNavigation.map(([label, href, icon]) => {
-          const active = activePath === href || (href === "/deals" && activePath === "/messages");
+          const active = mainNavActive(href);
           const badge = href === "/deals" ? unreadMessages : href === "/messenger" ? unreadMessenger : 0;
           return <Link key={href} href={href} className={`relative flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 text-[10px] font-semibold ${active ? "text-blue-600" : "text-slate-500"}`}>
             <span className={`flex h-7 w-9 items-center justify-center rounded-xl text-base ${active ? "bg-blue-50" : ""}`}>{icon}</span>
