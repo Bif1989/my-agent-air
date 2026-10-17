@@ -18,7 +18,7 @@ create table if not exists public.admin_sms_recipients (
   id uuid primary key default gen_random_uuid(),
   campaign_id uuid not null references public.admin_sms_campaigns(id) on delete cascade,
   phone text not null check (phone ~ '^998[0-9]{9}$'),
-  status text not null default 'pending' check (status in ('pending','sent','failed','skipped')),
+  status text not null default 'pending' check (status in ('pending','processing','sent','failed','skipped')),
   provider_message_id text,
   failure_reason text,
   attempts integer not null default 0 check (attempts >= 0),
@@ -40,3 +40,44 @@ revoke all on table public.admin_sms_campaigns from public, anon, authenticated;
 revoke all on table public.admin_sms_recipients from public, anon, authenticated;
 grant select, insert, update, delete on table public.admin_sms_campaigns to service_role;
 grant select, insert, update, delete on table public.admin_sms_recipients to service_role;
+
+create or replace function public.claim_admin_sms_batch(p_campaign_id uuid, p_limit integer default 5)
+returns setof public.admin_sms_recipients
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if p_limit < 1 or p_limit > 20 then
+    raise exception 'invalid_batch_size';
+  end if;
+
+  -- Recover a claim only if a previous server request died well beyond its 30s runtime window.
+  update public.admin_sms_recipients
+  set status = 'pending', updated_at = now()
+  where campaign_id = p_campaign_id
+    and status = 'processing'
+    and updated_at < now() - interval '2 minutes';
+
+  return query
+  with picked as (
+    select r.id
+    from public.admin_sms_recipients r
+    where r.campaign_id = p_campaign_id
+      and r.status = 'pending'
+    order by r.id
+    for update skip locked
+    limit p_limit
+  ), claimed as (
+    update public.admin_sms_recipients r
+    set status = 'processing', updated_at = now()
+    from picked
+    where r.id = picked.id
+    returning r.*
+  )
+  select * from claimed;
+end;
+$$;
+
+revoke all on function public.claim_admin_sms_batch(uuid, integer) from public, anon, authenticated;
+grant execute on function public.claim_admin_sms_batch(uuid, integer) to service_role;
