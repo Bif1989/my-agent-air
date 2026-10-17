@@ -39,6 +39,9 @@ export type AdminReferralRow = {
   referred_phone: string | null;
   referred_agent_type: string | null;
   referred_is_verified: boolean;
+  verified_by_admin_id: string | null;
+  verified_by_admin_name: string | null;
+  verified_at: string | null;
   generated_bonus: number;
 };
 
