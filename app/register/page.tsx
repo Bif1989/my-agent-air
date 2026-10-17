@@ -7,6 +7,7 @@ import BrandMark from "@/app/components/brand-mark";
 import TurnstileChallenge, { TURNSTILE_SITE_KEY } from "@/app/components/turnstile-challenge";
 import { UiControls, useUiSettings } from "@/lib/ui-settings";
 import { saveSession } from "@/lib/supabase-auth";
+import { claimReferralCode } from "@/lib/referral-api";
 import {
   completeSignupSmsProtected,
   requestSignupSmsProtected,
@@ -40,15 +41,26 @@ export default function RegisterPage() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [captchaToken, setCaptchaToken] = useState("");
   const [captchaReset, setCaptchaReset] = useState(0);
+  const [referralCode, setReferralCode] = useState("");
   const router = useRouter();
   const { isRu } = useUiSettings();
   const captchaRequired = Boolean(TURNSTILE_SITE_KEY);
+
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("ref")?.trim().toUpperCase() || "";
+    if (/^[A-Z0-9]{10,24}$/.test(code)) setReferralCode(code);
+  }, []);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
     const timer = window.setInterval(() => setResendCooldown((value) => value <= 1 ? 0 : value - 1), 1000);
     return () => window.clearInterval(timer);
   }, [resendCooldown]);
+
+  async function claimReferralAfterSignup() {
+    if (!referralCode) return;
+    await claimReferralCode(referralCode).catch(() => undefined);
+  }
 
   function resetCredentials(nextMethod = method) {
     setMethod(nextMethod);
@@ -86,6 +98,7 @@ export default function RegisterPage() {
         const response = await signUpProtected({ email: identifier, password, captcha_token: captchaToken });
         if (response.access_token && response.refresh_token && response.user?.id) {
           saveSession(response);
+          await claimReferralAfterSignup();
           router.replace("/profile?complete=1");
           return;
         }
@@ -117,6 +130,7 @@ export default function RegisterPage() {
         const response = await completeSignupSmsProtected({ phone: pending.identifier, password: pending.password }, pending.challengeId);
         if (response.access_token && response.refresh_token && response.user?.id) {
           saveSession(response);
+          await claimReferralAfterSignup();
           router.replace("/profile?complete=1");
           return;
         }
@@ -124,6 +138,7 @@ export default function RegisterPage() {
         const response = await verifySignupOtpProtected(pending.identifier, otpCode);
         if (response.access_token && response.refresh_token && response.user?.id) {
           saveSession(response);
+          await claimReferralAfterSignup();
           router.replace("/profile?complete=1");
           return;
         }
@@ -178,6 +193,11 @@ export default function RegisterPage() {
                 ? (isRu ? "После подтверждения вы войдёте в аккаунт и заполните анкету компании." : "Tasdiqlagach hisobga kirasiz va kompaniya anketasini to‘ldirasiz.")
                 : (isRu ? "Нужны только телефон или email и пароль. Остальные данные — после подтверждения." : "Hozir faqat telefon yoki email va parol kerak. Qolgan ma’lumotlar tasdiqlashdan keyin.")}</p>
             </div>
+
+            {referralCode && <div className="mt-5 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800">
+              <p className="font-semibold">🎁 {isRu ? "Реферальное приглашение принято" : "Referal taklif qabul qilindi"}</p>
+              <p className="mt-1 text-xs leading-5">{isRu ? "После заполнения профиля реальной компании и подтверждения администратором бонус автоматически будет начислен пригласившим партнёрам." : "Real kompaniya profilingiz to‘ldirilib, administrator tasdiqlagach bonus taklif qilgan hamkorlarga avtomatik hisoblanadi."}</p>
+            </div>}
 
             {pending ? (
               <form onSubmit={handleVerifyOtp} className="mt-8 grid gap-5">
