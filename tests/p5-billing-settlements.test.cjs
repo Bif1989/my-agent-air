@@ -37,15 +37,13 @@ test('P5.2 settlement is atomic and cannot settle one fee twice', () => {
   assert.match(sql, /paid_at = case when p_kind = 'payment'/);
 });
 
-test('P5.2 does not add automatic billing account blocking', () => {
+test('P5.2 historical settlement migration never deactivates or blocks an account', () => {
   const sql = read(migration);
-  const billingPage = read('app/billing/page.tsx');
   assert.doesNotMatch(sql, /set is_active = false/i);
   assert.doesNotMatch(sql, /registration_status\s*=\s*'blocked'/i);
-  assert.match(billingPage, /Qarzdorlik platformaga kirishni avtomatik bloklamaydi/);
 });
 
-test('P5.2 exposes admin settlement workflow and user settlement history', () => {
+test('admin settlement workflow remains available while the wallet UI separates legacy outstanding fees', () => {
   const adminApi = read('app/admin/billing/admin-billing-api.ts');
   const adminPage = read('app/admin/billing/page.tsx');
   const billingApi = read('app/billing/billing-api.ts');
@@ -55,5 +53,7 @@ test('P5.2 exposes admin settlement workflow and user settlement history', () =>
   assert.match(adminPage, /To‘landi deb belgilash/);
   assert.match(adminPage, /Hisobdan chiqarish/);
   assert.match(billingApi, /billing_settlements\?/);
-  assert.match(billingPage, /Settlement tarixi/);
+  assert.match(billingPage, /OLDINGI HISOB/);
+  assert.match(billingPage, /eski to‘lanmagan komissiya/);
+  assert.match(billingPage, /Yangi bitimlar qarzga yozilmaydi/);
 });
