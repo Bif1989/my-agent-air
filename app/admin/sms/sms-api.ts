@@ -39,8 +39,9 @@ type CampaignMutationResponse = {
   batch_processed?: number;
   batch_size?: number;
 };
-
 type ApiError = { message?: string; code?: string };
+
+const ENDPOINT = "/api/supplier-outreach/admin-sms-campaigns";
 
 async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   let session = getStoredSession();
@@ -74,15 +75,15 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export function listSmsCampaigns() {
-  return apiFetch<CampaignListResponse>("/api/admin/sms-campaigns");
+  return apiFetch<CampaignListResponse>(ENDPOINT);
 }
 
 export function getSmsCampaign(id: string) {
-  return apiFetch<CampaignDetailResponse>(`/api/admin/sms-campaigns?id=${encodeURIComponent(id)}`);
+  return apiFetch<CampaignDetailResponse>(`${ENDPOINT}?id=${encodeURIComponent(id)}`);
 }
 
 export function createSmsCampaign(input: { name: string; message: string; recipients: string[] }) {
-  return apiFetch<CampaignMutationResponse>("/api/admin/sms-campaigns", {
+  return apiFetch<CampaignMutationResponse>(ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "create", ...input }),
@@ -90,7 +91,7 @@ export function createSmsCampaign(input: { name: string; message: string; recipi
 }
 
 export function sendSmsCampaignBatch(campaignId: string) {
-  return apiFetch<CampaignMutationResponse>("/api/admin/sms-campaigns", {
+  return apiFetch<CampaignMutationResponse>(ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "send_batch", campaign_id: campaignId }),
@@ -98,7 +99,7 @@ export function sendSmsCampaignBatch(campaignId: string) {
 }
 
 export function retryFailedSms(campaignId: string) {
-  return apiFetch<CampaignMutationResponse>("/api/admin/sms-campaigns", {
+  return apiFetch<CampaignMutationResponse>(ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "retry_failed", campaign_id: campaignId }),
