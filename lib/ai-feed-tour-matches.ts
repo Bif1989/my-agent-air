@@ -134,7 +134,7 @@ function addSignalTerms(target: string[], allTerms: string[], seenTarget: Set<st
 }
 
 function looksLikeRouteQuery(message: string) {
-  const words = normalize(message).match(/[\p{L}\p{N}'-]+/gu) || [];
+  const words: string[] = normalize(message).match(/[\p{L}\p{N}'-]+/gu) ?? [];
   if (words.length < 2 || words.length > 12) return false;
 
   let fromIndex = -1;
