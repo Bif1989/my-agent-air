@@ -2,6 +2,7 @@ import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase-config";
 import type { AssistantDraft } from "@/lib/request-assistant";
 
 const MAX_MATCHES = 5;
+const MAX_ARCHIVED_MATCHES = 3;
 const MAX_SEARCH_TERMS = 10;
 
 export type AiTourPostMatch = {
@@ -59,72 +60,31 @@ const STOP_WORDS = new Set([
 const DISCOVERY_PATTERN = /(?:\b(?:kerak|qidir(?:ib)?|top(?:ib)?|bormi|xohlayman|xoxlayman|need|find|show|want)\b|нужен|нужна|нужно|найди|найти|покажи|хочу|есть\s+ли)/i;
 
 const SERVICE_SIGNALS: ServiceSignal[] = [
-  {
-    category: "Aviachipta",
-    feedCategories: ["aviachipta"],
-    keys: ["aviachipta", "chipta", "bilet", "flight", "air ticket", "авиачипта", "авиабилет", "билет", "рейс"],
-    terms: ["aviachipta", "bilet", "авиабилет", "билет", "flight"],
-  },
-  {
-    category: "Tur paket",
-    feedCategories: ["tur_paket"],
-    keys: ["tur paket", "turpaket", "tour package", "putyovka", "тур пакет", "турпакет", "путевка", "путёвка"],
-    terms: ["tur paket", "turpaket", "турпакет", "путевка", "tour"],
-  },
-  {
-    category: "Mehmonxona",
-    feedCategories: ["mehmonxona"],
-    keys: ["mehmonxona", "hotel", "otel", "hostel", "gostinitsa", "отель", "гостиница", "хостел", "апартамент"],
-    terms: ["mehmonxona", "hotel", "отель", "гостиница", "hostel"],
-  },
-  {
-    category: "Transfer",
-    feedCategories: ["transfer"],
-    keys: ["transfer", "taksi", "taxi", "driver", "transport", "трансфер", "такси", "водитель", "транспорт"],
-    terms: ["transfer", "трансфер", "taxi", "такси", "водитель"],
-  },
-  {
-    category: "Gid",
-    feedCategories: [],
-    keys: ["gid", "guide", "ekskursovod", "гид", "экскурсовод"],
-    terms: ["gid", "guide", "гид", "экскурсовод"],
-  },
-  {
-    category: "Viza",
-    feedCategories: ["viza"],
-    keys: ["viza", "visa", "виза"],
-    terms: ["viza", "visa", "виза"],
-  },
+  { category: "Aviachipta", feedCategories: ["aviachipta"], keys: ["aviachipta", "chipta", "bilet", "flight", "air ticket", "авиачипта", "авиабилет", "билет", "рейс"], terms: ["aviachipta", "bilet", "авиабилет", "билет", "flight"] },
+  { category: "Tur paket", feedCategories: ["tur_paket"], keys: ["tur paket", "turpaket", "tour package", "putyovka", "тур пакет", "турпакет", "путевка", "путёвка"], terms: ["tur paket", "turpaket", "турпакет", "путевка", "tour"] },
+  { category: "Mehmonxona", feedCategories: ["mehmonxona"], keys: ["mehmonxona", "hotel", "otel", "hostel", "gostinitsa", "отель", "гостиница", "хостел", "апартамент"], terms: ["mehmonxona", "hotel", "отель", "гостиница", "hostel"] },
+  { category: "Transfer", feedCategories: ["transfer"], keys: ["transfer", "taksi", "taxi", "driver", "transport", "трансфер", "такси", "водитель", "транспорт"], terms: ["transfer", "трансфер", "taxi", "такси", "водитель"] },
+  { category: "Gid", feedCategories: [], keys: ["gid", "guide", "ekskursovod", "гид", "экскурсовод"], terms: ["gid", "guide", "гид", "экскурсовод"] },
+  { category: "Viza", feedCategories: ["viza"], keys: ["viza", "visa", "виза"], terms: ["viza", "visa", "виза"] },
 ];
 
 const LANGUAGE_SIGNALS: Array<{ id: string; keys: string[]; terms: string[] }> = [
-  {
-    id: "ru",
-    keys: ["rus tilida", "ruscha", "russian", "русский", "русскоязы", "на русском", "по-русски", "по русски"],
-    terms: ["ruscha", "russian", "русский", "русскоязы"],
-  },
-  {
-    id: "uz",
-    keys: ["o'zbek tilida", "ozbek tilida", "o'zbekcha", "ozbekcha", "uzbek", "узбекский", "на узбекском"],
-    terms: ["o'zbekcha", "uzbek", "узбекский"],
-  },
-  {
-    id: "en",
-    keys: ["ingliz tilida", "inglizcha", "english", "английский", "на английском"],
-    terms: ["inglizcha", "english", "английский"],
-  },
+  { id: "ru", keys: ["rus tilida", "ruscha", "russian", "русский", "русскоязы", "на русском", "по-русски", "по русски"], terms: ["ruscha", "russian", "русский", "русскоязы"] },
+  { id: "uz", keys: ["o'zbek tilida", "ozbek tilida", "o'zbekcha", "ozbekcha", "uzbek", "узбекский", "на узбекском"], terms: ["o'zbekcha", "uzbek", "узбекский"] },
+  { id: "en", keys: ["ingliz tilida", "inglizcha", "english", "английский", "на английском"], terms: ["inglizcha", "english", "английский"] },
 ];
 
-const DESTINATION_ALIASES: Array<{ keys: string[]; terms: string[] }> = [
+const PLACE_ALIASES: Array<{ keys: string[]; terms: string[] }> = [
   { keys: ["dubai", "dubay", "дубай", "uae", "baa", "amirlik"], terms: ["Dubai", "Dubay", "Дубай", "UAE", "BAA"] },
   { keys: ["misr", "egypt", "египет", "sharm", "hurghada", "xurgada", "хургада"], terms: ["Misr", "Egypt", "Египет", "Sharm", "Hurghada"] },
   { keys: ["turkiya", "turkey", "турция", "antalya", "анталья", "istanbul", "стамбул"], terms: ["Turkiya", "Turkey", "Турция", "Antalya", "Istanbul"] },
-  { keys: ["tailand", "thailand", "тайланд", "phuket", "пхукет", "pattaya", "паттайя"], terms: ["Thailand", "Tailand", "Тайланд", "Phuket", "Pattaya"] },
-  { keys: ["vietnam", "ветнам", "вьетнам", "phu quoc", "phuquoc", "фукуок"], terms: ["Vietnam", "Вьетнам", "Phu Quoc", "Phuquoc", "Фукуок"] },
-  { keys: ["maldiv", "maldives", "мальдив"], terms: ["Maldives", "Maldiv", "Мальдивы"] },
-  { keys: ["malayziya", "malaysia", "малайзия", "kuala lumpur"], terms: ["Malaysia", "Malayziya", "Малайзия", "Kuala Lumpur"] },
-  { keys: ["gruziya", "georgia", "грузия", "tbilisi", "тбилиси", "batumi", "батуми"], terms: ["Georgia", "Gruziya", "Грузия", "Tbilisi", "Batumi"] },
-  { keys: ["ozarbayjon", "azerbaijan", "азербайджан", "baku", "баку"], terms: ["Azerbaijan", "Ozarbayjon", "Азербайджан", "Baku"] },
+  { keys: ["samarqand", "samarkand", "самарканд"], terms: ["Samarqand", "Samarkand", "Самарканд"] },
+  { keys: ["namangan", "наманган"], terms: ["Namangan", "Наманган"] },
+  { keys: ["toshkent", "tashkent", "ташкент"], terms: ["Toshkent", "Tashkent", "Ташкент"] },
+  { keys: ["buxoro", "bukhara", "бухара"], terms: ["Buxoro", "Bukhara", "Бухара"] },
+  { keys: ["xiva", "khiva", "хива"], terms: ["Xiva", "Khiva", "Хива"] },
+  { keys: ["andijon", "andijan", "андижан"], terms: ["Andijon", "Andijan", "Андижан"] },
+  { keys: ["fargona", "fergana", "фергана"], terms: ["Fargona", "Fergana", "Фергана"] },
 ];
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -148,7 +108,7 @@ function normalize(value: string) {
 }
 
 function stripUzbekCaseSuffix(word: string) {
-  for (const suffix of ["lardan", "larga", "ning", "dan", "gacha", "ga", "da", "ni"]) {
+  for (const suffix of ["lardan", "larga", "ning", "gacha", "dan", "дан", "ga", "га", "da", "да", "ni", "ни"]) {
     if (word.length > suffix.length + 3 && word.endsWith(suffix)) return word.slice(0, -suffix.length);
   }
   return word;
@@ -173,6 +133,24 @@ function addSignalTerms(target: string[], allTerms: string[], seenTarget: Set<st
   }
 }
 
+function looksLikeRouteQuery(message: string) {
+  const words = normalize(message).match(/[\p{L}\p{N}'-]+/gu) || [];
+  if (words.length < 2 || words.length > 12) return false;
+
+  let fromIndex = -1;
+  let toIndex = -1;
+  for (let index = 0; index < words.length; index += 1) {
+    const word = words[index];
+    if (fromIndex < 0 && word.length > 5 && (word.endsWith("dan") || word.endsWith("дан"))) fromIndex = index;
+    if (word.length > 4 && (word.endsWith("ga") || word.endsWith("га"))) toIndex = index;
+  }
+  if (fromIndex >= 0 && toIndex > fromIndex) return true;
+
+  const iz = words.indexOf("из");
+  const v = words.findIndex((word, index) => index > iz && (word === "в" || word === "во"));
+  return iz >= 0 && v > iz && v < words.length - 1;
+}
+
 export function buildAiFeedSearchContext(requests: MarketplaceRequest[], message: string): SearchContext {
   const terms: string[] = [];
   const destinationTerms: string[] = [];
@@ -195,7 +173,7 @@ export function buildAiFeedSearchContext(requests: MarketplaceRequest[], message
   const normalizedMessage = normalize(message);
   const requestCategoryNames = new Set(requests.map((item) => normalize(typeof item.category === "string" ? item.category : "")).filter(Boolean));
   const signalHaystack = `${normalizedMessage} ${destinationValues.map(normalize).join(" ")}`.trim();
-  let directSearchRequested = destinationValues.some((destination) => {
+  let directSearchRequested = looksLikeRouteQuery(message) || destinationValues.some((destination) => {
     const normalizedDestination = normalize(destination);
     return normalizedDestination.length >= 3 && normalizedMessage.includes(normalizedDestination);
   });
@@ -209,9 +187,9 @@ export function buildAiFeedSearchContext(requests: MarketplaceRequest[], message
     addSignalTerms(serviceTerms, terms, seenServices, seenTerms, group.terms, 4);
   }
 
-  for (const group of DESTINATION_ALIASES) {
+  for (const group of PLACE_ALIASES) {
     const requestedByText = hasSignal(normalizedMessage, group.keys);
-    if (requestedByText) directSearchRequested = true;
+    if (requestedByText && requests.length > 0) directSearchRequested = true;
     if (!hasSignal(signalHaystack, group.keys)) continue;
     addSignalTerms(destinationTerms, terms, seenDestinations, seenTerms, group.terms, 3);
   }
@@ -243,7 +221,6 @@ export function buildAiFeedSearchContext(requests: MarketplaceRequest[], message
   };
 }
 
-// Kept for backward compatibility with the first tour-only implementation and its callers/tests.
 export function buildTourPostSearchTerms(destination: string, message: string) {
   return buildAiFeedSearchContext([{ category: "Tur paket", destination }], message).terms;
 }
@@ -277,7 +254,7 @@ function scoreRow(row: FeedSearchRow, context: SearchContext) {
     if (!term) continue;
     if (destination === term) score += 10;
     else if (destination && (destination.includes(term) || term.includes(destination))) score += 7;
-    if (origin === term) score += 2;
+    if (origin === term) score += 4;
     if (title.includes(term)) score += 4;
     if (body.includes(term)) score += 2;
   }
@@ -303,26 +280,33 @@ function scoreRow(row: FeedSearchRow, context: SearchContext) {
     if (!term) continue;
     if (title.includes(term)) score += 1.5;
     if (body.includes(term)) score += 0.75;
-    if (destination.includes(term) || origin.includes(term)) score += 0.75;
+    if (destination.includes(term) || origin.includes(term)) score += 1;
   }
 
   if (!combined.trim() && !destination && !origin) score -= 5;
   return score;
 }
 
-function sanitizeRow(row: FeedSearchRow): AiTourPostMatch | null {
-  if (!row || typeof row.id !== "string" || row.status !== "active") return null;
+function availability(row: FeedSearchRow) {
+  if (row.status !== "active") return "closed" as const;
   if (row.expires_at) {
     const expiry = Date.parse(row.expires_at);
-    if (Number.isFinite(expiry) && expiry <= Date.now()) return null;
+    if (Number.isFinite(expiry) && expiry <= Date.now()) return "expired" as const;
   }
+  return "active" as const;
+}
+
+function sanitizeRow(row: FeedSearchRow): AiTourPostMatch | null {
+  if (!row || typeof row.id !== "string" || row.status === "deleted") return null;
   const numericPrice = row.price === null || row.price === undefined ? null : Number(row.price);
   const category = typeof row.category === "string" ? row.category.slice(0, 40) : "boshqa";
-  const titleValue = typeof row.title === "string" && row.title.trim()
+  const state = availability(row);
+  const rawTitle = typeof row.title === "string" && row.title.trim()
     ? row.title.trim().slice(0, 160)
     : typeof row.destination === "string" && row.destination.trim()
       ? row.destination.trim().slice(0, 120)
       : CATEGORY_LABELS[category] || "Taklif";
+  const titleValue = state === "active" ? rawTitle : `${state === "expired" ? "MUDDATI O‘TGAN" : "YOPILGAN"} · ${rawTitle}`.slice(0, 180);
   const authorName = typeof row.author_full_name === "string" && row.author_full_name.trim() ? row.author_full_name.trim().slice(0, 120) : null;
   const companyName = typeof row.author_company_name === "string" && row.author_company_name.trim()
     ? row.author_company_name.trim().slice(0, 160)
@@ -363,8 +347,7 @@ export async function findAiTourPostMatches({ requests, message, authorization, 
   for (const result of results) {
     if (result.status !== "fulfilled") continue;
     for (const row of result.value) {
-      const sanitized = sanitizeRow(row);
-      if (!sanitized || !serviceCompatible(row, context)) continue;
+      if (!sanitizeRow(row) || !serviceCompatible(row, context)) continue;
       const score = scoreRow(row, context);
       if (score <= 0) continue;
       const existing = ranked.get(row.id);
@@ -372,9 +355,12 @@ export async function findAiTourPostMatches({ requests, message, authorization, 
     }
   }
 
-  return [...ranked.values()]
-    .sort((a, b) => b.score - a.score || Date.parse(b.row.created_at || "") - Date.parse(a.row.created_at || ""))
+  const sorted = [...ranked.values()]
+    .sort((a, b) => b.score - a.score || Date.parse(b.row.created_at || "") - Date.parse(a.row.created_at || ""));
+  const active = sorted.filter(({ row }) => availability(row) === "active");
+  const selected = active.length ? active.slice(0, MAX_MATCHES) : sorted.filter(({ row }) => availability(row) !== "active").slice(0, MAX_ARCHIVED_MATCHES);
+
+  return selected
     .map(({ row }) => sanitizeRow(row))
-    .filter((row): row is AiTourPostMatch => Boolean(row))
-    .slice(0, MAX_MATCHES);
+    .filter((row): row is AiTourPostMatch => Boolean(row));
 }
