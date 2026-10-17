@@ -17,7 +17,7 @@ For a new empty Supabase project only:
 3. Apply every later `.sql` file in `migrations/` in filename order.
 4. Configure project-specific secrets, URLs and provider credentials separately.
 5. Run `tests/resume_security.sql` and the application Quality Gate.
-6. Verify RLS/advisors before exposing the environment to users.
+6. Verify RLS/advisors and browser-role grants before exposing the environment to users.
 
 P10 restored cloud migrations that were present in production history but absent from Git recovery history:
 
@@ -37,9 +37,11 @@ Phone signup uses `registration_sms_otps` as a server-only challenge store. Brow
 
 ## Payment integrations
 
-Merchant secrets for Click/Payme must be configured only after the provider has issued the final merchant/service identifiers and credentials. Webhook/provider callbacks must be verified server-side and processed idempotently. Payment database migrations and frontend release should remain backward-compatible while old production code is still serving traffic.
+Click is live for the Agent billing flow. Merchant/service credentials and the Click secret remain server-only. Prepare/Complete callbacks verify provider signatures and bind the callback to the stored order amount, order reference and purpose. Wallet top-up completion is idempotent and writes an immutable wallet ledger entry; subscription fulfillment uses the same payment-order foundation. Payme is not enabled unless a separate provider rollout explicitly configures and tests it.
 
-The recovered Click migration creates the service-role-only prepare/complete/cancel RPC foundation. It does not contain merchant credentials and does not by itself expose a public payment callback. P10 stages additional foreign-key indexes and least-privilege cleanup under `supabase/p10/` for the merchant rollout.
+The historical Click migration created the service-role-only prepare/complete/cancel foundation. Later wallet/subscription migrations extend it without exposing merchant credentials. P10 base migrations `20261016042735_p10_base_browser_least_privilege.sql` and `20261016042741_p10_base_payment_order_fk_indexes.sql` were applied to production; the files under `supabase/p10/` are review references, not pending production SQL.
+
+P10 closeout migration `20261017081851_p10_closeout_default_privilege_hardening.sql` removes `TRUNCATE`, `REFERENCES` and `TRIGGER` from browser roles on the wallet tables and changes the `postgres` public-table default ACL so later `postgres`-owned tables do not inherit those structural privileges. The managed `supabase_admin` default ACL is provider-owned and cannot be changed by the `postgres` role through the project connector; any future object owned by that role must therefore be reviewed explicitly with the privilege scan/advisors.
 
 ## Push dispatch
 
@@ -55,4 +57,4 @@ The baseline contains no usable secret, so fresh databases send no pushes until 
 
 Run `tests/resume_security.sql` after the recovery chain is applied. Its temporary fixtures and queued notifications are rolled back. It verifies the successful deal flow and rejects unauthorized, blocked, expired and invalid-money operations.
 
-Also run database advisors and confirm that every table in exposed schemas has the intended RLS and least-privilege grants before release.
+Also run database advisors and a direct privilege scan. For `anon` and `authenticated`, public application tables should not retain `TRUNCATE`, `TRIGGER` or `REFERENCES` unless a reviewed use case explicitly requires them. Advisor output is not expected to be empty: service-only RLS tables can intentionally have no browser policy, public token-based supplier invite RPCs are intentionally anonymous, and authenticated security-definer RPCs must be evaluated by their internal ownership/admin checks rather than blanket-revoked.
