@@ -58,14 +58,16 @@ For a **fresh Supabase database only**:
 
 Do **not** replay the baseline on production. Production's `supabase_migrations.schema_migrations` ledger remains the canonical record of what was actually applied there.
 
-P10 restored cloud migrations that existed in production but were missing from Git recovery history, including the AI chat prerequisites, the VK aviation ingest schema/disable step, and the Click subscription payment-order foundation. The VK recovery migration intentionally omits the production-only secret hash; environment credentials must be configured separately.
+P10 restored cloud migrations that existed in production but were missing from Git recovery history, including the AI chat prerequisites, the VK aviation ingest schema/disable step, and the Click subscription payment-order foundation. The VK recovery migration intentionally omits the production-only secret hash; environment credentials must be configured separately. P10 closeout migration `20261017081851_p10_closeout_default_privilege_hardening.sql` also removes structural browser privileges from the wallet tables and prevents those privileges from being inherited by future `postgres`-owned public tables.
 
 `supabase/tests/resume_security.sql` verifies access, profile requirements, expiry, money constraints, system-message protection and the core deal workflow. It rolls back its fixtures and queued notifications. Identity sequences may still advance during the test.
 
 ## Verification and deployment
 
-`npm test`, lint and production build are mandatory before release. The Quality Gate also runs browser smoke checks on Desktop, Android and iOS shells. These smoke checks cover public routes and authentication guards; they are not a substitute for a real authenticated end-to-end business-flow test.
+`npm test`, lint and production build are mandatory before release. The Quality Gate also runs browser smoke checks on Desktop, Android and iOS shells. These smoke checks cover public routes and authentication guards.
 
-Vercel Git deployment is disabled for non-`main` branches. P10 work is accumulated on a working branch and merged to `main` in batches so several validated changes can share one production deployment. After Vercel reports READY, verify the deployed Git SHA, `agent.bifavia.uz` alias and Production Smoke result.
+P10 final closeout additionally ran a rollback-only authenticated transaction against the production schema/RLS/RPC path for request → supplier matching → offer → idempotent acceptance → deal → two-way deal chat → completed billing → review. The transaction was rolled back and a follow-up query confirmed that no audit fixtures remained. See `docs/p10-final-closeout.md` for the closeout evidence and the remaining non-blocking Supabase advisor notices.
+
+Vercel Git deployment is disabled for non-`main` branches. Reviewed changes are batched to conserve the Hobby deployment budget. After a runtime release, verify the deployed Git SHA, `agent.bifavia.uz` alias and Production Smoke result. Documentation-only/recovery-only closeout commits do not require an extra runtime deployment when the production application code is unchanged.
 
 Database migrations and frontend deployment are separate operations. Keep migrations backward-compatible with the currently running frontend during rollout, and never expose Supabase secret/service-role keys, Eskiz credentials or merchant secrets to the browser.
