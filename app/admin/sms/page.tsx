@@ -109,15 +109,18 @@ export default function AdminSmsPage() {
   useEffect(() => {
     const stored = getStoredSession();
     if (!stored) { window.location.replace("/login"); return; }
-    setSession(stored);
-    getCurrentProfile()
-      .then((profile) => {
-        if (profile?.role !== "admin") { window.location.replace("/dashboard"); return null; }
-        return listSmsCampaigns();
-      })
-      .then((data) => { if (data) setCampaigns(data.campaigns); })
-      .catch(() => setError("SMS kampaniyalarini yuklab bo‘lmadi."))
-      .finally(() => setLoading(false));
+    const timeoutId = window.setTimeout(() => {
+      setSession(stored);
+      getCurrentProfile()
+        .then((profile) => {
+          if (profile?.role !== "admin") { window.location.replace("/dashboard"); return null; }
+          return listSmsCampaigns();
+        })
+        .then((data) => { if (data) setCampaigns(data.campaigns); })
+        .catch(() => setError("SMS kampaniyalarini yuklab bo‘lmadi."))
+        .finally(() => setLoading(false));
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   async function handleFile(file: File | undefined) {
