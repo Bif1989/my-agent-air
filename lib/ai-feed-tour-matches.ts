@@ -47,13 +47,16 @@ type SearchContext = {
   languageTerms: string[];
   expectedCategories: Set<string>;
   russianRequested: boolean;
+  directSearchRequested: boolean;
 };
 
 const STOP_WORDS = new Set([
-  "kerak", "qidir", "qidirib", "top", "topib", "ber", "bering", "uchun", "bormi", "bor", "xohlayman", "xoxlayman", "til", "tili", "tilida", "gapiradigan",
-  "need", "find", "show", "want", "for", "language", "speaking", "please",
-  "нужен", "нужна", "нужно", "найди", "найти", "покажи", "хочу", "есть", "для", "язык", "языке", "говорит", "говорящий",
+  "tur", "turi", "turpaket", "paket", "kerak", "qidir", "qidirib", "top", "topib", "ber", "bering", "uchun", "bormi", "bor", "sayohat", "xohlayman", "xoxlayman", "til", "tili", "tilida", "gapiradigan",
+  "tour", "package", "need", "find", "show", "want", "trip", "for", "language", "speaking", "please",
+  "тур", "пакет", "нужен", "нужна", "нужно", "найди", "найти", "покажи", "хочу", "поездка", "есть", "для", "язык", "языке", "говорит", "говорящий",
 ]);
+
+const DISCOVERY_PATTERN = /(?:\b(?:kerak|qidir(?:ib)?|top(?:ib)?|bormi|xohlayman|xoxlayman|need|find|show|want)\b|нужен|нужна|нужно|найди|найти|покажи|хочу|есть\s+ли)/i;
 
 const SERVICE_SIGNALS: ServiceSignal[] = [
   {
@@ -192,16 +195,23 @@ export function buildAiFeedSearchContext(requests: MarketplaceRequest[], message
   const normalizedMessage = normalize(message);
   const requestCategoryNames = new Set(requests.map((item) => normalize(typeof item.category === "string" ? item.category : "")).filter(Boolean));
   const signalHaystack = `${normalizedMessage} ${destinationValues.map(normalize).join(" ")}`.trim();
+  let directSearchRequested = destinationValues.some((destination) => {
+    const normalizedDestination = normalize(destination);
+    return normalizedDestination.length >= 3 && normalizedMessage.includes(normalizedDestination);
+  });
 
   for (const group of SERVICE_SIGNALS) {
     const requestedByDraft = requestCategoryNames.has(normalize(group.category));
     const requestedByText = hasSignal(normalizedMessage, group.keys);
+    if (requestedByText) directSearchRequested = true;
     if (!requestedByDraft && !requestedByText) continue;
     for (const category of group.feedCategories) expectedCategories.add(category);
     addSignalTerms(serviceTerms, terms, seenServices, seenTerms, group.terms, 4);
   }
 
   for (const group of DESTINATION_ALIASES) {
+    const requestedByText = hasSignal(normalizedMessage, group.keys);
+    if (requestedByText) directSearchRequested = true;
     if (!hasSignal(signalHaystack, group.keys)) continue;
     addSignalTerms(destinationTerms, terms, seenDestinations, seenTerms, group.terms, 3);
   }
@@ -220,6 +230,8 @@ export function buildAiFeedSearchContext(requests: MarketplaceRequest[], message
     if (terms.length >= MAX_SEARCH_TERMS) break;
   }
 
+  if (!directSearchRequested && requests.length > 0 && DISCOVERY_PATTERN.test(normalizedMessage)) directSearchRequested = true;
+
   return {
     terms: terms.slice(0, MAX_SEARCH_TERMS),
     destinationTerms,
@@ -227,6 +239,7 @@ export function buildAiFeedSearchContext(requests: MarketplaceRequest[], message
     languageTerms,
     expectedCategories,
     russianRequested,
+    directSearchRequested,
   };
 }
 
@@ -331,7 +344,7 @@ function sanitizeRow(row: FeedSearchRow): AiTourPostMatch | null {
 
 export async function findAiTourPostMatches({ requests, message, authorization, signal }: SearchArgs) {
   const context = buildAiFeedSearchContext(requests, message);
-  if (!context.terms.length) return [] as AiTourPostMatch[];
+  if (!context.directSearchRequested || !context.terms.length) return [] as AiTourPostMatch[];
 
   const results = await Promise.allSettled(context.terms.map(async (term) => {
     const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/list_feed_posts`, {
