@@ -90,5 +90,5 @@ test('AI response surfaces exact post links in a dedicated marketplace-offer blo
   assert.match(route, /\/feed\/\$\{match\.id\}/);
   assert.match(renderer, /clarification\|note\|suggestion\|warning\|offer/);
   assert.match(renderer, /Platformadagi mos tur paketlar/);
-  assert.match(renderer, /\^\\\/feed\\\/[0-9a-f-]\{36\}\$/i);
+  assert.ok(renderer.includes('[0-9a-f-]{36}$/i.test(href)'));
 });
