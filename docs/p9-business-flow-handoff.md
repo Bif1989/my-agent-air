@@ -15,16 +15,21 @@ Implemented:
 - Review panel remounts on deal/status changes so completion correctly starts loading existing reviews.
 - Remove internal P5/P6 stage names from customer-facing labels.
 
-Validation:
+Original P9 validation:
 - Existing 181 tests passed after updating two obsolete label expectations.
 - Two additional behavioral API tests passed (participant isolation, session absence, opaque ID encoding, current offer filtering).
 - ESLint: no errors, three pre-existing warnings.
 - Production build passed; local production server started on 127.0.0.1:3001.
-- Browser smoke NOT completed: environment lacks Chromium and Playwright browser downloads return truncated/non-ZIP responses.
-- No live DB mutations, real offers, messages or reviews were submitted.
 
-Remaining gate before one batched production deploy:
-- Desktop and mobile authenticated smoke of operator → AI → request → matching → offer → deal → chat → review.
-- In particular: existing/pending/withdrawn offers, expired requests, failed review lookup/retry, accepted request revisits.
-- Recheck production Realtime filter errors mentioned in previous P8 handoff; this batch makes no Realtime changes.
-- This is a P9 continuation batch, not certification of full production completion or the P10 audit.
+## Gate closed by P10 final audit — 2026-10-17
+
+The remaining P9 handoff gate is now closed by the P10 production audit:
+
+- GitHub Quality Gate now runs production build plus Desktop Chromium, Android Chromium and iOS WebKit smoke checks; the P10.6 release passed the complete gate with 242/242 tests.
+- A rollback-only authenticated transaction was executed against the production Supabase schema/RLS/RPC path and passed: request → supplier matching → offer → idempotent acceptance → deal → two-way deal chat → completed billing → review.
+- The E2E transaction was rolled back and a follow-up query confirmed zero retained request, offer, chat or review fixtures.
+- Production Realtime logs for the audit window contained no `error`, `fail` or `invalid` entries.
+- Vercel production runtime error aggregation for the previous 24 hours returned no runtime error clusters.
+- Wallet/payment invariants were checked separately: no negative wallet, duplicate deal fee, duplicate Click transaction/order reference, paid wallet order without ledger, or duplicate referral reward was found.
+
+The production application runtime remains the reviewed P10.6 deployment. P10 closeout itself only adds recovery/security documentation, regression coverage and a database privilege-hardening migration; it does not require another Vercel runtime deployment.
