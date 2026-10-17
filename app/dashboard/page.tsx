@@ -49,7 +49,7 @@ export default function DashboardPage() {
             </div>
             <div className="flex shrink-0 gap-2">
               <Link href="/requests/new" className="rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700">+ {isRu ? "Запрос" : "So‘rov"}</Link>
-              <Link href="/profile" className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0b1f3a] transition hover:border-blue-300">{isRu ? "Профиль" : "Profil"}</Link>
+              <Link href="/deals" className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0b1f3a] transition hover:border-blue-300">{isRu ? "Кабинет" : "Kabinet"}</Link>
             </div>
           </header>
           <AiCommandCenter session={session} displayName={displayName} stats={data.stats} />
