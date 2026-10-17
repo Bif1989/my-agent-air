@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { POST as sendEmailPost } from "@/lib/server/supplier-outreach-actions/send";
 import { POST as sendSmsPost } from "@/lib/server/supplier-outreach-actions/send-sms";
+import { GET as adminSmsGet, POST as adminSmsPost } from "@/lib/server/supplier-outreach-actions/admin-sms-campaigns";
 import { readBoundedJson } from "@/lib/server/bounded-json";
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase-config";
 
@@ -21,6 +22,10 @@ const handlers: Record<string, Handler> = {
   "send-sms": sendSmsPost,
 };
 
+function actionFrom(request: NextRequest) {
+  return request.nextUrl.pathname.split("/").filter(Boolean).at(-1) || "";
+}
+
 function bearerToken(request: NextRequest) {
   const authorization = request.headers.get("authorization") || "";
   if (authorization.length > 4096) return "";
@@ -35,15 +40,19 @@ function response(code: string, message: string, status: number) {
   );
 }
 
+function notFound() {
+  return NextResponse.json(
+    { code: "NOT_FOUND", message: "Endpoint topilmadi." },
+    { status: 404, headers: { "Cache-Control": "no-store, max-age=0" } },
+  );
+}
+
 async function withDeliveryClaim(request: NextRequest, handler: Handler) {
-  // Parse only a bounded clone. The original request remains untouched for the
-  // existing action handler, which performs the authoritative validation too.
   const body = await readBoundedJson<DeliveryBody>(request.clone(), MAX_BODY_BYTES);
   const inviteId = typeof body?.invite_id === "string" ? body.invite_id.trim() : "";
   const token = typeof body?.token === "string" ? body.token.trim() : "";
   const accessToken = bearerToken(request);
 
-  // Let the existing handler return its established validation error shape.
   if (!UUID_RE.test(inviteId) || !TOKEN_RE.test(token) || !accessToken) return handler(request);
 
   const secretKey = process.env.SUPABASE_SECRET_KEY?.trim();
@@ -71,11 +80,7 @@ async function withDeliveryClaim(request: NextRequest, handler: Handler) {
 
   const claim = (data || {}) as DeliveryClaim;
   if (claim.claimed !== true) {
-    if (claim.status === "in_flight") {
-      return response("DELIVERY_IN_PROGRESS", "Bu xabar hozir yuborilmoqda. Biroz kuting.", 409);
-    }
-    // Terminal, expired and authorization cases are intentionally delegated so
-    // the existing action keeps its precise public response semantics.
+    if (claim.status === "in_flight") return response("DELIVERY_IN_PROGRESS", "Bu xabar hozir yuborilmoqda. Biroz kuting.", 409);
     return handler(request);
   }
 
@@ -96,14 +101,15 @@ async function withDeliveryClaim(request: NextRequest, handler: Handler) {
   }
 }
 
+export async function GET(request: NextRequest) {
+  if (actionFrom(request) !== "admin-sms-campaigns") return notFound();
+  return adminSmsGet(request);
+}
+
 export async function POST(request: NextRequest) {
-  const action = request.nextUrl.pathname.split("/").filter(Boolean).at(-1) || "";
+  const action = actionFrom(request);
+  if (action === "admin-sms-campaigns") return adminSmsPost(request);
   const handler = handlers[action];
-  if (!handler) {
-    return NextResponse.json(
-      { code: "NOT_FOUND", message: "Endpoint topilmadi." },
-      { status: 404, headers: { "Cache-Control": "no-store, max-age=0" } },
-    );
-  }
+  if (!handler) return notFound();
   return withDeliveryClaim(request, handler);
 }
