@@ -62,10 +62,12 @@ test('AI feed search expands destinations and service names across Uzbek, Russia
   assert.ok(guide.terms.some((term) => /^gid$/i.test(term)));
   assert.ok(guide.terms.some((term) => term === 'гид'));
   assert.equal(guide.russianRequested, true);
+  assert.equal(guide.directSearchRequested, true);
 
   const hotel = buildAiFeedSearchContext([{ category: 'Mehmonxona', destination: 'Egypt' }], 'Misrga hotel kerak');
   assert.ok(hotel.terms.some((term) => /hotel/i.test(term)));
   assert.ok(hotel.terms.some((term) => /misr|egypt/i.test(term)));
+  assert.equal(hotel.directSearchRequested, true);
 });
 
 test('AI keeps active non-expired matching posts and searches all feed categories', async () => {
@@ -125,6 +127,19 @@ test('Uzbek guide request can discover a guide post written in Russian', async (
   assert.equal(matches[0].author_company_name, 'Mantip Guide');
   assert.ok(calls.some((call) => /gid|guide|гид|экскурсовод/i.test(call.p_search)));
   assert.ok(calls.every((call) => call.p_category === null));
+});
+
+test('editing an existing draft does not trigger an unrelated marketplace search', async () => {
+  let calls = 0;
+  global.fetch = async () => { calls += 1; return Response.json([]); };
+  const matches = await findAiTourPostMatches({
+    requests: [{ category: 'Mehmonxona', destination: 'Samarqand' }],
+    message: 'Nonushta qo‘shing',
+    authorization: 'Bearer test-user-token',
+    signal: new AbortController().signal,
+  });
+  assert.deepEqual(matches, []);
+  assert.equal(calls, 0);
 });
 
 test('AI response surfaces exact post links in a generic marketplace-offer block', () => {
