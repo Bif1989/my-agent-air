@@ -6,9 +6,9 @@ export const DEAL_STATUSES = ["accepted", "processing", "issued", "completed", "
 export type DealStatus = (typeof DEAL_STATUSES)[number];
 
 const PROFILE_FIELDS = "id,full_name,company_name,city,phone,agent_type,is_verified";
-const REQUEST_FIELDS = "id,origin,destination,category,travel_date,description,adults,children,infants,baggage,budget,currency,service_details,form_version";
-const OFFER_FIELDS = "id,airline,baggage,comment,price,currency,status,created_at";
-const DEAL_FIELDS = `id,request_id,offer_id,buyer_id,seller_id,agreed_price,currency,status,created_at,updated_at,request:requests!deals_request_id_fkey(${REQUEST_FIELDS}),offer:offers!deals_offer_id_fkey(${OFFER_FIELDS}),buyer:profiles!deals_buyer_id_fkey(${PROFILE_FIELDS}),seller:profiles!deals_seller_id_fkey(${PROFILE_FIELDS})`;
+const REQUEST_FIELDS = "id,acting_role,origin,destination,category,travel_date,description,adults,children,infants,baggage,budget,currency,service_details,form_version";
+const OFFER_FIELDS = "id,acting_role,airline,baggage,comment,price,currency,status,created_at";
+const DEAL_FIELDS = `id,request_id,offer_id,buyer_id,seller_id,buyer_role_snapshot,seller_role_snapshot,agreed_price,currency,status,created_at,updated_at,request:requests!deals_request_id_fkey(${REQUEST_FIELDS}),offer:offers!deals_offer_id_fkey(${OFFER_FIELDS}),buyer:profiles!deals_buyer_id_fkey(${PROFILE_FIELDS}),seller:profiles!deals_seller_id_fkey(${PROFILE_FIELDS})`;
 
 export type DealProfile = {
   id: string;
@@ -20,10 +20,11 @@ export type DealProfile = {
   is_verified: boolean | null;
 };
 
-export type DealRequest = Pick<RequestRecord, "id" | "origin" | "destination" | "category" | "travel_date" | "description" | "adults" | "children" | "infants" | "baggage" | "budget" | "currency" | "service_details" | "form_version">;
+export type DealRequest = Pick<RequestRecord, "id" | "acting_role" | "origin" | "destination" | "category" | "travel_date" | "description" | "adults" | "children" | "infants" | "baggage" | "budget" | "currency" | "service_details" | "form_version">;
 
 export type DealOffer = {
   id: string;
+  acting_role: string | null;
   airline: string | null;
   baggage: string | null;
   comment: string | null;
@@ -39,6 +40,8 @@ export type DealRecord = {
   offer_id: string;
   buyer_id: string;
   seller_id: string;
+  buyer_role_snapshot: string | null;
+  seller_role_snapshot: string | null;
   agreed_price: number | null;
   currency: string;
   status: DealStatus;
@@ -125,17 +128,10 @@ export async function updateDealStatus(id: string, status: DealStatus) {
   return response.json() as Promise<DealRecord | DealRecord[]>;
 }
 
-// Keep the request-to-deal handoff scoped to the signed-in participant and RLS.
 export function getDealForRequest(requestId: string) {
   const userId = currentUserId();
   return dedupeInFlight("deals:request", `${userId}:${requestId}`, async () => {
-    const params = new URLSearchParams({
-      select: "id",
-      request_id: `eq.${requestId}`,
-      or: `(buyer_id.eq.${userId},seller_id.eq.${userId})`,
-      order: "created_at.desc",
-      limit: "1",
-    });
+    const params = new URLSearchParams({ select: "id", request_id: `eq.${requestId}`, or: `(buyer_id.eq.${userId},seller_id.eq.${userId})`, order: "created_at.desc", limit: "1" });
     const response = await authenticatedSupabaseFetch(`deals?${params}`);
     const rows = await readJson<{ id: string }[]>(response);
     return rows[0] || null;
