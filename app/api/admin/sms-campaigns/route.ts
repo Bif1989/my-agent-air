@@ -39,7 +39,7 @@ type RecipientRow = {
   id: string;
   campaign_id: string;
   phone: string;
-  status: "pending" | "sent" | "failed" | "skipped";
+  status: "pending" | "processing" | "sent" | "failed" | "skipped";
   provider_message_id: string | null;
   failure_reason: string | null;
   attempts: number;
@@ -206,12 +206,14 @@ async function countRecipients(admin: AdminContext["admin"], campaignId: string,
 }
 
 async function syncCampaign(admin: AdminContext["admin"], campaignId: string) {
-  const [sentCount, failedCount, pendingCount] = await Promise.all([
+  const [sentCount, failedCount, pendingCount, processingCount] = await Promise.all([
     countRecipients(admin, campaignId, "sent"),
     countRecipients(admin, campaignId, "failed"),
     countRecipients(admin, campaignId, "pending"),
+    countRecipients(admin, campaignId, "processing"),
   ]);
-  const finished = pendingCount === 0;
+  const outstandingCount = pendingCount + processingCount;
+  const finished = outstandingCount === 0;
   const update = {
     sent_count: sentCount,
     failed_count: failedCount,
@@ -226,7 +228,7 @@ async function syncCampaign(admin: AdminContext["admin"], campaignId: string) {
     .select("id,created_by,name,message,provider,status,recipient_count,sent_count,failed_count,started_at,completed_at,created_at,updated_at")
     .single();
   if (error) throw error;
-  return { campaign: data as CampaignRow, pending_count: pendingCount };
+  return { campaign: data as CampaignRow, pending_count: outstandingCount };
 }
 
 export async function GET(request: NextRequest) {
@@ -315,14 +317,11 @@ export async function POST(request: NextRequest) {
   if (campaignError || !campaign) return json({ code: "NOT_FOUND", message: "Kampaniya topilmadi." }, 404);
   if (campaign.status === "cancelled") return json({ code: "CAMPAIGN_CANCELLED", message: "Kampaniya bekor qilingan." }, 409);
 
-  const { data: recipients, error: recipientsError } = await admin
-    .from("admin_sms_recipients")
-    .select("id,campaign_id,phone,status,provider_message_id,failure_reason,attempts,sent_at,created_at,updated_at")
-    .eq("campaign_id", campaignId)
-    .eq("status", "pending")
-    .order("id", { ascending: true })
-    .limit(BATCH_SIZE);
-  if (recipientsError) return json({ code: "LOAD_FAILED", message: "SMS navbatini yuklab bo‘lmadi." }, 500);
+  const { data: recipients, error: recipientsError } = await admin.rpc("claim_admin_sms_batch", {
+    p_campaign_id: campaignId,
+    p_limit: BATCH_SIZE,
+  });
+  if (recipientsError) return json({ code: "LOAD_FAILED", message: "SMS navbatini xavfsiz band qilib bo‘lmadi." }, 500);
   if (!recipients?.length) {
     const synced = await syncCampaign(admin, campaignId).catch(() => null);
     return synced ? json({ ...synced, batch_processed: 0 }) : json({ code: "STATUS_UPDATE_FAILED", message: "Kampaniya holatini yangilab bo‘lmadi." }, 500);
@@ -341,6 +340,7 @@ export async function POST(request: NextRequest) {
   try {
     eskizToken = await getEskizToken(eskizEmail, eskizPassword);
   } catch (error) {
+    await admin.from("admin_sms_recipients").update({ status: "pending", updated_at: new Date().toISOString() }).eq("campaign_id", campaignId).eq("status", "processing");
     console.error("Admin bulk SMS Eskiz auth failed", { campaignId, reason: error instanceof Error ? error.message : "unknown" });
     return json({ code: "SMS_AUTH_FAILED", message: "ESKIZ bilan ulanishda xatolik." }, 502);
   }
@@ -364,7 +364,7 @@ export async function POST(request: NextRequest) {
           attempts,
           failure_reason: `eskiz_send_failed:${result.response.status}:${providerStatus}${providerMessage ? `:${providerMessage}` : ""}`.slice(0, 500),
           updated_at: new Date().toISOString(),
-        }).eq("id", row.id);
+        }).eq("id", row.id).eq("status", "processing");
         continue;
       }
 
@@ -376,14 +376,14 @@ export async function POST(request: NextRequest) {
         failure_reason: null,
         sent_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      }).eq("id", row.id);
+      }).eq("id", row.id).eq("status", "processing");
     } catch (error) {
       await admin.from("admin_sms_recipients").update({
         status: "failed",
         attempts,
         failure_reason: (error instanceof Error ? error.message : "sms_send_failed").slice(0, 500),
         updated_at: new Date().toISOString(),
-      }).eq("id", row.id);
+      }).eq("id", row.id).eq("status", "processing");
     }
   }
 
