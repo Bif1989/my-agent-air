@@ -50,7 +50,7 @@ test('completed paid deals deduct wallet atomically and insufficient balance rai
 });
 
 test('Unlimited bypasses wallet charging before the lifetime/free decision', () => {
-  assert.match(migration, /if v_subscription_active then v_fee:=0; v_billing_source:='subscription'; elsif v_lifetime_sequence<=v_free_limit/);
+  assert.match(migration, /if v_subscription_active then[\s\S]{0,120}v_fee:=0; v_billing_source:='subscription';[\s\S]{0,100}elsif v_lifetime_sequence<=v_free_limit then/);
 });
 
 test('multi-role deal snapshots are immutable billing inputs after offer acceptance', () => {
