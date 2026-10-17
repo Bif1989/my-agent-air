@@ -12,6 +12,7 @@ const hotelId = '22222222-2222-4222-8222-222222222222';
 const guideId = '33333333-3333-4333-8333-333333333333';
 const closedId = '44444444-4444-4444-8444-444444444444';
 const expiredId = '55555555-5555-4555-8555-555555555555';
+const routeClosedId = '558b1edb-3243-4907-a356-b15c4d84d6fb';
 
 const baseOffer = {
   id: tourId,
@@ -52,6 +53,19 @@ const guideOffer = {
   author_full_name: 'Mantip Guide',
 };
 
+const closedRouteOffer = {
+  ...baseOffer,
+  id: routeClosedId,
+  title: 'smarqandga',
+  body: 'Namangandan Samarqanffdsv',
+  origin: 'nmc',
+  destination: 'ffg',
+  status: 'closed',
+  expires_at: null,
+  price: null,
+  created_at: '2026-09-17T14:42:03Z',
+};
+
 test('AI feed search expands destinations and service names across Uzbek, Russian and English', () => {
   const dubai = buildTourPostSearchTerms('Dubai', 'Dubaiga tur kerak');
   assert.ok(dubai.some((term) => /dubai/i.test(term)));
@@ -68,6 +82,16 @@ test('AI feed search expands destinations and service names across Uzbek, Russia
   assert.ok(hotel.terms.some((term) => /hotel/i.test(term)));
   assert.ok(hotel.terms.some((term) => /misr|egypt/i.test(term)));
   assert.equal(hotel.directSearchRequested, true);
+});
+
+test('route-only Uzbek wording triggers marketplace search without a service keyword', () => {
+  const route = buildAiFeedSearchContext([], 'Namangandan Samarqandga');
+  assert.equal(route.directSearchRequested, true);
+  assert.ok(route.terms.some((term) => /namangan/i.test(term)));
+  assert.ok(route.terms.some((term) => /samarqand|samarkand/i.test(term)));
+
+  const russianRoute = buildAiFeedSearchContext([], 'из Намангана в Самарканд');
+  assert.equal(russianRoute.directSearchRequested, true);
 });
 
 test('AI keeps active non-expired matching posts and searches all feed categories', async () => {
@@ -93,6 +117,27 @@ test('AI keeps active non-expired matching posts and searches all feed categorie
   assert.ok(calls.length > 0 && calls.length <= 10);
   assert.ok(calls.every((call) => call.url.endsWith('/rest/v1/rpc/list_feed_posts')));
   assert.ok(calls.every((call) => call.body.p_category === null && call.body.p_limit === 8));
+});
+
+test('when no active match exists, route-only search can surface a clearly marked closed historical post', async () => {
+  const calls = [];
+  global.fetch = async (_url, options) => {
+    calls.push(JSON.parse(options.body));
+    const term = String(calls.at(-1).p_search || '').toLowerCase();
+    return Response.json(term.includes('namangan') ? [closedRouteOffer] : []);
+  };
+
+  const matches = await findAiTourPostMatches({
+    requests: [],
+    message: 'Namangandan Samarqandga',
+    authorization: 'Bearer test-user-token',
+    signal: new AbortController().signal,
+  });
+
+  assert.deepEqual(matches.map((item) => item.id), [routeClosedId]);
+  assert.match(matches[0].title, /^YOPILGAN · /);
+  assert.ok(calls.some((call) => /namangan/i.test(call.p_search)));
+  assert.ok(calls.every((call) => call.p_category === null));
 });
 
 test('hotel request returns hotel posts but filters unrelated tour posts', async () => {
