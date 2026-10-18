@@ -29,20 +29,23 @@ module.exports = async function handler(req, res) {
   if (event.type === 'confirmation') return legacyHandler(req, res);
   if (Number(event.group_id || 0) !== VK_GROUP_ID || !secretOk(event)) return legacyHandler(req, res);
 
-  // VK callback buttons expire quickly. Acknowledge every valid button press
-  // before storage/VK work starts so slow list/stat/billing actions do not
-  // surface as a frozen button or VK API error 100.
-  if (event.type === 'message_event') {
-    await answerEvent(event.object || {}, '⏳ Bajarilmoqda...').catch(() => {});
-  }
-
+  // VK expects the Callback API request itself to be acknowledged first.
+  // Return "ok" immediately, then answer callback buttons before any
+  // storage/list/billing work so the event_id is still fresh.
   text(res, 200, 'ok');
-  const task = Promise.resolve(processBillingEvent(event)).catch((error) => {
+
+  const task = (async () => {
+    if (event.type === 'message_event') {
+      await answerEvent(event.object || {}, '⏳ Bajarilmoqda...').catch(() => {});
+    }
+    await processBillingEvent(event);
+  })().catch((error) => {
     console.error('billing_event_processing_failed', {
       type: event?.type || null,
       code: error?.code || null,
       message: error?.message || String(error),
     });
   });
+
   try { waitUntil(task); } catch { task.catch(() => {}); }
 };
