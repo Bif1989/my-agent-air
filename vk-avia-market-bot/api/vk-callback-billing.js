@@ -13,7 +13,7 @@ function sha256(value) {
 
 function secretOk(event) {
   if (!event?.secret) return false;
-  if (CALLBACK_SECRET_HASH) return sha256(event.secret) === CALLBACK_SECRET_HASH;
+  if (CALLBACK_SECRET_HASH && sha256(event.secret) === CALLBACK_SECRET_HASH) return true;
   return Boolean(process.env.VK_SECRET && event.secret === process.env.VK_SECRET);
 }
 
@@ -71,7 +71,11 @@ module.exports = async function handler(req, res) {
 
   const event = req.body || {};
   if (event.type === 'confirmation') return legacyHandler(req, res);
-  if (Number(event.group_id || 0) !== VK_GROUP_ID || !secretOk(event)) return legacyHandler(req, res);
+  if (Number(event.group_id || 0) !== VK_GROUP_ID) return legacyHandler(req, res);
+  if (!secretOk(event)) {
+    console.warn('callback_secret_rejected', { type: event?.type || null, group_id: Number(event?.group_id || 0) || null });
+    return legacyHandler(req, res);
+  }
 
   // VK Callback API itself must be acknowledged immediately.
   text(res, 200, 'ok');
