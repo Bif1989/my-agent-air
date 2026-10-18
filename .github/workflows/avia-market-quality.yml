@@ -1,0 +1,39 @@
+name: Avia Market Quality Gate
+
+on:
+  push:
+    branches: [vk-avia-market-bot]
+    paths:
+      - "vk-avia-market-bot/**"
+      - ".github/workflows/avia-market-quality.yml"
+  pull_request:
+    paths:
+      - "vk-avia-market-bot/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: avia-market-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: vk-avia-market-bot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: vk-avia-market-bot/package-lock.json
+      - run: npm ci
+      - name: Syntax check
+        run: npm run check
+      - name: Smoke, CLICK and billing tests
+        run: npm test
