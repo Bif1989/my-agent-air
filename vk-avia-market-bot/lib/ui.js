@@ -1,9 +1,9 @@
 const BOT_OPEN_URL = process.env.VK_BOT_OPEN_URL || 'https://vk.me/aviamarketbot';
 const MARKET_CHAT_URL = process.env.VK_MARKET_CHAT_URL || 'https://vk.me/join/9Dn9taRYkLOBOpxp7ussbi/P6NICNIX98ZY=';
 
-function payload(cmd, extra = {}) { return JSON.stringify({ cmd, v: 2, ...extra }); }
-function textButton(label, cmd, color = 'secondary', extra = {}) {
-  return { action: { type: 'text', label, payload: payload(cmd, extra) }, color };
+function payload(cmd, extra = {}) { return JSON.stringify({ cmd, v: 4, ...extra }); }
+function callbackButton(label, cmd, color = 'secondary', extra = {}) {
+  return { action: { type: 'callback', label, payload: payload(cmd, extra) }, color };
 }
 
 function privateMenu() {
@@ -12,20 +12,20 @@ function privateMenu() {
     buttons: [
       [{ action: { type: 'open_link', label: '🌐 UMUMIY CHAT', link: MARKET_CHAT_URL } }],
       [
-        textButton('➕ TAKLIF BERISH', 'new_offer', 'primary'),
-        textButton('🔎 SO‘ROV BERISH', 'new_search', 'primary'),
+        callbackButton('➕ TAKLIF BERISH', 'new_offer', 'primary'),
+        callbackButton('🔎 SO‘ROV BERISH', 'new_search', 'primary'),
       ],
       [
-        textButton('🌐 TAKLIFLAR', 'offers'),
-        textButton('👥 SO‘ROVLAR', 'searches'),
+        callbackButton('🌐 TAKLIFLAR', 'offers'),
+        callbackButton('👥 SO‘ROVLAR', 'searches'),
       ],
       [
-        textButton('📦 MENING TAKLIFLARIM', 'my_offers'),
-        textButton('📋 MENING SO‘ROVLARIM', 'my_searches'),
+        callbackButton('📦 MENING TAKLIFLARIM', 'my_offers'),
+        callbackButton('📋 MENING SO‘ROVLARIM', 'my_searches'),
       ],
       [
-        textButton('👤 KABINET', 'cabinet'),
-        textButton('📊 STATISTIKA', 'stats'),
+        callbackButton('👤 KABINET', 'cabinet'),
+        callbackButton('📊 STATISTIKA', 'stats'),
       ],
     ],
   };
@@ -35,12 +35,12 @@ function profileMenu() {
   return {
     inline: true,
     buttons: [
-      [textButton('✏️ KONTAKTLARNI SOZLASH', 'profile_edit', 'primary')],
+      [callbackButton('✏️ KONTAKTLARNI SOZLASH', 'profile_edit', 'primary')],
       [
-        textButton('📦 TAKLIFLARIM', 'my_offers'),
-        textButton('📋 SO‘ROVLARIM', 'my_searches'),
+        callbackButton('📦 TAKLIFLARIM', 'my_offers'),
+        callbackButton('📋 SO‘ROVLARIM', 'my_searches'),
       ],
-      [textButton('🏠 MENYU', 'home')],
+      [callbackButton('🏠 MENYU', 'home')],
     ],
   };
 }
@@ -51,11 +51,11 @@ function listingManageMenu(items = []) {
     const id = Number(item?.id || 0);
     if (!id) continue;
     buttons.push([
-      textButton(`✏️ ${index + 1}`, 'edit_listing', 'primary', { id }),
-      textButton(`🗑 ${index + 1}`, 'delete_listing', 'negative', { id }),
+      callbackButton(`✏️ ${index + 1}`, 'edit_listing', 'primary', { id }),
+      callbackButton(`🗑 ${index + 1}`, 'delete_listing', 'negative', { id }),
     ]);
   }
-  buttons.push([textButton('🏠 MENYU', 'home')]);
+  buttons.push([callbackButton('🏠 MENYU', 'home')]);
   return { inline: true, buttons };
 }
 
@@ -64,8 +64,8 @@ function confirmDeleteMenu(listingId) {
   return {
     inline: true,
     buttons: [[
-      textButton('✅ O‘CHIRISH', 'confirm_delete_listing', 'negative', { id }),
-      textButton('↩️ BEKOR', 'cancel_delete_listing', 'secondary', { id }),
+      callbackButton('✅ O‘CHIRISH', 'confirm_delete_listing', 'negative', { id }),
+      callbackButton('↩️ BEKOR', 'cancel_delete_listing', 'secondary', { id }),
     ]],
   };
 }
@@ -78,8 +78,8 @@ function adminMenu() {
   return {
     inline: true,
     buttons: [
-      [textButton('📌 QOIDALARNI YANGILASH', 'admin_pinmenu', 'primary')],
-      [textButton('🧹 BOT E’LONLARINI TOZALASH', 'admin_cleanall', 'negative')],
+      [callbackButton('📌 QOIDALARNI YANGILASH', 'admin_pinmenu', 'primary')],
+      [callbackButton('🧹 BOT E’LONLARINI TOZALASH', 'admin_cleanall', 'negative')],
     ],
   };
 }
