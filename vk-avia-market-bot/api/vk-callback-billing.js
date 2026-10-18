@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const { waitUntil } = require('@vercel/functions');
 const legacyHandler = require('./vk-callback');
 const { processBillingEvent } = require('../lib/billing');
+const { answerEvent } = require('../lib/vk');
 
 const VK_GROUP_ID = Number(process.env.VK_GROUP_ID || 0);
 const CALLBACK_SECRET_HASH = String(process.env.VK_SECRET_SHA256 || '').trim().toLowerCase();
@@ -27,6 +28,13 @@ module.exports = async function handler(req, res) {
   const event = req.body || {};
   if (event.type === 'confirmation') return legacyHandler(req, res);
   if (Number(event.group_id || 0) !== VK_GROUP_ID || !secretOk(event)) return legacyHandler(req, res);
+
+  // VK callback buttons expire quickly. Acknowledge every valid button press
+  // before storage/VK work starts so slow list/stat/billing actions do not
+  // surface as a frozen button or VK API error 100.
+  if (event.type === 'message_event') {
+    await answerEvent(event.object || {}, '⏳ Bajarilmoqda...').catch(() => {});
+  }
 
   text(res, 200, 'ok');
   const task = Promise.resolve(processBillingEvent(event)).catch((error) => {
