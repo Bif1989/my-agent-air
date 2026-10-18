@@ -9,6 +9,9 @@ const ADMIN_USER_ID = Number(process.env.VK_CLEANUP_USER_ID || 0);
 const TOPUP_AMOUNTS = new Set([5000, 10000, 20000, 50000, 100000, 200000]);
 
 function payload(cmd, extra = {}) { return JSON.stringify({ cmd, v: 3, ...extra }); }
+function textButton(label, cmd, color = 'secondary', extra = {}) {
+  return { action: { type: 'text', label, payload: payload(cmd, extra) }, color };
+}
 function safePayload(value) {
   if (!value) return {};
   if (typeof value === 'object') return value;
@@ -20,43 +23,43 @@ function formatMoney(value) {
 }
 function cabinetMenu() {
   return { inline: true, buttons: [
-    [{ action: { type: 'callback', label: '💰 BALANS / TO‘LDIRISH', payload: payload('billing') }, color: 'positive' }],
-    [{ action: { type: 'callback', label: '✏️ KONTAKTLARNI SOZLASH', payload: payload('profile_edit') }, color: 'primary' }],
+    [textButton('💰 BALANS / TO‘LDIRISH', 'billing', 'positive')],
+    [textButton('✏️ KONTAKTLARNI SOZLASH', 'profile_edit', 'primary')],
     [
-      { action: { type: 'callback', label: '📦 TAKLIFLARIM', payload: payload('my_offers') }, color: 'secondary' },
-      { action: { type: 'callback', label: '📋 SO‘ROVLARIM', payload: payload('my_searches') }, color: 'secondary' },
+      textButton('📦 TAKLIFLARIM', 'my_offers'),
+      textButton('📋 SO‘ROVLARIM', 'my_searches'),
     ],
-    [{ action: { type: 'callback', label: '🏠 MENYU', payload: payload('home') }, color: 'secondary' }],
+    [textButton('🏠 MENYU', 'home')],
   ] };
 }
 function billingMenu() {
   return { inline: true, buttons: [
     [
-      { action: { type: 'callback', label: '5 000 so‘m', payload: payload('topup_amount', { amount: 5000 }) }, color: 'primary' },
-      { action: { type: 'callback', label: '10 000 so‘m', payload: payload('topup_amount', { amount: 10000 }) }, color: 'primary' },
+      textButton('5 000 so‘m', 'topup_amount', 'primary', { amount: 5000 }),
+      textButton('10 000 so‘m', 'topup_amount', 'primary', { amount: 10000 }),
     ],
     [
-      { action: { type: 'callback', label: '20 000 so‘m', payload: payload('topup_amount', { amount: 20000 }) }, color: 'secondary' },
-      { action: { type: 'callback', label: '50 000 so‘m', payload: payload('topup_amount', { amount: 50000 }) }, color: 'secondary' },
+      textButton('20 000 so‘m', 'topup_amount', 'secondary', { amount: 20000 }),
+      textButton('50 000 so‘m', 'topup_amount', 'secondary', { amount: 50000 }),
     ],
     [
-      { action: { type: 'callback', label: '100 000 so‘m', payload: payload('topup_amount', { amount: 100000 }) }, color: 'secondary' },
-      { action: { type: 'callback', label: '200 000 so‘m', payload: payload('topup_amount', { amount: 200000 }) }, color: 'secondary' },
+      textButton('100 000 so‘m', 'topup_amount', 'secondary', { amount: 100000 }),
+      textButton('200 000 so‘m', 'topup_amount', 'secondary', { amount: 200000 }),
     ],
-    [{ action: { type: 'callback', label: '🔄 BALANSNI YANGILASH', payload: payload('billing') }, color: 'positive' }],
-    [{ action: { type: 'callback', label: '👤 KABINET', payload: payload('cabinet') }, color: 'secondary' }],
+    [textButton('🔄 BALANSNI YANGILASH', 'billing', 'positive')],
+    [textButton('👤 KABINET', 'cabinet')],
   ] };
 }
 function paymentMenu(url) {
   return { inline: true, buttons: [
     [{ action: { type: 'open_link', label: '💳 CLICK ORQALI TO‘LASH', link: String(url) } }],
-    [{ action: { type: 'callback', label: '🔄 BALANSNI TEKSHIRISH', payload: payload('billing') }, color: 'positive' }],
+    [textButton('🔄 BALANSNI TEKSHIRISH', 'billing', 'positive')],
   ] };
 }
 function insufficientBalanceMenu() {
   return { inline: true, buttons: [
-    [{ action: { type: 'callback', label: '💰 BALANS TO‘LDIRISH', payload: payload('billing') }, color: 'primary' }],
-    [{ action: { type: 'callback', label: '🏠 MENYU', payload: payload('home') }, color: 'secondary' }],
+    [textButton('💰 BALANS TO‘LDIRISH', 'billing', 'primary')],
+    [textButton('🏠 MENYU', 'home')],
   ] };
 }
 async function sendCabinet(userId) {
