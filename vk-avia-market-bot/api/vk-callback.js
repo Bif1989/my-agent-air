@@ -20,6 +20,7 @@ const CALLBACK_SECRET_HASH = String(process.env.VK_SECRET_SHA256 || '').trim().t
 const ADMIN_SECRET = String(process.env.VK_ADMIN_PUSH_SECRET || '');
 const CALLBACK_URL = 'https://project-xj41n.vercel.app/api/vk-callback?v=2';
 const PRIVATE_BOT_TITLE = 'AVIA MARKET BOT';
+const SERVICE_VERSION = '2.3.1';
 
 function sha256(value) {
   return crypto.createHash('sha256').update(String(value || ''), 'utf8').digest('hex');
@@ -27,7 +28,7 @@ function sha256(value) {
 
 function secretOk(event) {
   if (!event?.secret) return false;
-  if (CALLBACK_SECRET_HASH) return sha256(event.secret) === CALLBACK_SECRET_HASH;
+  if (CALLBACK_SECRET_HASH && sha256(event.secret) === CALLBACK_SECRET_HASH) return true;
   return Boolean(process.env.VK_SECRET && event.secret === process.env.VK_SECRET);
 }
 
@@ -57,11 +58,21 @@ async function getConfirmationCode() {
 }
 
 async function repairCallbackServer() {
+  const callbackSecret = String(process.env.VK_SECRET || '');
+  if (!callbackSecret) throw new Error('vk_secret_missing');
+
   const servers = await vkApi('groups.getCallbackServers', { group_id: VK_GROUP_ID });
   const items = Array.isArray(servers?.items) ? servers.items : [];
-  const server = items[0];
+  const server = items.find((item) => String(item?.url || '').includes('/api/vk-callback')) || items[0];
   if (!server?.id) throw new Error('callback_server_missing');
-  await vkApi('groups.editCallbackServer', { group_id: VK_GROUP_ID, server_id: Number(server.id), url: CALLBACK_URL, title: 'AviaMarket v2' });
+
+  await vkApi('groups.editCallbackServer', {
+    group_id: VK_GROUP_ID,
+    server_id: Number(server.id),
+    url: CALLBACK_URL,
+    title: 'AviaMarket v2',
+    secret_key: callbackSecret,
+  });
   await vkApi('groups.setCallbackSettings', {
     group_id: VK_GROUP_ID,
     server_id: Number(server.id),
@@ -73,7 +84,12 @@ async function repairCallbackServer() {
   });
   const after = await vkApi('groups.getCallbackServers', { group_id: VK_GROUP_ID, server_ids: Number(server.id) });
   const current = Array.isArray(after?.items) ? after.items[0] : null;
-  return { server_id: Number(server.id), status: String(current?.status || 'unknown'), url: String(current?.url || '') };
+  return {
+    server_id: Number(server.id),
+    status: String(current?.status || 'unknown'),
+    url: String(current?.url || ''),
+    secret_synced: !current?.secret_key || String(current.secret_key) === callbackSecret,
+  };
 }
 
 async function pushAdminMenu() {
@@ -134,13 +150,24 @@ async function runSelfTest() {
     if (!VK_GROUP_ID) missing.push('VK_GROUP_ID');
     if (!PRIMARY_PEER_ID) missing.push('VK_PRIMARY_PEER_ID');
     if (!ADMIN_USER_ID) missing.push('VK_CLEANUP_USER_ID');
-    if (!CALLBACK_SECRET_HASH && !process.env.VK_SECRET) missing.push('VK callback secret');
+    if (!process.env.VK_SECRET) missing.push('VK_SECRET');
     if (!ADMIN_SECRET) missing.push('VK_ADMIN_PUSH_SECRET');
     if (!process.env.VK_TOKEN) missing.push('VK_TOKEN');
     if (!process.env.SUPABASE_URL) missing.push('SUPABASE_URL');
     if (!process.env.SUPABASE_BOT_SECRET) missing.push('SUPABASE_BOT_SECRET');
     if (missing.length) { const error = new Error(`Missing configuration: ${missing.join(', ')}`); error.code = 'config'; throw error; }
     return { configured: true };
+  });
+
+  await run('callback_secret', async () => {
+    const callbackSecret = String(process.env.VK_SECRET || '');
+    if (!callbackSecret) { const error = new Error('VK_SECRET missing'); error.code = 'secret_missing'; throw error; }
+    if (CALLBACK_SECRET_HASH && sha256(callbackSecret) !== CALLBACK_SECRET_HASH) {
+      const error = new Error('VK_SECRET_SHA256 does not match VK_SECRET');
+      error.code = 'secret_hash_mismatch';
+      throw error;
+    }
+    return { hash_ok: true };
   });
 
   await run('storage_health', async () => {
@@ -156,7 +183,17 @@ async function runSelfTest() {
     const items = Array.isArray(servers?.items) ? servers.items : [];
     const server = items.find((item) => String(item?.url || '').includes('/api/vk-callback')) || items[0];
     if (!server?.id || String(server?.status || '') !== 'ok') { const error = new Error(`Callback server status: ${server?.status || 'missing'}`); error.code = 'callback_not_ok'; throw error; }
-    return { status: String(server.status), url_ok: String(server.url || '').startsWith('https://project-xj41n.vercel.app/api/vk-callback') };
+    const callbackSecret = String(process.env.VK_SECRET || '');
+    if (server?.secret_key && String(server.secret_key) !== callbackSecret) {
+      const error = new Error('VK callback server secret differs from VK_SECRET');
+      error.code = 'callback_secret_drift';
+      throw error;
+    }
+    return {
+      status: String(server.status),
+      url_ok: String(server.url || '').startsWith('https://project-xj41n.vercel.app/api/vk-callback'),
+      secret_ok: true,
+    };
   });
   await run('community_identity', async () => {
     const response = await vkApi('groups.getById', { group_id: VK_GROUP_ID });
@@ -218,7 +255,7 @@ async function runSelfTest() {
     });
   }
 
-  return { ok: failures.length === 0, version: '2.2.1', failures, warnings, checks };
+  return { ok: failures.length === 0, version: SERVICE_VERSION, failures, warnings, checks };
 }
 
 function adminPrivateCommand(event) {
@@ -270,7 +307,7 @@ module.exports = async function handler(req, res) {
     return json(res, 200, {
       ok: true,
       service: 'vk-avia-market-bot',
-      version: '2.2.1',
+      version: SERVICE_VERSION,
       architecture: 'protected-edge-storage',
       duplicate_guard_hours: 24,
       stale_pending_recovery_minutes: 5,
@@ -291,7 +328,10 @@ module.exports = async function handler(req, res) {
     try { return text(res, 200, await getConfirmationCode()); }
     catch (error) { console.error('confirmation_code_failed', { code: error?.code || null, message: error?.message || String(error) }); return text(res, 200, process.env.VK_CONFIRMATION_STRING || ''); }
   }
-  if (!secretOk(event)) return json(res, 403, { ok: false, error: 'forbidden' });
+  if (!secretOk(event)) {
+    console.warn('callback_secret_rejected', { type: event?.type || null, group_id: Number(event?.group_id || 0) || null });
+    return json(res, 403, { ok: false, error: 'forbidden' });
+  }
   text(res, 200, 'ok');
   waitUntil(Promise.resolve(processEventWithAdminUi(event)).catch((error) => {
     console.error('event_processing_failed', { type: event?.type || null, code: error?.code || null, message: error?.message || String(error) });
