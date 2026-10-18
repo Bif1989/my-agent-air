@@ -62,6 +62,16 @@ assert.deepStrictEqual(messageRef({ message_id: 88, conversation_message_id: 99 
 assert.deepStrictEqual(messageRef({ conversation_message_id: 99 }), { message_id: null, conversation_message_id: 99 });
 assert.strictEqual(typeof editMessage, 'function');
 
+function assertCallbackButtons(keyboard, { allowOpenLink = false } = {}) {
+  for (const row of keyboard?.buttons || []) {
+    for (const button of row || []) {
+      const type = button?.action?.type;
+      if (allowOpenLink && type === 'open_link') continue;
+      assert.strictEqual(type, 'callback', `expected callback button, got ${type}`);
+    }
+  }
+}
+
 const privateKeyboard = privateMenu();
 const cabinetKeyboard = profileMenu();
 const managerKeyboard = listingManageMenu([{ id: 11 }, { id: 22 }]);
@@ -73,6 +83,11 @@ assert.strictEqual(privateKeyboard.buttons[0][0].action.type, 'open_link', 'publ
 assert(privateKeyboard.buttons[0][0].action.label.includes('UMUMIY CHAT'));
 assert(/^https:\/\/vk\.me\/join\//i.test(privateKeyboard.buttons[0][0].action.link));
 assert.strictEqual(privateKeyboard.buttons[0][0].color, undefined, 'VK open_link buttons must not define color');
+assertCallbackButtons(privateKeyboard, { allowOpenLink: true });
+assertCallbackButtons(cabinetKeyboard);
+assertCallbackButtons(managerKeyboard);
+assertCallbackButtons(deleteKeyboard);
+assertCallbackButtons(adminKeyboard);
 assert(cabinetKeyboard.buttons[0][0].action.payload.includes('profile_edit'));
 assert(managerKeyboard.buttons[0][0].action.payload.includes('edit_listing'));
 assert(managerKeyboard.buttons[0][1].action.payload.includes('delete_listing'));
