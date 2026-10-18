@@ -2,10 +2,13 @@ const crypto = require('crypto');
 const { waitUntil } = require('@vercel/functions');
 const legacyHandler = require('./vk-callback');
 const { processBillingEvent } = require('../lib/billing');
-const { answerEvent, deleteMessage } = require('../lib/vk');
+const { vkApi, answerEvent, deleteMessage } = require('../lib/vk');
 
 const VK_GROUP_ID = Number(process.env.VK_GROUP_ID || 0);
 const CALLBACK_SECRET_HASH = String(process.env.VK_SECRET_SHA256 || '').trim().toLowerCase();
+const CALLBACK_URL = 'https://project-xj41n.vercel.app/api/vk-callback?v=3';
+const CALLBACK_REPAIR_COOLDOWN_MS = 60_000;
+let lastCallbackRepairAt = 0;
 
 function sha256(value) {
   return crypto.createHash('sha256').update(String(value || ''), 'utf8').digest('hex');
@@ -22,6 +25,44 @@ function text(res, status, value) {
   res.end(String(value));
 }
 
+function keepAlive(task) {
+  try { waitUntil(task); }
+  catch { task.catch(() => {}); }
+}
+
+async function repairCallbackSecret() {
+  const now = Date.now();
+  if (now - lastCallbackRepairAt < CALLBACK_REPAIR_COOLDOWN_MS) return { skipped: true, reason: 'cooldown' };
+  lastCallbackRepairAt = now;
+
+  const callbackSecret = String(process.env.VK_SECRET || '');
+  if (!callbackSecret) throw new Error('vk_secret_missing');
+
+  const servers = await vkApi('groups.getCallbackServers', { group_id: VK_GROUP_ID });
+  const items = Array.isArray(servers?.items) ? servers.items : [];
+  const server = items.find((item) => String(item?.url || '').includes('/api/vk-callback')) || items[0];
+  if (!server?.id) throw new Error('callback_server_missing');
+
+  await vkApi('groups.editCallbackServer', {
+    group_id: VK_GROUP_ID,
+    server_id: Number(server.id),
+    url: CALLBACK_URL,
+    title: 'AviaMarket v3',
+    secret_key: callbackSecret,
+  });
+  await vkApi('groups.setCallbackSettings', {
+    group_id: VK_GROUP_ID,
+    server_id: Number(server.id),
+    api_version: process.env.VK_API_VERSION || '5.199',
+    message_new: 1,
+    message_event: 1,
+    message_allow: 1,
+    message_deny: 1,
+  });
+
+  return { repaired: true, server_id: Number(server.id) };
+}
+
 function textButtonMessage(event) {
   if (event?.type !== 'message_new') return null;
   const msg = event?.object?.message || {};
@@ -36,9 +77,9 @@ function routeTextButton(event) {
   const button = textButtonMessage(event);
   if (!button) return event;
 
-  // VK text buttons send a normal message_new event. Re-route only the
-  // structured payload into the existing command dispatcher so no
-  // sendMessageEventAnswer callback is required and no loading spinner remains.
+  // All current Avia Market buttons use one canonical action path.
+  // VK text+payload arrives as message_new; normalize it to the same internal
+  // action event used by legacy callback buttons. No second dispatcher exists.
   return {
     ...event,
     type: 'message_event',
@@ -72,19 +113,38 @@ module.exports = async function handler(req, res) {
   const event = req.body || {};
   if (event.type === 'confirmation') return legacyHandler(req, res);
   if (Number(event.group_id || 0) !== VK_GROUP_ID) return legacyHandler(req, res);
+
   if (!secretOk(event)) {
-    console.warn('callback_secret_rejected', { type: event?.type || null, group_id: Number(event?.group_id || 0) || null });
-    return legacyHandler(req, res);
+    // A stale VK Callback secret previously caused valid events to be rejected
+    // repeatedly, which looked like random freezes to users. Acknowledge the
+    // stale event without processing it, then securely re-sync VK to the
+    // server-side VK_SECRET. No secret is exposed to the request or logs.
+    console.warn('callback_secret_drift_detected', {
+      type: event?.type || null,
+      group_id: Number(event?.group_id || 0) || null,
+    });
+    text(res, 200, 'ok');
+    keepAlive(
+      repairCallbackSecret()
+        .then((result) => console.info('callback_secret_repair_result', result))
+        .catch((error) => console.error('callback_secret_repair_failed', {
+          code: error?.code || null,
+          message: error?.message || String(error),
+        })),
+    );
+    return;
   }
 
   // VK Callback API itself must be acknowledged immediately.
   text(res, 200, 'ok');
 
   const task = (async () => {
-    // Keep legacy callback buttons functional for old messages, but all new
-    // menus use text+payload and therefore never depend on callback ACK.
+    // Legacy callback buttons may still exist in old messages. Answer exactly
+    // once and then clear event_id so downstream handlers cannot send a second
+    // MessageEventAnswer (the duplicate ACK was producing VK error code 100).
     if (event.type === 'message_event') {
       await answerEvent(event.object || {}, '⏳ Bajarilmoqda...').catch(() => {});
+      if (event.object && typeof event.object === 'object') event.object.event_id = null;
     }
 
     // Text buttons intentionally create message_new events. Hide only those
@@ -100,5 +160,5 @@ module.exports = async function handler(req, res) {
     });
   });
 
-  try { waitUntil(task); } catch { task.catch(() => {}); }
+  keepAlive(task);
 };
