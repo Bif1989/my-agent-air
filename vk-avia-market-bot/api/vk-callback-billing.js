@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const { waitUntil } = require('@vercel/functions');
 const legacyHandler = require('./vk-callback');
 const { processBillingEvent } = require('../lib/billing');
-const { answerEvent } = require('../lib/vk');
+const { answerEvent, deleteMessage } = require('../lib/vk');
 
 const VK_GROUP_ID = Number(process.env.VK_GROUP_ID || 0);
 const CALLBACK_SECRET_HASH = String(process.env.VK_SECRET_SHA256 || '').trim().toLowerCase();
@@ -22,12 +22,19 @@ function text(res, status, value) {
   res.end(String(value));
 }
 
-function routeTextButton(event) {
-  if (event?.type !== 'message_new') return event;
+function textButtonMessage(event) {
+  if (event?.type !== 'message_new') return null;
   const msg = event?.object?.message || {};
   const userId = Number(msg?.from_id || 0);
   const peerId = Number(msg?.peer_id || 0);
-  if (!msg?.payload || !userId || peerId !== userId || Number(msg?.out || 0) === 1) return event;
+  const conversationMessageId = Number(msg?.conversation_message_id || 0);
+  if (!msg?.payload || !userId || peerId !== userId || Number(msg?.out || 0) === 1) return null;
+  return { msg, userId, peerId, conversationMessageId };
+}
+
+function routeTextButton(event) {
+  const button = textButtonMessage(event);
+  if (!button) return event;
 
   // VK text buttons send a normal message_new event. Re-route only the
   // structured payload into the existing command dispatcher so no
@@ -36,12 +43,27 @@ function routeTextButton(event) {
     ...event,
     type: 'message_event',
     object: {
-      user_id: userId,
-      peer_id: peerId,
-      payload: msg.payload,
-      conversation_message_id: Number(msg?.conversation_message_id || 0) || null,
+      user_id: button.userId,
+      peer_id: button.peerId,
+      payload: button.msg.payload,
+      conversation_message_id: button.conversationMessageId || null,
     },
   };
+}
+
+async function hideTextButtonMessage(event) {
+  const button = textButtonMessage(event);
+  if (!button?.conversationMessageId) return false;
+  try {
+    return await deleteMessage(button.peerId, button.conversationMessageId);
+  } catch (error) {
+    console.warn('text_button_cleanup_failed', {
+      code: error?.code || null,
+      peerId: button.peerId,
+      cmid: button.conversationMessageId,
+    });
+    return false;
+  }
 }
 
 module.exports = async function handler(req, res) {
@@ -60,6 +82,11 @@ module.exports = async function handler(req, res) {
     if (event.type === 'message_event') {
       await answerEvent(event.object || {}, '⏳ Bajarilmoqda...').catch(() => {});
     }
+
+    // Text buttons intentionally create message_new events. Hide only those
+    // structured button-command messages so the private dialog stays clean.
+    // Ordinary user text and listing content are never touched.
+    await hideTextButtonMessage(event);
     await processBillingEvent(routeTextButton(event));
   })().catch((error) => {
     console.error('billing_event_processing_failed', {
