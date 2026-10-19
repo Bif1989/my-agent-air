@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import AppShell from "@/app/dashboard/components/app-shell";
 import { getStoredSession, type AuthSession } from "@/lib/supabase-auth";
 import { useUiSettings } from "@/lib/ui-settings";
-import { listAgents, getAgentFilterOptions, type AgentFilterOptions, type AgentRecord, type AgentSort } from "@/app/agents/agents-api";
+import { countAgents, listAgents, getAgentFilterOptions, type AgentFilterOptions, type AgentRecord, type AgentSort } from "@/app/agents/agents-api";
 
 const tr = (isRu: boolean, uz: string, ru: string) => isRu ? ru : uz;
 
@@ -109,6 +109,7 @@ export default function AgentsPage() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [page, setPage] = useState(0);
   const [agents, setAgents] = useState<AgentRecord[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [options, setOptions] = useState<AgentFilterOptions>({ cities: [], agentTypes: [], services: [] });
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -150,8 +151,16 @@ export default function AgentsPage() {
     const timer = window.setTimeout(() => {
       setIsLoading(true);
       setError("");
-      void listAgents({ search: debouncedSearch, city, agentType, service, verifiedOnly, sort, limit: 24, offset: page * 24 })
-        .then((loaded) => { if (active) setAgents(loaded); })
+      const filters = { search: debouncedSearch, city, agentType, service, verifiedOnly };
+      void Promise.all([
+        listAgents({ ...filters, sort, limit: 24, offset: page * 24 }),
+        countAgents(filters),
+      ])
+        .then(([loadedAgents, loadedCount]) => {
+          if (!active) return;
+          setAgents(loadedAgents);
+          setTotalCount(loadedCount);
+        })
         .catch((reason: unknown) => {
           if (active) setError(reason instanceof Error ? reason.message : tr(isRu, "Agentlar yuklanmadi.", "Не удалось загрузить агентов."));
         })
@@ -185,7 +194,7 @@ export default function AgentsPage() {
             <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#0b1f3a] sm:text-4xl">{tr(isRu, "Agentlar", "Агенты")}</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{tr(isRu, "Hamkorlarni Trust Score, real bitimlar va baholar bo‘yicha solishtiring.", "Сравнивайте партнёров по Trust Score, реальным сделкам и отзывам.")}</p>
           </div>
-          <p className="text-sm font-semibold text-slate-500">{isLoading ? tr(isRu, "Yuklanmoqda...", "Загрузка...") : isRu ? `${visibleAgents.length} агентов` : `${visibleAgents.length} ta agent`}</p>
+          <p className="text-sm font-semibold text-slate-500">{isLoading ? tr(isRu, "Yuklanmoqda...", "Загрузка...") : isRu ? `${totalCount} агентов` : `${totalCount} ta agent`}</p>
         </header>
 
         <section aria-label={tr(isRu, "Agentlarni qidirish va filtrlash", "Поиск и фильтры агентов")} className="mt-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -246,8 +255,8 @@ export default function AgentsPage() {
 
         {!isLoading && !error && !visibleAgents.length && (
           <div className="mt-7 rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-16 text-center">
-            <h2 className="font-semibold text-[#0b1f3a]">{agents.length ? tr(isRu, "Mos agent topilmadi", "Подходящие агенты не найдены") : tr(isRu, "Hozircha faol agentlar yo‘q", "Пока нет активных агентов")}</h2>
-            <p className="mt-2 text-sm text-slate-500">{agents.length ? tr(isRu, "Qidiruv yoki filtrlarni o‘zgartirib ko‘ring.", "Измените поиск или фильтры.") : tr(isRu, "Faol agentlar qo‘shilganda ular shu yerda ko‘rinadi.", "Активные агенты появятся здесь после добавления.")}</p>
+            <h2 className="font-semibold text-[#0b1f3a]">{hasFilters ? tr(isRu, "Mos agent topilmadi", "Подходящие агенты не найдены") : tr(isRu, "Hozircha katalogda agentlar yo‘q", "Пока в каталоге нет агентов")}</h2>
+            <p className="mt-2 text-sm text-slate-500">{hasFilters ? tr(isRu, "Qidiruv yoki filtrlarni o‘zgartirib ko‘ring.", "Измените поиск или фильтры.") : tr(isRu, "Profilini to‘liq yakunlagan faol agentlar shu yerda ko‘rinadi.", "Здесь появятся активные агенты с полностью заполненным профилем.")}</p>
           </div>
         )}
 
@@ -260,7 +269,7 @@ export default function AgentsPage() {
         <nav aria-label={tr(isRu, "Agentlar sahifalari", "Страницы агентов")} className="mt-6 flex items-center justify-center gap-4 text-sm">
           <button disabled={isLoading || page === 0} onClick={() => setPage((value) => value - 1)} className="rounded-lg border px-4 py-2 disabled:opacity-40">← {tr(isRu, "Oldingi", "Назад")}</button>
           <span>{isRu ? `Страница ${page + 1}` : `${page + 1}-sahifa`}</span>
-          <button disabled={isLoading || agents.length < 24} onClick={() => setPage((value) => value + 1)} className="rounded-lg border px-4 py-2 disabled:opacity-40">{tr(isRu, "Keyingi", "Далее")} →</button>
+          <button disabled={isLoading || (page + 1) * 24 >= totalCount} onClick={() => setPage((value) => value + 1)} className="rounded-lg border px-4 py-2 disabled:opacity-40">{tr(isRu, "Keyingi", "Далее")} →</button>
         </nav>
       </div>
     </AppShell>
