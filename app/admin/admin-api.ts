@@ -1,7 +1,15 @@
 import { authenticatedSupabaseFetch } from "@/lib/supabase-auth";
 import { PROFILE_FIELDS, type ProfileRecord } from "@/app/profile/profile-api";
 
-export type AdminStats = { activeAgents: number; verifiedAgents: number; unverifiedAgents: number; openRequests: number; activeDeals: number };
+export type AdminStats = {
+  totalAgentProfiles: number;
+  activeAccounts: number;
+  directoryAgents: number;
+  incompleteProfiles: number;
+  inactiveAgents: number;
+  openRequests: number;
+  activeDeals: number;
+};
 export type AdminAgent = ProfileRecord;
 export type AgentCounts = { requests: number; offers: number; buyerDeals: number; sellerDeals: number };
 export type AdminAuditLog = { id: string; action: "set_verified" | "set_active" | string; admin_id: string; target_profile_id: string; old_value: string; new_value: string; created_at: string; admin_name: string; target_name: string };
@@ -17,15 +25,34 @@ async function readJson<T>(path: string) {
   return response.json() as Promise<T>;
 }
 
+async function countDirectoryAgents() {
+  const response = await authenticatedSupabaseFetch("rpc/count_agents_directory", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  const value = await response.json() as number | string;
+  return Number(value) || 0;
+}
+
 export async function loadAdminStats(): Promise<AdminStats> {
-  const [activeAgents, verifiedAgents, unverifiedAgents, openRequests, activeDeals] = await Promise.all([
+  const [totalAgentProfiles, activeAccounts, directoryAgents, openRequests, activeDeals] = await Promise.all([
+    countRows("profiles?select=id&role=eq.agent"),
     countRows("profiles?select=id&is_active=eq.true&role=eq.agent"),
-    countRows("profiles?select=id&is_verified=eq.true&role=eq.agent"),
-    countRows("profiles?select=id&is_verified=eq.false&role=eq.agent"),
+    countDirectoryAgents(),
     countRows("requests?select=id&status=eq.open"),
     countRows("deals?select=id&status=in.(accepted,processing,issued)"),
   ]);
-  return { activeAgents, verifiedAgents, unverifiedAgents, openRequests, activeDeals };
+
+  return {
+    totalAgentProfiles,
+    activeAccounts,
+    directoryAgents,
+    incompleteProfiles: Math.max(0, activeAccounts - directoryAgents),
+    inactiveAgents: Math.max(0, totalAgentProfiles - activeAccounts),
+    openRequests,
+    activeDeals,
+  };
 }
 
 export function listAdminAgents() {
