@@ -18,6 +18,10 @@ export type SupplierImportItem = {
   registry_number?: string;
   star_rating?: string | number;
   capacity?: string | number;
+  price_from?: string | number;
+  price_to?: string | number;
+  currency?: string;
+  price_unit?: string;
   services?: string[];
   source_updated_at?: string;
   metadata?: Record<string, unknown>;
@@ -40,6 +44,52 @@ export type SupplierImportResult = {
   total: number;
 };
 
+export type SupplierLocality = {
+  region: string;
+  locality: string;
+  kind: "city" | "district";
+};
+
+export type SupplierFilterOptions = {
+  regions: string[];
+  localities: SupplierLocality[];
+};
+
+export type SupplierRow = {
+  id: string;
+  supplier_type: string;
+  name: string;
+  region: string | null;
+  city: string | null;
+  district: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  registry_number: string | null;
+  star_rating: number | null;
+  capacity: number | null;
+  price_from: number | string | null;
+  price_to: number | string | null;
+  currency: string | null;
+  price_unit: string | null;
+  source_name: string | null;
+  status: string | null;
+  total_count: number | string;
+};
+
+export type SupplierListQuery = {
+  supplierType?: string;
+  region?: string;
+  locality?: string;
+  search?: string;
+  minPrice?: string;
+  maxPrice?: string;
+  sort?: "location" | "name" | "price_asc" | "price_desc" | "stars_desc";
+  limit?: number;
+  offset?: number;
+};
+
 export async function loadSupplierStats() {
   const response = await authenticatedSupabaseFetch("rpc/admin_external_supplier_stats", {
     method: "POST",
@@ -48,6 +98,39 @@ export async function loadSupplierStats() {
   });
   if (!response.ok) throw new Error("Supplier statistikasi yuklanmadi");
   return response.json() as Promise<SupplierStats>;
+}
+
+export async function loadSupplierFilterOptions() {
+  const response = await authenticatedSupabaseFetch("rpc/admin_external_supplier_filter_options", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  if (!response.ok) throw new Error("Supplier filtr ro‘yxati yuklanmadi");
+  return response.json() as Promise<SupplierFilterOptions>;
+}
+
+export async function loadSuppliers(query: SupplierListQuery = {}) {
+  const response = await authenticatedSupabaseFetch("rpc/admin_list_external_suppliers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      p_supplier_type: query.supplierType || null,
+      p_region: query.region || null,
+      p_locality: query.locality || null,
+      p_search: query.search || null,
+      p_min_price: query.minPrice ? Number(query.minPrice) : null,
+      p_max_price: query.maxPrice ? Number(query.maxPrice) : null,
+      p_sort: query.sort || "location",
+      p_limit: query.limit ?? 50,
+      p_offset: query.offset ?? 0,
+    }),
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || "Supplierlar ro‘yxati yuklanmadi");
+  }
+  return response.json() as Promise<SupplierRow[]>;
 }
 
 export async function importSuppliers(items: SupplierImportItem[]) {
