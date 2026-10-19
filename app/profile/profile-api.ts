@@ -1,13 +1,14 @@
 import { dedupeInFlight } from "@/lib/inflight-dedupe";
 import { authenticatedSupabaseFetch, getStoredSession } from "@/lib/supabase-auth";
 
-export const PROFILE_FIELDS = "id,full_name,avatar_url,company_name,city,phone,agent_type,services,is_verified,is_active,registration_status,role,created_at,updated_at";
+export const PROFILE_FIELDS = "id,full_name,avatar_url,company_name,region,city,phone,agent_type,services,is_verified,is_active,registration_status,role,created_at,updated_at";
 
 export type ProfileRecord = {
   id: string;
   full_name: string | null;
   avatar_url: string | null;
   company_name: string | null;
+  region: string | null;
   city: string | null;
   phone: string | null;
   agent_type: string | null;
@@ -24,10 +25,18 @@ export type EditableProfile = {
   full_name: string;
   avatar_url: string;
   company_name: string;
+  region: string;
   city: string;
   phone: string;
   agent_type: string;
   services: string[];
+};
+
+export type UzLocation = {
+  region: string;
+  locality: string;
+  kind: "city" | "district";
+  sort_order: number;
 };
 
 function currentUserId() {
@@ -43,6 +52,11 @@ export function getCurrentProfile() {
     const rows = await response.json() as ProfileRecord[];
     return rows[0] || null;
   });
+}
+
+export async function listUzLocations() {
+  const response = await authenticatedSupabaseFetch("uz_locations?select=region,locality,kind,sort_order&order=sort_order.asc");
+  return response.json() as Promise<UzLocation[]>;
 }
 
 export async function updateCurrentProfile(profile: EditableProfile) {
