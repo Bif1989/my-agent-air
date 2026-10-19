@@ -15,7 +15,7 @@ import {
   type AdminSmsRecipient,
 } from "@/app/admin/sms/sms-api";
 
-const DEFAULT_MESSAGE = "Turfirmalar uchun B2B platforma! So'rov yuboring, hamkorlardan taklif oling: tur, mehmonxona, gid, transport, avia. agent.bifavia.uz";
+const DEFAULT_MESSAGE = "Turfirmalar uchun B2B platforma! So'rov yuboring, hamkorlardan taklif oling: tur, mehmonxona, gid, transport, avia tel: +998912924010 https://agent.bifavia.uz/";
 const MOBILE_PREFIXES = new Set(["33", "50", "55", "77", "88", "90", "91", "93", "94", "95", "97", "98", "99"]);
 
 function normalizeMobile(value: string) {
