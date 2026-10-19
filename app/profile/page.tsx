@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import AppShell from "@/app/dashboard/components/app-shell";
 import { getStoredSession, type AuthSession } from "@/lib/supabase-auth";
-import { getCurrentProfile, updateCurrentProfile, type EditableProfile, type ProfileRecord } from "@/app/profile/profile-api";
+import { getCurrentProfile, listUzLocations, updateCurrentProfile, type EditableProfile, type ProfileRecord, type UzLocation } from "@/app/profile/profile-api";
 import NotificationSettings from "@/app/profile/notification-settings";
 import SupplierCapabilities from "@/app/profile/supplier-capabilities";
 import { AGENT_TYPES as agentTypes, missingProfileFields } from "@/lib/profile-completion";
@@ -21,11 +21,12 @@ function initials(profile: ProfileRecord | EditableProfile) {
 }
 
 function validate(profile: EditableProfile) {
-  if (missingProfileFields(profile).length) return "Ism, kompaniya, shahar, telefon va agent turini to‘ldiring.";
+  if (missingProfileFields(profile).length) return "Ism, kompaniya, viloyat/hudud, tuman/shahar, telefon va agent turini to‘ldiring.";
   if (!/^[+\d\s()-]{7,40}$/.test(profile.phone.trim()) || profile.phone.replace(/\D/g, "").length < 7) return "Telefon raqamini to‘g‘ri kiriting.";
   if (profile.full_name.length > 120) return "To‘liq ism 120 belgidan oshmasin.";
   if (profile.company_name.length > 160) return "Kompaniya nomi 160 belgidan oshmasin.";
-  if (profile.city.length > 100) return "Shahar 100 belgidan oshmasin.";
+  if (profile.region.length > 120) return "Viloyat/hudud nomi 120 belgidan oshmasin.";
+  if (profile.city.length > 120) return "Tuman/shahar nomi 120 belgidan oshmasin.";
   if (profile.phone.length > 40) return "Telefon 40 belgidan oshmasin.";
   if (profile.avatar_url && !/^https?:\/\/[^\s]+$/i.test(profile.avatar_url)) return "Avatar URL http yoki https bilan boshlanishi kerak.";
   if (profile.services.length > 20) return "Ko‘pi bilan 20 ta xizmat qo‘shish mumkin.";
@@ -63,7 +64,8 @@ function ProfilePreview({ profile, services, verified }: {
       </div>
     </div>
     <dl className="mt-7 space-y-3 border-t border-white/10 pt-5 text-sm">
-      <div className="flex justify-between gap-4"><dt className="text-blue-200">Shahar</dt><dd className="text-right font-medium">{profile.city || "Ko‘rsatilmagan"}</dd></div>
+      <div className="flex justify-between gap-4"><dt className="text-blue-200">Viloyat / hudud</dt><dd className="text-right font-medium">{profile.region || "Ko‘rsatilmagan"}</dd></div>
+      <div className="flex justify-between gap-4"><dt className="text-blue-200">Tuman / shahar</dt><dd className="text-right font-medium">{profile.city || "Ko‘rsatilmagan"}</dd></div>
       <div className="flex justify-between gap-4"><dt className="text-blue-200">Agent turi</dt><dd className="text-right font-medium">{profile.agent_type || "Ko‘rsatilmagan"}</dd></div>
     </dl>
     <div className="mt-5 flex flex-wrap gap-2">
@@ -79,7 +81,8 @@ function ProfilePreview({ profile, services, verified }: {
 export default function ProfilePage() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [profile, setProfile] = useState<ProfileRecord | null>(null);
-  const [form, setForm] = useState<EditableProfile>({ full_name: "", avatar_url: "", company_name: "", city: "", phone: "", agent_type: "", services: [] });
+  const [locations, setLocations] = useState<UzLocation[]>([]);
+  const [form, setForm] = useState<EditableProfile>({ full_name: "", avatar_url: "", company_name: "", region: "", city: "", phone: "", agent_type: "", services: [] });
   const [serviceInput, setServiceInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -92,14 +95,16 @@ export default function ProfilePage() {
     if (!stored) { window.location.replace("/login"); return; }
     const timeoutId = window.setTimeout(() => {
       setSession(stored);
-      getCurrentProfile()
-        .then((loaded) => {
+      Promise.all([getCurrentProfile(), listUzLocations()])
+        .then(([loaded, loadedLocations]) => {
           if (!loaded) throw new Error("PROFILE_NOT_FOUND");
           setProfile(loaded);
+          setLocations(loadedLocations);
           setForm({
             full_name: loaded.full_name || "",
             avatar_url: loaded.avatar_url || "",
             company_name: loaded.company_name || "",
+            region: loaded.region || "",
             city: loaded.city || "",
             phone: loaded.phone || "",
             agent_type: loaded.agent_type || "",
@@ -108,15 +113,24 @@ export default function ProfilePage() {
         })
         .catch((loadError: unknown) => {
           if (loadError instanceof Error && loadError.message.includes("AUTH_SESSION")) window.location.replace("/login");
-          else setError("Profilni yuklashda xatolik yuz berdi.");
+          else setError("Profil yoki lokatsiyalar ro‘yxatini yuklashda xatolik yuz berdi.");
         })
         .finally(() => setLoading(false));
     }, 0);
     return () => window.clearTimeout(timeoutId);
   }, []);
 
+  const regions = useMemo(() => [...new Set(locations.map((location) => location.region))], [locations]);
+  const localityOptions = useMemo(() => locations.filter((location) => location.region === form.region), [locations, form.region]);
+
   const setField = (field: keyof Omit<EditableProfile, "services">, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
+    setDirty(true);
+    setMessage("");
+  };
+
+  const setRegion = (value: string) => {
+    setForm((current) => ({ ...current, region: value, city: "" }));
     setDirty(true);
     setMessage("");
   };
@@ -146,6 +160,7 @@ export default function ProfilePage() {
         full_name: form.full_name.trim(),
         avatar_url: form.avatar_url.trim(),
         company_name: form.company_name.trim(),
+        region: form.region.trim(),
         city: form.city.trim(),
         phone: form.phone.trim(),
         agent_type: form.agent_type.trim(),
@@ -206,7 +221,18 @@ export default function ProfilePage() {
           <div className="grid gap-5 sm:grid-cols-2">
             <Field label="To‘liq ism *" value={form.full_name} onChange={(value) => setField("full_name", value)} maxLength={120} />
             <Field label="Kompaniya *" value={form.company_name} onChange={(value) => setField("company_name", value)} maxLength={160} />
-            <Field label="Shahar *" value={form.city} onChange={(value) => setField("city", value)} maxLength={100} />
+            <label className="block text-sm font-semibold text-[#0b1f3a]">Viloyat / hudud *
+              <select value={form.region} onChange={(event) => setRegion(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-normal outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100">
+                <option value="">Tanlang</option>
+                {regions.map((region) => <option key={region} value={region}>{region}</option>)}
+              </select>
+            </label>
+            <label className="block text-sm font-semibold text-[#0b1f3a]">Tuman / shahar *
+              <select value={form.city} disabled={!form.region} onChange={(event) => setField("city", event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-normal outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400">
+                <option value="">{form.region ? "Tanlang" : "Avval viloyat/hududni tanlang"}</option>
+                {localityOptions.map((location) => <option key={`${location.region}:${location.locality}`} value={location.locality}>{location.locality}</option>)}
+              </select>
+            </label>
             <Field label="Telefon *" value={form.phone} onChange={(value) => setField("phone", value)} maxLength={40} type="tel" />
             <Field label="Avatar URL" value={form.avatar_url} onChange={(value) => setField("avatar_url", value)} maxLength={500} type="url" />
             <label className="block text-sm font-semibold text-[#0b1f3a]">Agent turi *
@@ -217,6 +243,8 @@ export default function ProfilePage() {
               </select>
             </label>
           </div>
+
+          <p className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-500">Lokatsiya erkin yozilmaydi. Viloyat/hudud va tuman/shahar faqat standart ro‘yxatdan tanlanadi.</p>
 
           <div className="mt-5">
             <label className="block text-sm font-semibold text-[#0b1f3a]">Xizmatlar</label>
