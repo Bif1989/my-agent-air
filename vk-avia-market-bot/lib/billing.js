@@ -1,4 +1,4 @@
-const { getUserName, sendMessage, answerEvent, messageRef } = require('./vk');
+const { sendMessage, messageRef } = require('./vk');
 const storage = require('./storage');
 const { privateMenu, privateHome, adminHome } = require('./ui');
 const { buildListingText, processEvent } = require('./market');
@@ -8,7 +8,7 @@ const PRIMARY_PEER_ID = Number(process.env.VK_PRIMARY_PEER_ID || 0);
 const ADMIN_USER_ID = Number(process.env.VK_CLEANUP_USER_ID || 0);
 const TOPUP_AMOUNTS = new Set([5000, 10000, 20000, 50000, 100000, 200000]);
 
-function payload(cmd, extra = {}) { return JSON.stringify({ cmd, v: 4, ...extra }); }
+function payload(cmd, extra = {}) { return JSON.stringify({ cmd, v: 5, ...extra }); }
 function callbackButton(label, cmd, color = 'secondary', extra = {}) {
   return { action: { type: 'callback', label, payload: payload(cmd, extra) }, color };
 }
@@ -63,22 +63,25 @@ function insufficientBalanceMenu() {
   ] };
 }
 async function sendCabinet(userId) {
-  const [stats, profile, billing, name] = await Promise.all([
-    storage.stats(userId), storage.getProfile(userId), storage.billingStatus(userId), getUserName(userId),
+  // Cabinet intentionally loads only the data needed on this screen. Statistics
+  // have their own button, so avoiding stats + users.get removes two external
+  // requests from every cabinet click.
+  const [profile, billing] = await Promise.all([
+    storage.getProfile(userId),
+    storage.billingStatus(userId),
   ]);
   const today = billing?.today || {};
   const price = Number(billing?.price_per_listing || 5000);
   await sendMessage(userId, [
     '👤 AVIA MARKET — KABINET', '',
-    `👤 VK: [id${userId}|${name}]`,
+    `👤 VK: [id${userId}|Profilni ochish]`,
     `🏢 Kompaniya: ${profile?.company || 'Kiritilmagan'}`,
     `📞 Telefon: ${profile?.phone || 'Kiritilmagan'}`,
     `✈️ Telegram: ${profile?.telegram || 'Kiritilmagan'}`, '',
     `💰 Depozit balans: ${formatMoney(billing?.balance || 0)}`,
     `🎁 Bugun bepul: ✈️ ${Number(today.offer_remaining ?? 3)}/${Number(today.offer_limit ?? 3)} taklif · 🔎 ${Number(today.search_remaining ?? 3)}/${Number(today.search_limit ?? 3)} so‘rov`,
     `💳 Limitdan keyin: har bir Taklif/So‘rov ${formatMoney(price)}`, '',
-    `✈️ 7 kunda takliflarim: ${Number(stats?.my_offers || 0)}`,
-    `🔎 7 kunda so‘rovlarim: ${Number(stats?.my_searches || 0)}`,
+    '📊 7 kunlik ma’lumot uchun STATISTIKA tugmasini bosing.',
   ].join('\n'), cabinetMenu());
   return { snackbar: 'Kabinet yuborildi' };
 }
@@ -177,14 +180,12 @@ async function handleCallback(event) {
   const cmd = String(data?.cmd || '');
   if (!userId || !['cabinet', 'billing', 'topup_amount'].includes(cmd)) return false;
   try {
-    let result;
-    if (cmd === 'cabinet') result = await sendCabinet(userId);
-    if (cmd === 'billing') result = await sendBilling(userId);
-    if (cmd === 'topup_amount') result = await createTopupPayment(userId, Number(data?.amount || 0));
-    await answerEvent(obj, result?.snackbar || 'Bajarildi');
+    if (cmd === 'cabinet') await sendCabinet(userId);
+    if (cmd === 'billing') await sendBilling(userId);
+    if (cmd === 'topup_amount') await createTopupPayment(userId, Number(data?.amount || 0));
   } catch (error) {
     console.error('billing_callback_failed', { cmd, code: error?.code || null, message: error?.message || String(error) });
-    await answerEvent(obj, 'Xatolik. Qayta urinib ko‘ring').catch(() => {});
+    await sendMessage(userId, '⚠️ Amalni bajarishda xato bo‘ldi. Qayta urinib ko‘ring.', privateMenu()).catch(() => {});
   }
   return true;
 }
