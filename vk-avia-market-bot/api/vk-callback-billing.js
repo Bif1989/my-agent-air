@@ -6,7 +6,7 @@ const { vkApi, deleteMessage } = require('../lib/vk');
 
 const VK_GROUP_ID = Number(process.env.VK_GROUP_ID || 0);
 const CALLBACK_SECRET_HASH = String(process.env.VK_SECRET_SHA256 || '').trim().toLowerCase();
-const CALLBACK_URL = 'https://project-xj41n.vercel.app/api/vk-callback?v=4';
+const CALLBACK_URL = 'https://project-xj41n.vercel.app/api/vk-callback?v=5';
 const CALLBACK_REPAIR_COOLDOWN_MS = 60_000;
 let lastCallbackRepairAt = 0;
 
@@ -47,7 +47,7 @@ async function repairCallbackSecret() {
     group_id: VK_GROUP_ID,
     server_id: Number(server.id),
     url: CALLBACK_URL,
-    title: 'AviaMarket v4',
+    title: 'AviaMarket v5',
     secret_key: callbackSecret,
   });
   await vkApi('groups.setCallbackSettings', {
@@ -77,9 +77,6 @@ function routeLegacyTextButton(event) {
   const button = legacyTextButtonMessage(event);
   if (!button) return event;
 
-  // Old v2/v3 keyboards used type=text and therefore wrote the button label
-  // into the dialog. Keep those already-sent keyboards functional by routing
-  // their payload through the same action dispatcher as callback buttons.
   return {
     ...event,
     type: 'message_event',
@@ -131,11 +128,15 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  // Acknowledge the VK Callback HTTP request immediately. This is different
-  // from messages.sendMessageEventAnswer: the latter is sent exactly once by
-  // the action handler after it completes, so VK code 100 from duplicate event
-  // answers cannot be produced by this wrapper.
+  // VK only needs the Callback API HTTP acknowledgement for the button event.
+  // messages.sendMessageEventAnswer was adding a second VK API round-trip and
+  // currently returns VK error 100 for real clicks. Disable that downstream
+  // call by removing event_id; the actual requested bot message remains the
+  // user-visible acknowledgement and is sent immediately by the action flow.
   text(res, 200, 'ok');
+  if (event.type === 'message_event' && event.object && typeof event.object === 'object') {
+    event.object.event_id = null;
+  }
 
   const task = (async () => {
     await hideLegacyTextButtonMessage(event);
