@@ -29,30 +29,47 @@ export type AgentFilterOptions = {
 };
 
 export type AgentSort = "trust_desc" | "newest" | "oldest" | "name_asc" | "name_desc";
+export type AgentDirectoryFilters = { search?: string; city?: string; agentType?: string; service?: string; verifiedOnly?: boolean };
 const agentReadsInFlight = new Map<string, Promise<AgentRecord | null>>();
 
 async function readJson<T>(response: Response) {
   return response.json() as Promise<T>;
 }
 
-export async function listAgents(options: { search?: string; city?: string; agentType?: string; service?: string; verifiedOnly?: boolean; sort?: AgentSort; limit?: number; offset?: number } = {}) {
+function directoryFilterPayload(options: AgentDirectoryFilters) {
+  return {
+    p_search: options.search?.trim().slice(0, 100) || null,
+    p_city: options.city || null,
+    p_agent_type: options.agentType || null,
+    p_service: options.service || null,
+    p_verified_only: Boolean(options.verifiedOnly),
+  };
+}
+
+export async function listAgents(options: AgentDirectoryFilters & { sort?: AgentSort; limit?: number; offset?: number } = {}) {
   const safeLimit = Math.max(1, Math.min(100, options.limit || 24));
   const safeOffset = Math.max(0, options.offset || 0);
   const response = await authenticatedSupabaseFetch("rpc/list_agents_with_trust", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      p_search: options.search?.trim().slice(0, 100) || null,
-      p_city: options.city || null,
-      p_agent_type: options.agentType || null,
-      p_service: options.service || null,
-      p_verified_only: Boolean(options.verifiedOnly),
+      ...directoryFilterPayload(options),
       p_sort: options.sort || "trust_desc",
       p_limit: safeLimit,
       p_offset: safeOffset,
     }),
   });
   return readJson<AgentRecord[]>(response);
+}
+
+export async function countAgents(options: AgentDirectoryFilters = {}) {
+  const response = await authenticatedSupabaseFetch("rpc/count_agents_directory", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(directoryFilterPayload(options)),
+  });
+  const value = await readJson<number | string>(response);
+  return Number(value) || 0;
 }
 
 export async function getAgentFilterOptions() {
@@ -67,6 +84,7 @@ export async function getAgent(id: string) {
     const params = new URLSearchParams({
       select: AGENT_FIELDS,
       id: `eq.${id}`,
+      role: "eq.agent",
       is_active: "eq.true",
       registration_status: "eq.active",
       and: COMPLETE_AGENT_FILTER,
