@@ -26,7 +26,7 @@ export default function Home() {
     <main className="overflow-hidden">
       <section className="relative isolate bg-[#0b1f3a] text-white">
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_75%_20%,rgba(56,189,248,0.28),transparent_35%),linear-gradient(120deg,#0b1f3a_15%,#0f4c81_100%)]" />
-        <div className="mx-auto max-w-7xl px-4 pb-20 pt-6 sm:px-6 lg:px-10 lg:pb-28">
+        <div className="mx-auto max-w-7xl px-4 pb-20 pt-6 sm:px-6 lg:px-10 lg:pb-24">
           <nav className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <Link href="/" className="flex items-center gap-3 self-start" aria-label="My Agent Air">
               <BrandMark />
@@ -43,19 +43,22 @@ export default function Home() {
             </div>
           </nav>
 
-          <div className="grid items-center gap-14 pt-20 lg:grid-cols-[1.05fr_0.95fr] lg:gap-20 lg:pt-28">
+          <div className="grid items-center gap-12 pt-14 lg:grid-cols-[1.12fr_0.88fr] lg:gap-16 lg:pt-20">
             <div>
-              <p className="mb-6 inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-white/10 px-4 py-2 text-xs font-medium tracking-wide text-cyan-100">
+              <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-white/10 px-4 py-2 text-xs font-medium tracking-wide text-cyan-100">
                 <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" />
                 {isRu ? "Новая площадка для сотрудничества агентов Узбекистана" : "O‘zbekiston agentlari uchun yangi hamkorlik maydoni"}
               </p>
-              <h1 className="max-w-3xl text-5xl font-semibold leading-[1.06] tracking-tight sm:text-6xl lg:text-7xl">
+              <h1 className="max-w-3xl text-4xl font-semibold leading-[1.06] tracking-tight sm:text-5xl lg:text-6xl">
                 {isRu ? "Новая точка взлёта для travel-агентов" : "Travel agentlar uchun yangi parvoz nuqtasi"}
               </h1>
-              <p className="mt-7 max-w-xl text-lg leading-8 text-blue-100">
+              <p className="mt-5 max-w-xl text-base leading-7 text-blue-100 sm:text-lg">
                 {isRu ? "Профессиональная B2B-платформа для авиакасс и туристических агентств. Находите партнёров, обменивайтесь предложениями и уверенно завершайте сделки." : "Aviakassa va turizm agentlari uchun professional B2B platforma. Hamkor toping, taklif almashing va kelishuvlarni ishonch bilan yakunlang."}
               </p>
-              <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+
+              <PlatformStats isRu={isRu} />
+
+              <div className="mt-7 flex flex-col gap-3 sm:flex-row">
                 <Link href="/register" className="inline-flex items-center justify-center gap-3 rounded-full bg-cyan-300 px-6 py-3.5 font-semibold text-[#09213d] transition hover:bg-cyan-200">
                   {isRu ? "Присоединиться" : "Tarmoqqa qo‘shilish"} <span aria-hidden="true">→</span>
                 </Link>
@@ -91,8 +94,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
-      <PlatformStats isRu={isRu} />
 
       <section className="mx-auto max-w-7xl px-6 py-20 lg:px-10 lg:py-28">
         <div className="max-w-2xl">
