@@ -21,15 +21,20 @@ export async function GET() {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  const activeBase = admin
-    .from("profiles")
-    .select("id", { count: "exact", head: true })
-    .eq("role", "agent")
-    .eq("is_active", true)
-    .eq("registration_status", "active");
-
-  const [totalResult, ...typeResults] = await Promise.all([
-    activeBase,
+  const [activeResult, supplierResult, agentProfilesResult, ...typeResults] = await Promise.all([
+    admin
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("role", "agent")
+      .eq("is_active", true)
+      .eq("registration_status", "active"),
+    admin
+      .from("external_suppliers")
+      .select("id", { count: "exact", head: true }),
+    admin
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("role", "agent"),
     ...PUBLIC_TYPES.map((agentType) =>
       admin
         .from("profiles")
@@ -41,7 +46,10 @@ export async function GET() {
     ),
   ]);
 
-  const errors = [totalResult, ...typeResults].map((result) => result.error).filter(Boolean);
+  const errors = [activeResult, supplierResult, agentProfilesResult, ...typeResults]
+    .map((result) => result.error)
+    .filter(Boolean);
+
   if (errors.length) {
     console.error("Public platform stats load failed", errors.map((error) => error?.message));
     return NextResponse.json(
@@ -56,10 +64,12 @@ export async function GET() {
 
   return NextResponse.json(
     {
-      total_active: totalResult.count ?? 0,
+      supplier_records: supplierResult.count ?? 0,
       hotels: byType.Mehmonxona,
       tour_operators: byType.Turoperator,
       travel_agents: byType.Turagent,
+      total_active: activeResult.count ?? 0,
+      agent_profiles: agentProfilesResult.count ?? 0,
       updated_at: new Date().toISOString(),
     },
     {
