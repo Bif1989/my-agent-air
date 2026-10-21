@@ -69,19 +69,19 @@ export default function PlatformStats({ isRu }: { isRu: boolean }) {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,9rem),1fr))] gap-2.5">
         {CARDS.map((card) => (
           <div
             key={card.key}
-            className="rounded-2xl border border-white/15 bg-white/10 px-3 py-3 shadow-lg shadow-blue-950/10 backdrop-blur-sm"
+            className="min-w-0 rounded-2xl border border-white/15 bg-white/10 px-3 py-3 shadow-lg shadow-blue-950/10 backdrop-blur-sm"
           >
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-lg" aria-hidden="true">{card.icon}</span>
-              <span className="text-xl font-bold tracking-tight text-white sm:text-2xl">
+            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+              <span className="shrink-0 text-lg" aria-hidden="true">{card.icon}</span>
+              <span className="min-w-0 max-w-full break-words text-xl font-bold tabular-nums tracking-tight text-white sm:text-2xl">
                 {stats ? stats[card.key].toLocaleString(isRu ? "ru-RU" : "uz-UZ") : "—"}
               </span>
             </div>
-            <p className="mt-2 text-[11px] font-medium leading-4 text-blue-100 sm:text-xs">
+            <p className="mt-2 break-words text-[11px] font-medium leading-4 text-blue-100 sm:text-xs">
               {isRu ? card.ru : card.uz}
             </p>
           </div>
