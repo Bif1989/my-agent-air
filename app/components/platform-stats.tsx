@@ -37,7 +37,7 @@ export default function PlatformStats({ isRu }: { isRu: boolean }) {
         const data = (await response.json()) as PlatformStatsData;
         if (!cancelled) setStats(data);
       } catch {
-        // Keep the section visible with placeholders when the public stats endpoint is unavailable.
+        // Keep placeholders visible if the public endpoint is temporarily unavailable.
       }
     }
 
@@ -50,38 +50,31 @@ export default function PlatformStats({ isRu }: { isRu: boolean }) {
   }, []);
 
   return (
-    <section className="relative z-10 mx-auto -mt-10 max-w-6xl px-4 sm:px-6 lg:px-10">
-      <div className="rounded-3xl border border-blue-100 bg-white p-4 shadow-xl shadow-blue-950/10 sm:p-6">
-        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">
-              {isRu ? "Участники платформы" : "Platforma ishtirokchilari"}
-            </p>
-            <h2 className="mt-1 text-lg font-semibold text-[#0b1f3a] sm:text-xl">
-              {isRu ? "Сколько партнёров уже в My Agent Air" : "My Agent Air bazasida hozir"}
-            </h2>
-          </div>
-          <p className="text-xs text-slate-400">
-            {isRu ? "Данные обновляются автоматически" : "Ma’lumotlar avtomatik yangilanadi"}
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {CARDS.map((card) => (
-            <div key={card.key} className="rounded-2xl bg-[#f7fbff] p-4 sm:p-5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-2xl" aria-hidden="true">{card.icon}</span>
-                <span className="text-3xl font-bold tracking-tight text-[#0f4c81] sm:text-4xl">
-                  {stats ? stats[card.key].toLocaleString(isRu ? "ru-RU" : "uz-UZ") : "—"}
-                </span>
-              </div>
-              <p className="mt-3 text-sm font-semibold text-slate-700 sm:text-base">
-                {isRu ? card.ru : card.uz}
-              </p>
-            </div>
-          ))}
-        </div>
+    <div className="mt-7 w-full max-w-2xl" aria-label={isRu ? "Статистика платформы" : "Platforma statistikasi"}>
+      <div className="mb-3 flex items-end justify-between gap-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200">
+          {isRu ? "Уже на платформе" : "Hozir platformada"}
+        </p>
+        <p className="hidden text-[11px] text-blue-200 sm:block">
+          {isRu ? "Обновляется автоматически" : "Avtomatik yangilanadi"}
+        </p>
       </div>
-    </section>
+
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        {CARDS.map((card) => (
+          <div key={card.key} className="rounded-2xl border border-white/15 bg-white/10 px-3 py-3.5 shadow-lg shadow-blue-950/10 backdrop-blur-sm sm:px-3.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-lg" aria-hidden="true">{card.icon}</span>
+              <span className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                {stats ? stats[card.key].toLocaleString(isRu ? "ru-RU" : "uz-UZ") : "—"}
+              </span>
+            </div>
+            <p className="mt-2 text-xs font-medium leading-4 text-blue-100 sm:text-[13px]">
+              {isRu ? card.ru : card.uz}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
