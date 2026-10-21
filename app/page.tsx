@@ -47,13 +47,16 @@ export default function Home() {
             <div>
               <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-white/10 px-4 py-2 text-xs font-medium tracking-wide text-cyan-100">
                 <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" />
-                {isRu ? "Новая площадка для сотрудничества агентов Узбекистана" : "O‘zbekiston agentlari uchun yangi hamkorlik maydoni"}
+                {isRu ? "B2B-платформа для профессионалов туризма" : "Turizm professionallari uchun B2B platforma"}
               </p>
               <h1 className="max-w-3xl text-4xl font-semibold leading-[1.06] tracking-tight sm:text-5xl lg:text-6xl">
-                {isRu ? "Новая точка взлёта для travel-агентов" : "Travel agentlar uchun yangi parvoz nuqtasi"}
+                {isRu ? "Профессионалы туризма — на одной платформе" : "Turizm professionallari bir platformada"}
               </h1>
               <p className="mt-5 max-w-xl text-base leading-7 text-blue-100 sm:text-lg">
-                {isRu ? "Профессиональная B2B-платформа для авиакасс и туристических агентств. Находите партнёров, обменивайтесь предложениями и уверенно завершайте сделки." : "Aviakassa va turizm agentlari uchun professional B2B platforma. Hamkor toping, taklif almashing va kelishuvlarni ishonch bilan yakunlang."}
+                {isRu ? "Единая B2B-платформа для турагентов, туроператоров, отелей, гидов, транспортных компаний и авиакасс." : "Turagentlar, turoperatorlar, mehmonxonalar, gidlar, transport xizmatlari va aviakassalar uchun yagona B2B platforma."}
+              </p>
+              <p className="mt-4 max-w-xl text-sm font-semibold tracking-wide text-cyan-100 sm:text-base">
+                {isRu ? "Находите партнёров. Обменивайтесь предложениями. Развивайтесь." : "Hamkor toping. Taklif almashing. Rivojlaning."}
               </p>
 
               <PlatformStats isRu={isRu} />
