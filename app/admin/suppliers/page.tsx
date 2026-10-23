@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AppShell from "@/app/dashboard/components/app-shell";
 import { getCurrentProfile } from "@/app/profile/profile-api";
 import { getStoredSession, type AuthSession } from "@/lib/supabase-auth";
@@ -27,6 +27,8 @@ const EMPTY_FILTERS = {
   search: "",
   minPrice: "",
   maxPrice: "",
+  currency: "",
+  priceUnit: "",
   sort: "location" as SupplierListQuery["sort"],
 };
 
@@ -110,11 +112,13 @@ function formatPrice(row: SupplierRow) {
 export default function AdminSuppliersPage() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [stats, setStats] = useState<SupplierStats | null>(null);
-  const [filterOptions, setFilterOptions] = useState<SupplierFilterOptions>({ regions: [], localities: [] });
+  const [filterOptions, setFilterOptions] = useState<SupplierFilterOptions>({ regions: [], localities: [], currencies: [], priceUnits: [] });
   const [supplierRows, setSupplierRows] = useState<SupplierRow[]>([]);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [appliedFilters, setAppliedFilters] = useState(EMPTY_FILTERS);
   const [page, setPage] = useState(0);
   const [listLoading, setListLoading] = useState(false);
+  const listRequest = useRef(0);
   const [csv, setCsv] = useState("");
   const [supplierType, setSupplierType] = useState<SupplierImportItem["supplier_type"]>("hotel");
   const [sourceName, setSourceName] = useState("O‘zbekiston turizm reyestri");
@@ -169,6 +173,7 @@ export default function AdminSuppliersPage() {
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   async function fetchRows(nextPage: number, nextFilters = filters) {
+    const request = ++listRequest.current;
     setListLoading(true);
     setError("");
     try {
@@ -179,16 +184,20 @@ export default function AdminSuppliersPage() {
         search: nextFilters.search,
         minPrice: nextFilters.minPrice,
         maxPrice: nextFilters.maxPrice,
+        currency: nextFilters.currency,
+        priceUnit: nextFilters.priceUnit,
         sort: nextFilters.sort,
         limit: PAGE_SIZE,
         offset: nextPage * PAGE_SIZE,
       });
+      if (request !== listRequest.current) return;
       setSupplierRows(rows);
       setPage(nextPage);
+      setAppliedFilters(nextFilters);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Supplierlar ro‘yxati yuklanmadi.");
+      if (request === listRequest.current) setError(cause instanceof Error ? cause.message : "Supplierlar ro‘yxati yuklanmadi.");
     } finally {
-      setListLoading(false);
+      if (request === listRequest.current) setListLoading(false);
     }
   }
 
@@ -213,6 +222,7 @@ export default function AdminSuppliersPage() {
       const summary = { inserted, updated, skipped, total };
       setResult(summary);
       setStats(await loadSupplierStats());
+      setFilterOptions(await loadSupplierFilterOptions());
       await fetchRows(0);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Importda xatolik yuz berdi.");
@@ -268,9 +278,9 @@ export default function AdminSuppliersPage() {
             </label>
 
             <label className="text-xs font-semibold text-slate-600">Shahar / tuman
-              <select value={filters.locality} onChange={(e) => setFilters((current) => ({ ...current, locality: e.target.value }))} className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
-                <option value="">Barchasi</option>
-                {localityOptions.map((item) => <option key={`${item.region}-${item.locality}`} value={item.locality}>{item.locality}</option>)}
+              <select value={JSON.stringify([filters.region, filters.locality])} onChange={(e) => { const [region, locality] = JSON.parse(e.target.value) as [string, string]; setFilters((current) => ({ ...current, region, locality })); }} className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
+                <option value={JSON.stringify([filters.region, ""])}>Barchasi</option>
+                {localityOptions.map((item) => <option key={`${item.region}-${item.locality}`} value={JSON.stringify([item.region, item.locality])}>{item.locality}{!filters.region ? ` — ${item.region}` : ""}</option>)}
               </select>
             </label>
 
@@ -295,12 +305,25 @@ export default function AdminSuppliersPage() {
             <label className="text-xs font-semibold text-slate-600">Narxgacha
               <input type="number" min="0" value={filters.maxPrice} onChange={(e) => setFilters((current) => ({ ...current, maxPrice: e.target.value }))} placeholder="Masalan 500000" className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-normal" />
             </label>
+            <label className="text-xs font-semibold text-slate-600">Valyuta
+              <select value={filters.currency} onChange={(e) => setFilters((current) => ({ ...current, currency: e.target.value }))} className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
+                <option value="">Tanlang</option>
+                {filterOptions.currencies.map((currency) => <option key={currency} value={currency}>{currency}</option>)}
+              </select>
+            </label>
+            <label className="text-xs font-semibold text-slate-600">Narx birligi
+              <select value={filters.priceUnit} onChange={(e) => setFilters((current) => ({ ...current, priceUnit: e.target.value }))} className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
+                <option value="">Tanlang</option>
+                {filterOptions.priceUnits.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+              </select>
+            </label>
           </div>
 
           <div className="mt-4 flex flex-wrap gap-3">
             <button type="button" onClick={() => fetchRows(0)} disabled={listLoading} className="rounded-xl bg-[#0b1f3a] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{listLoading ? "Yuklanmoqda..." : "Filtrlash"}</button>
             <button type="button" onClick={() => { setFilters(EMPTY_FILTERS); void fetchRows(0, EMPTY_FILTERS); }} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600">Tozalash</button>
           </div>
+          {error && <p role="alert" className="mt-4 break-words rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}
 
           <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200">
             <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
@@ -346,8 +369,8 @@ export default function AdminSuppliersPage() {
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-xs text-slate-500">Sahifa {page + 1} / {totalPages}</div>
             <div className="flex gap-2">
-              <button type="button" disabled={page <= 0 || listLoading} onClick={() => fetchRows(page - 1)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 disabled:opacity-40">← Oldingi</button>
-              <button type="button" disabled={page + 1 >= totalPages || listLoading} onClick={() => fetchRows(page + 1)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 disabled:opacity-40">Keyingi →</button>
+              <button type="button" disabled={page <= 0 || listLoading} onClick={() => fetchRows(page - 1, appliedFilters)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 disabled:opacity-40">← Oldingi</button>
+              <button type="button" disabled={page + 1 >= totalPages || listLoading} onClick={() => fetchRows(page + 1, appliedFilters)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 disabled:opacity-40">Keyingi →</button>
             </div>
           </div>
         </section>

@@ -56,7 +56,13 @@ export function getCurrentProfile() {
 
 export async function listUzLocations() {
   const response = await authenticatedSupabaseFetch("uz_locations?select=region,locality,kind,sort_order&order=sort_order.asc");
-  return response.json() as Promise<UzLocation[]>;
+  if (!response.ok) throw new Error("Lokatsiyalar ro‘yxati yuklanmadi. Qayta urinib ko‘ring.");
+  const rows: unknown = await response.json();
+  if (!Array.isArray(rows) || !rows.length || !rows.every((row) =>
+    row && typeof row.region === "string" && typeof row.locality === "string"
+    && (row.kind === "city" || row.kind === "district") && typeof row.sort_order === "number"
+  )) throw new Error("Lokatsiyalar ro‘yxati noto‘g‘ri formatda. Qayta urinib ko‘ring.");
+  return rows as UzLocation[];
 }
 
 export async function updateCurrentProfile(profile: EditableProfile) {

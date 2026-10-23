@@ -32,7 +32,7 @@ export default function Home() {
               <BrandMark />
               <span className="text-sm font-semibold tracking-wide sm:text-base">MY AGENT AIR</span>
             </Link>
-            <div className="grid w-full grid-cols-[auto_auto_1fr] items-center gap-1.5 text-xs sm:flex sm:w-auto sm:flex-nowrap sm:gap-2 sm:text-sm">
+            <div className="flex w-full flex-wrap items-center gap-1.5 text-xs sm:w-auto sm:flex-nowrap sm:gap-2 sm:text-sm">
               <UiControls compact inverse />
               <Link href="/login" className="inline-flex whitespace-nowrap rounded-full border border-white/25 px-2.5 py-2.5 text-slate-100 transition hover:bg-white/10 hover:text-white sm:px-4">
                 {isRu ? "Войти" : "Kirish"}
@@ -44,12 +44,12 @@ export default function Home() {
           </nav>
 
           <div className="grid items-center gap-12 pt-14 lg:grid-cols-[1.12fr_0.88fr] lg:gap-16 lg:pt-20">
-            <div>
+            <div className="min-w-0">
               <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-white/10 px-4 py-2 text-xs font-medium tracking-wide text-cyan-100">
                 <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" />
                 {isRu ? "B2B-платформа для профессионалов туризма" : "Turizm professionallari uchun B2B platforma"}
               </p>
-              <h1 className="max-w-3xl text-4xl font-semibold leading-[1.06] tracking-tight sm:text-5xl lg:text-6xl">
+              <h1 className="max-w-3xl break-words text-3xl font-semibold leading-[1.06] tracking-tight min-[375px]:text-4xl sm:text-5xl xl:text-6xl">
                 {isRu ? "Профессионалы туризма — на одной платформе" : "Turizm professionallari bir platformada"}
               </h1>
               <p className="mt-5 max-w-xl text-base leading-7 text-blue-100 sm:text-lg">
@@ -71,12 +71,12 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="relative mx-auto w-full max-w-md lg:mr-0">
+            <div className="relative mx-auto min-w-0 w-full max-w-md lg:mr-0">
               <div className="absolute -inset-8 rounded-[3rem] bg-cyan-300/10 blur-3xl" />
               <div className="relative rounded-[2rem] border border-white/20 bg-white/10 p-5 shadow-2xl backdrop-blur-xl">
                 <div className="rounded-[1.4rem] bg-white p-6 text-[#0b1f3a] shadow-xl">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">{isRu ? "ВОЗМОЖНОСТИ ПЛАТФОРМЫ" : "Platforma imkoniyatlari"}</p>
-                  <h2 className="mt-3 text-2xl font-semibold">{isRu ? "Управляйте сотрудничеством в одном месте" : "Hamkorlikni bir joyda boshqaring"}</h2>
+                  <h2 className="mt-3 break-words text-xl font-semibold sm:text-2xl">{isRu ? "Управляйте сотрудничеством в одном месте" : "Hamkorlikni bir joyda boshqaring"}</h2>
                   <div className="mt-6 space-y-4">
                     {(isRu
                       ? [["01", "Найдите агентов", "Ищите активных партнёров по услугам."], ["02", "Обменивайтесь предложениями", "Ведите запросы и предложения с понятными условиями."], ["03", "Завершайте сделки", "Продолжайте безопасный рабочий процесс на основе принятого предложения."]]
@@ -84,7 +84,7 @@ export default function Home() {
                     ).map(([number, title, description]) => (
                       <div key={number} className="flex gap-3 rounded-xl bg-slate-50 p-3">
                         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-xs font-bold text-blue-700">{number}</span>
-                        <div>
+                        <div className="min-w-0 break-words">
                           <p className="text-sm font-semibold">{title}</p>
                           <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p>
                         </div>
