@@ -71,12 +71,12 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="relative mx-auto w-full max-w-md lg:mr-0">
+            <div className="relative mx-auto min-w-0 w-full max-w-md lg:mr-0">
               <div className="absolute -inset-8 rounded-[3rem] bg-cyan-300/10 blur-3xl" />
               <div className="relative rounded-[2rem] border border-white/20 bg-white/10 p-5 shadow-2xl backdrop-blur-xl">
                 <div className="rounded-[1.4rem] bg-white p-6 text-[#0b1f3a] shadow-xl">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">{isRu ? "ВОЗМОЖНОСТИ ПЛАТФОРМЫ" : "Platforma imkoniyatlari"}</p>
-                  <h2 className="mt-3 text-2xl font-semibold">{isRu ? "Управляйте сотрудничеством в одном месте" : "Hamkorlikni bir joyda boshqaring"}</h2>
+                  <h2 className="mt-3 break-words text-xl font-semibold sm:text-2xl">{isRu ? "Управляйте сотрудничеством в одном месте" : "Hamkorlikni bir joyda boshqaring"}</h2>
                   <div className="mt-6 space-y-4">
                     {(isRu
                       ? [["01", "Найдите агентов", "Ищите активных партнёров по услугам."], ["02", "Обменивайтесь предложениями", "Ведите запросы и предложения с понятными условиями."], ["03", "Завершайте сделки", "Продолжайте безопасный рабочий процесс на основе принятого предложения."]]
@@ -84,7 +84,7 @@ export default function Home() {
                     ).map(([number, title, description]) => (
                       <div key={number} className="flex gap-3 rounded-xl bg-slate-50 p-3">
                         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-xs font-bold text-blue-700">{number}</span>
-                        <div>
+                        <div className="min-w-0 break-words">
                           <p className="text-sm font-semibold">{title}</p>
                           <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p>
                         </div>
