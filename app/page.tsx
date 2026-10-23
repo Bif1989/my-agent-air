@@ -44,12 +44,12 @@ export default function Home() {
           </nav>
 
           <div className="grid items-center gap-12 pt-14 lg:grid-cols-[1.12fr_0.88fr] lg:gap-16 lg:pt-20">
-            <div>
+            <div className="min-w-0">
               <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-cyan-200/20 bg-white/10 px-4 py-2 text-xs font-medium tracking-wide text-cyan-100">
                 <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" />
                 {isRu ? "B2B-платформа для профессионалов туризма" : "Turizm professionallari uchun B2B platforma"}
               </p>
-              <h1 className="max-w-3xl text-4xl font-semibold leading-[1.06] tracking-tight sm:text-5xl lg:text-6xl">
+              <h1 className="max-w-3xl break-words text-3xl font-semibold leading-[1.06] tracking-tight min-[375px]:text-4xl sm:text-5xl xl:text-6xl">
                 {isRu ? "Профессионалы туризма — на одной платформе" : "Turizm professionallari bir platformada"}
               </h1>
               <p className="mt-5 max-w-xl text-base leading-7 text-blue-100 sm:text-lg">
