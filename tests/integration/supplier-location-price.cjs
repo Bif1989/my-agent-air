@@ -15,7 +15,7 @@ const read=p=>fs.readFileSync(root+p,'utf8');
  assert.equal((await db.query('select city from app_private.profile_legacy_locations')).rows[0].city,'Unmapped town');
  await db.exec(read('supabase/migrations/20261006123500_external_supplier_network.sql').split('create index')[0]);
  await db.exec(read('supabase/migrations/20261019154500_supplier_location_price_filters.sql'));
- await db.exec(read('supabase/migrations/20261023062132_harden_supplier_filters_and_locations.sql'));
+ for (const name of fs.readdirSync(root+'supabase/migrations').filter(name => /^202610230919.*_supplier_/.test(name)).sort()) await db.exec(read('supabase/migrations/'+name));
  await db.exec(`select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',false);`);
  await db.query(`select public.admin_import_external_suppliers($1::jsonb)`,[JSON.stringify([
   {name:'USD NIGHT',source_type:'manual',source_record_id:'test-1',region:'Toshkent viloyati',city:'Yuqori Chirchiq tumani',price_from:100,price_to:200,currency:'USD',price_unit:'1 kecha'},
