@@ -58,6 +58,40 @@ set
   end
 where city is not null;
 
+-- Fresh installs may contain legacy cities beyond the small alias list above.
+-- Resolve only unambiguous matches; preserve unresolved input privately before
+-- clearing the pair so the validated constraints cannot abort the migration.
+with candidates as (
+  select p.id, min(l.region) as region, min(l.locality) as locality
+  from public.profiles p
+  join public.uz_locations l on (
+    lower(trim(p.city)) = lower(l.locality)
+    or (l.kind = 'city' and lower(trim(p.city)) = lower(regexp_replace(l.locality, ' shahri$', '')))
+  ) and (p.region is null or p.region = l.region)
+  group by p.id having count(*) = 1
+)
+update public.profiles p set region = c.region, city = c.locality
+from candidates c where p.id = c.id;
+
+create schema if not exists app_private;
+create table if not exists app_private.profile_legacy_locations (
+  profile_id uuid primary key,
+  region text,
+  city text,
+  preserved_at timestamptz not null default now()
+);
+alter table app_private.profile_legacy_locations enable row level security;
+revoke all on app_private.profile_legacy_locations from public, anon, authenticated;
+insert into app_private.profile_legacy_locations(profile_id, region, city)
+select p.id, p.region, p.city from public.profiles p
+where (p.region is not null or p.city is not null)
+  and not exists (select 1 from public.uz_locations l where l.region=p.region and l.locality=p.city)
+on conflict (profile_id) do nothing;
+
+update public.profiles p set region = null, city = null
+where (p.region is not null or p.city is not null)
+  and not exists (select 1 from public.uz_locations l where l.region=p.region and l.locality=p.city);
+
 alter table public.profiles drop constraint if exists profiles_location_pair_check;
 alter table public.profiles add constraint profiles_location_pair_check
 check ((region is null and city is null) or (region is not null and city is not null));

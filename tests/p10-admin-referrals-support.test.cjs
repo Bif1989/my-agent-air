@@ -62,5 +62,5 @@ test('admin panel exposes referral and operator inbox surfaces', () => {
 
 test('support implementation adds no new API route or Vercel function', () => {
   const apiRoutes = fs.readdirSync(path.join(root, 'app', 'api'), { withFileTypes: true }).map((entry) => entry.name).sort();
-  assert.deepEqual(apiRoutes, ['ai', 'auth', 'payments', 'supplier-outreach']);
+  assert.deepEqual(apiRoutes, ['ai', 'auth', 'payments', 'public', 'supplier-outreach']);
 });

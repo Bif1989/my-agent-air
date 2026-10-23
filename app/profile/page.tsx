@@ -89,11 +89,14 @@ export default function ProfilePage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [dirty, setDirty] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
     const stored = getStoredSession();
     if (!stored) { window.location.replace("/login"); return; }
     const timeoutId = window.setTimeout(() => {
+      setLoading(true);
+      setError("");
       setSession(stored);
       Promise.all([getCurrentProfile(), listUzLocations()])
         .then(([loaded, loadedLocations]) => {
@@ -118,7 +121,7 @@ export default function ProfilePage() {
         .finally(() => setLoading(false));
     }, 0);
     return () => window.clearTimeout(timeoutId);
-  }, []);
+  }, [loadAttempt]);
 
   const regions = useMemo(() => [...new Set(locations.map((location) => location.region))], [locations]);
   const localityOptions = useMemo(() => locations.filter((location) => location.region === form.region), [locations, form.region]);
@@ -215,6 +218,10 @@ export default function ProfilePage() {
       </div>}
 
       {loading && <div className="flex min-h-[40vh] items-center justify-center text-sm text-slate-500">Profil yuklanmoqda...</div>}
+      {!loading && !profile && error && <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4">
+        <p role="alert" className="text-sm text-red-700">{error}</p>
+        <button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)} className="mt-3 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white">Qayta urinish</button>
+      </div>}
 
       {!loading && profile && <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(300px,0.7fr)]">
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">

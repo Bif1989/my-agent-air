@@ -53,6 +53,8 @@ export type SupplierLocality = {
 export type SupplierFilterOptions = {
   regions: string[];
   localities: SupplierLocality[];
+  priceUnits: string[];
+  currencies: string[];
 };
 
 export type SupplierRow = {
@@ -85,6 +87,8 @@ export type SupplierListQuery = {
   search?: string;
   minPrice?: string;
   maxPrice?: string;
+  currency?: string;
+  priceUnit?: string;
   sort?: "location" | "name" | "price_asc" | "price_desc" | "stars_desc";
   limit?: number;
   offset?: number;
@@ -111,7 +115,16 @@ export async function loadSupplierFilterOptions() {
 }
 
 export async function loadSuppliers(query: SupplierListQuery = {}) {
-  const response = await authenticatedSupabaseFetch("rpc/admin_list_external_suppliers", {
+  const minPrice = query.minPrice?.trim() ? Number(query.minPrice) : null;
+  const maxPrice = query.maxPrice?.trim() ? Number(query.maxPrice) : null;
+  if ([minPrice, maxPrice].some((value) => value !== null && (!Number.isFinite(value) || value < 0))
+    || (minPrice !== null && maxPrice !== null && minPrice > maxPrice)) {
+    throw new Error("Narx oralig‘ini to‘g‘ri kiriting.");
+  }
+  if ((minPrice !== null || maxPrice !== null || query.sort?.startsWith("price_")) && (!query.currency || !query.priceUnit)) {
+    throw new Error("Narx bo‘yicha filtrlash uchun valyuta va narx birligini tanlang.");
+  }
+  const response = await authenticatedSupabaseFetch("rpc/admin_list_external_suppliers_v2", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -119,16 +132,17 @@ export async function loadSuppliers(query: SupplierListQuery = {}) {
       p_region: query.region || null,
       p_locality: query.locality || null,
       p_search: query.search || null,
-      p_min_price: query.minPrice ? Number(query.minPrice) : null,
-      p_max_price: query.maxPrice ? Number(query.maxPrice) : null,
+      p_min_price: minPrice,
+      p_max_price: maxPrice,
+      p_currency: query.currency || null,
+      p_price_unit: query.priceUnit || null,
       p_sort: query.sort || "location",
       p_limit: query.limit ?? 50,
       p_offset: query.offset ?? 0,
     }),
   });
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || "Supplierlar ro‘yxati yuklanmadi");
+    throw new Error("Supplierlar ro‘yxati yuklanmadi. Qayta urinib ko‘ring.");
   }
   return response.json() as Promise<SupplierRow[]>;
 }

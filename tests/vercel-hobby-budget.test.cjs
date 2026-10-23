@@ -29,6 +29,7 @@ test('Vercel Node API surface stays consolidated', () => {
     'app/api/ai/transcribe/route.ts',
     'app/api/auth/[action]/route.ts',
     'app/api/payments/click/[stage]/route.ts',
+    'app/api/public/platform-stats/route.ts',
     'app/api/supplier-outreach/[action]/route.ts',
   ]);
 });

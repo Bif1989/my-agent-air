@@ -32,7 +32,7 @@ export default function Home() {
               <BrandMark />
               <span className="text-sm font-semibold tracking-wide sm:text-base">MY AGENT AIR</span>
             </Link>
-            <div className="grid w-full grid-cols-[auto_auto_1fr] items-center gap-1.5 text-xs sm:flex sm:w-auto sm:flex-nowrap sm:gap-2 sm:text-sm">
+            <div className="flex w-full flex-wrap items-center gap-1.5 text-xs sm:w-auto sm:flex-nowrap sm:gap-2 sm:text-sm">
               <UiControls compact inverse />
               <Link href="/login" className="inline-flex whitespace-nowrap rounded-full border border-white/25 px-2.5 py-2.5 text-slate-100 transition hover:bg-white/10 hover:text-white sm:px-4">
                 {isRu ? "Войти" : "Kirish"}
