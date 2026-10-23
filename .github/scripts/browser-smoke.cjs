@@ -132,11 +132,39 @@ async function checkProfile(browser, label, contextOptions) {
   await context.close();
 }
 
+async function checkHomeLayout(browser, label, widths) {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.route('**/api/public/platform-stats', (route) => route.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify({ supplier_records: 1392, hotels: 2, tour_operators: 3, travel_agents: 3, total_active: 19, agent_profiles: 48, updated_at: new Date().toISOString() }),
+  }));
+  for (const width of widths) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(baseURL, { waitUntil: 'domcontentloaded' });
+    for (const locale of ['UZ', 'RU']) {
+      await page.getByRole('button', { name: locale, exact: true }).click();
+      const stats = page.locator('[aria-label="Platforma statistikasi"], [aria-label="Статистика платформы"]');
+      await stats.getByText(/1\D?392/).waitFor();
+      const overflow = await page.evaluate(() => {
+        const viewport = document.documentElement.clientWidth;
+        return [...document.querySelectorAll('nav a, nav button, h1, [aria-label="Platforma statistikasi"] span, [aria-label="Platforma statistikasi"] p, [aria-label="Статистика платформы"] span, [aria-label="Статистика платформы"] p')]
+          .filter((element) => { const box = element.getBoundingClientRect(); return box.width && (box.left < -1 || box.right > viewport + 1 || element.scrollWidth > element.clientWidth + 1); })
+          .map((element) => element.textContent.trim());
+      });
+      assert.deepEqual(overflow, [], `${label} ${width}px ${locale}: clipped hero/navigation/statistics`);
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${label} ${width}px ${locale}: page overflow`);
+    }
+  }
+  await context.close();
+}
+
 (async () => {
   const chromiumBrowser = await chromium.launch({ headless: true });
   try {
     await checkProfile(chromiumBrowser, 'desktop-chromium', { viewport: { width: 1440, height: 900 } });
     await checkProfile(chromiumBrowser, 'android-chromium', { ...devices['Pixel 7'] });
+    await checkHomeLayout(chromiumBrowser, 'chromium-layout', [320, 375, 768, 1024, 1440]);
   } finally {
     await chromiumBrowser.close();
   }
@@ -144,6 +172,7 @@ async function checkProfile(browser, label, contextOptions) {
   const webkitBrowser = await webkit.launch({ headless: true });
   try {
     await checkProfile(webkitBrowser, 'ios-webkit', { ...devices['iPhone 15'] });
+    await checkHomeLayout(webkitBrowser, 'webkit-layout', [320, 390, 1440]);
   } finally {
     await webkitBrowser.close();
   }
