@@ -133,9 +133,11 @@ async function checkProfile(browser, label, contextOptions) {
 }
 
 async function checkHomeLayout(browser, label, widths) {
-  const context = await browser.newContext();
+  const context = await browser.newContext({ serviceWorkers: 'block' });
   const page = await context.newPage();
-  await page.route('**/api/public/platform-stats', (route) => route.fulfill({
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await context.route('**/api/public/platform-stats', (route) => route.fulfill({
     contentType: 'application/json',
     body: JSON.stringify({ supplier_records: 1392, hotels: 2, tour_operators: 3, travel_agents: 3, total_active: 19, agent_profiles: 48, updated_at: new Date().toISOString() }),
   }));
@@ -145,7 +147,9 @@ async function checkHomeLayout(browser, label, widths) {
     for (const locale of ['UZ', 'RU']) {
       await page.getByRole('button', { name: locale, exact: true }).click();
       const stats = page.locator('[aria-label="Platforma statistikasi"], [aria-label="Статистика платформы"]');
-      await stats.getByText(/1\D?392/).waitFor();
+      await stats.getByText(/1\D?392/).waitFor().catch(async (error) => {
+        throw new Error(`${label} ${width}px ${locale}: stats did not render; errors=${JSON.stringify(errors)}; page=${await page.locator('body').innerText()}; ${error.message}`);
+      });
       const overflow = await page.evaluate(() => {
         const viewport = document.documentElement.clientWidth;
         return [...document.querySelectorAll('nav a, nav button, h1, [aria-label="Platforma statistikasi"] span, [aria-label="Platforma statistikasi"] p, [aria-label="Статистика платформы"] span, [aria-label="Статистика платформы"] p')]
