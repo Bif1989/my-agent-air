@@ -45,11 +45,22 @@ function currentUserId() {
   return session.user.id;
 }
 
+async function readProfileRows(response: Response, operation: "load" | "save") {
+  const prefix = operation === "load" ? "PROFILE_LOAD" : "PROFILE_SAVE";
+  if (!response.ok) {
+    if (response.status === 401) throw new Error("AUTH_SESSION_EXPIRED");
+    throw new Error(`${prefix}_FAILED_${response.status}`);
+  }
+  const body: unknown = await response.json().catch(() => null);
+  if (!Array.isArray(body)) throw new Error(`${prefix}_INVALID_RESPONSE`);
+  return body as ProfileRecord[];
+}
+
 export function getCurrentProfile() {
   const userId = currentUserId();
   return dedupeInFlight("profile:current", userId, async () => {
     const response = await authenticatedSupabaseFetch(`profiles?select=${encodeURIComponent(PROFILE_FIELDS)}&id=eq.${encodeURIComponent(userId)}&limit=1`);
-    const rows = await response.json() as ProfileRecord[];
+    const rows = await readProfileRows(response, "load");
     return rows[0] || null;
   });
 }
@@ -71,7 +82,7 @@ export async function updateCurrentProfile(profile: EditableProfile) {
     headers: { "Content-Type": "application/json", Prefer: "return=representation" },
     body: JSON.stringify(profile),
   });
-  const rows = await response.json() as ProfileRecord[];
+  const rows = await readProfileRows(response, "save");
   if (!rows[0]) throw new Error("Profil saqlanmadi. Qayta urinib ko‘ring.");
   window.dispatchEvent(new Event("my-agent-air:profile-updated"));
   return rows[0] || null;

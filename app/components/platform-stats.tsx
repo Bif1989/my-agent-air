@@ -24,6 +24,15 @@ type StatCard = {
   icon: string;
 };
 
+const STAT_KEYS: readonly StatKey[] = [
+  "supplier_records",
+  "hotels",
+  "tour_operators",
+  "travel_agents",
+  "total_active",
+  "agent_profiles",
+];
+
 const CARDS: StatCard[] = [
   { key: "supplier_records", uz: "Supplier bazasi", ru: "База поставщиков", icon: "🗂️" },
   { key: "hotels", uz: "Mehmonxonalar", ru: "Отели", icon: "🏨" },
@@ -32,6 +41,15 @@ const CARDS: StatCard[] = [
   { key: "total_active", uz: "Faol hamkorlar", ru: "Активные партнёры", icon: "🤝" },
   { key: "agent_profiles", uz: "Jami agent profillari", ru: "Всего профилей агентов", icon: "👤" },
 ];
+
+function isPlatformStatsData(value: unknown): value is PlatformStatsData {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return STAT_KEYS.every((key) => {
+    const metric = record[key];
+    return typeof metric === "number" && Number.isFinite(metric) && metric >= 0;
+  }) && typeof record.updated_at === "string";
+}
 
 export default function PlatformStats({ isRu }: { isRu: boolean }) {
   const [stats, setStats] = useState<PlatformStatsData | null>(null);
@@ -42,11 +60,18 @@ export default function PlatformStats({ isRu }: { isRu: boolean }) {
     async function loadStats() {
       try {
         const response = await fetch("/api/public/platform-stats", { cache: "no-store" });
-        if (!response.ok) return;
-        const data = (await response.json()) as PlatformStatsData;
+        if (!response.ok) {
+          if (!cancelled) setStats(null);
+          return;
+        }
+        const data: unknown = await response.json();
+        if (!isPlatformStatsData(data)) {
+          if (!cancelled) setStats(null);
+          return;
+        }
         if (!cancelled) setStats(data);
       } catch {
-        // Keep placeholders visible if the public endpoint is temporarily unavailable.
+        if (!cancelled) setStats(null);
       }
     }
 
