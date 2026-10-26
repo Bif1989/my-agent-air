@@ -116,7 +116,9 @@ export default function ProfilePage() {
         })
         .catch((loadError: unknown) => {
           if (loadError instanceof Error && loadError.message.includes("AUTH_SESSION")) window.location.replace("/login");
-          else setError("Profil yoki lokatsiyalar ro‘yxatini yuklashda xatolik yuz berdi.");
+          else setError(loadError instanceof Error && loadError.message === "PROFILE_NOT_FOUND"
+            ? "Hisobingiz uchun profil topilmadi. Qayta kiring; muammo qolsa qo‘llab-quvvatlash xizmatiga murojaat qiling."
+            : "Profil yoki lokatsiyalar ro‘yxatini yuklashda xatolik yuz berdi.");
         })
         .finally(() => setLoading(false));
     }, 0);

@@ -87,7 +87,7 @@ test('profile updates reject failed and malformed PATCH responses before reporti
 });
 
 test('supplier email suppression is enforced on persisted outstanding invites', () => {
-  const sql = fs.readFileSync(path.resolve(__dirname, '../supabase/migrations/20261026010000_supplier_invite_email_suppression_guard.sql'), 'utf8');
+  const sql = fs.readFileSync(path.resolve(__dirname, '../supabase/migrations/20261025235613_supplier_invite_email_suppression_guard.sql'), 'utf8');
   assert.match(sql, /supplier_invites_email_suppression_guard/);
   assert.match(sql, /before insert or update of channel, recipient on public\.supplier_invites/);
   assert.match(sql, /supplier_email_suppressed/);
@@ -100,4 +100,16 @@ test('homepage statistics drop stale values on failed or malformed refreshes', (
   assert.match(source, /if \(!response\.ok\) \{[\s\S]*?setStats\(null\);[\s\S]*?return;/);
   assert.match(source, /if \(!isPlatformStatsData\(data\)\) \{[\s\S]*?setStats\(null\);[\s\S]*?return;/);
   assert.match(source, /catch \{[\s\S]*?setStats\(null\);/);
+});
+
+ test('profile rejects malformed rows and other users without emitting save success', async () => {
+  auth.getStoredSession = () => session;
+  let events = 0;
+  global.window = { dispatchEvent() { events++; } };
+  for (const row of [null, {}, {...profile, id: 'other-user'}, {...profile, services: {}}, {...profile, is_active: 'true'}]) {
+    auth.authenticatedSupabaseFetch = async () => Response.json([row]);
+    await assert.rejects(getCurrentProfile(), /PROFILE_LOAD_INVALID_RESPONSE/);
+    await assert.rejects(updateCurrentProfile({}), /PROFILE_SAVE_INVALID_RESPONSE/);
+  }
+  assert.equal(events, 0);
 });

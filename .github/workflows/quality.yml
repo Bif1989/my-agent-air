@@ -29,7 +29,9 @@ jobs:
       - name: Supplier SQL integration
         env:
           NODE_PATH: /tmp/sql-tests/node_modules
-        run: node tests/integration/supplier-location-price.cjs
+        run: |
+          node tests/integration/supplier-location-price.cjs
+          node tests/integration/supplier-email-suppression.cjs
       - run: npm run lint
       - name: Build with Turnstile enabled for navigation smoke
         env:
@@ -37,8 +39,8 @@ jobs:
         run: npm run build
       - name: Install browser smoke dependencies
         run: |
-          npm install --no-save playwright@1.56.1
-          npx playwright install --with-deps chromium webkit
+          npm install --prefix /tmp/browser-smoke --no-package-lock playwright@1.56.1
+          /tmp/browser-smoke/node_modules/.bin/playwright install --with-deps chromium webkit
       - name: Start production build
         run: |
           npm run start > /tmp/my-agent-air.log 2>&1 &
@@ -52,6 +54,7 @@ jobs:
       - name: Desktop, Android and iOS browser smoke
         env:
           BASE_URL: http://127.0.0.1:3000
+          NODE_PATH: /tmp/browser-smoke/node_modules
         run: node .github/scripts/browser-smoke.cjs
       - name: Print app log on failure
         if: failure()

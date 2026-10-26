@@ -52,7 +52,18 @@ async function readProfileRows(response: Response, operation: "load" | "save") {
     throw new Error(`${prefix}_FAILED_${response.status}`);
   }
   const body: unknown = await response.json().catch(() => null);
-  if (!Array.isArray(body)) throw new Error(`${prefix}_INVALID_RESPONSE`);
+  const nullableStrings = ["full_name", "avatar_url", "company_name", "region", "city", "phone", "agent_type", "role", "updated_at"];
+  const validRow = (value: unknown) => {
+    if (!value || typeof value !== "object") return false;
+    const row = value as Record<string, unknown>;
+    return row.id === currentUserId()
+      && nullableStrings.every((key) => row[key] === null || typeof row[key] === "string")
+      && (row.services === null || (Array.isArray(row.services) && row.services.every((item) => typeof item === "string")))
+      && ["is_verified", "is_active"].every((key) => row[key] === null || typeof row[key] === "boolean")
+      && ["pending_email", "incomplete", "active", "suspended"].includes(String(row.registration_status))
+      && typeof row.created_at === "string";
+  };
+  if (!Array.isArray(body) || body.length > 1 || !body.every(validRow)) throw new Error(`${prefix}_INVALID_RESPONSE`);
   return body as ProfileRecord[];
 }
 
