@@ -14,7 +14,7 @@ const { PGlite } = require('@electric-sql/pglite');
     // Simulate a previously suppressed row with no provenance.
     await db.exec(`insert into outreach_email_suppressions(email) values('blocked@example.com');`);
     assert.equal((await db.query('select recipient from supplier_invites')).rows[0].recipient, null);
-    await db.exec(fs.readFileSync('supabase/migrations/20261026144139_recover_suppressed_supplier_invites.sql','utf8'));
+    await db.exec(fs.readFileSync('supabase/migrations/20261026145058_recover_suppressed_supplier_invites.sql','utf8'));
     await db.exec(`update outreach_email_suppressions set replacement_email='valid@example.com' where email='blocked@example.com';`);
     assert.deepEqual((await db.query('select recipient,status,failure_reason from supplier_invites')).rows[0],
       {recipient:'valid@example.com',status:'failed',failure_reason:null});
