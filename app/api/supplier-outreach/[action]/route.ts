@@ -81,7 +81,8 @@ async function withDeliveryClaim(request: NextRequest, handler: Handler) {
   const claim = (data || {}) as DeliveryClaim;
   if (claim.claimed !== true) {
     if (claim.status === "in_flight") return response("DELIVERY_IN_PROGRESS", "Bu xabar hozir yuborilmoqda. Biroz kuting.", 409);
-    return handler(request);
+    if (["sent", "opened", "responded"].includes(String(claim.status))) return handler(request);
+    return response("INVITE_NOT_SENDABLE", "Bu taklifni yuborishga ruxsat yo‘q.", 409);
   }
 
   const claimId = typeof claim.claim_id === "string" ? claim.claim_id : "";

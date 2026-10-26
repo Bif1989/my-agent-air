@@ -24,6 +24,12 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
       - run: npm test
+      - name: Install isolated SQL test dependency
+        run: npm install --prefix /tmp/sql-tests --no-package-lock @electric-sql/pglite@0.3.14
+      - name: Supplier SQL integration
+        env:
+          NODE_PATH: /tmp/sql-tests/node_modules
+        run: node tests/integration/supplier-location-price.cjs
       - run: npm run lint
       - name: Build with Turnstile enabled for navigation smoke
         env:
