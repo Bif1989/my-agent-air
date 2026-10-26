@@ -254,6 +254,24 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // Refresh recipient immediately before provider delivery; never use a stale invite snapshot.
+  const [{ data: freshInvite, error: freshInviteError }, { data: freshSupplier, error: freshSupplierError }] = await Promise.all([
+    admin.from("supplier_invites").select("recipient,status,token_hash").eq("id", typedInvite.id).maybeSingle(),
+    admin.from("external_suppliers").select("opt_out,status").eq("id", typedInvite.supplier_id).maybeSingle(),
+  ]);
+  if (freshInviteError || freshSupplierError || !freshInvite || !freshSupplier) {
+    return json({ code: "OUTREACH_UNAVAILABLE" }, 503);
+  }
+  if (freshSupplier.opt_out || freshSupplier.status === "inactive" ||
+      !["queued", "failed"].includes(freshInvite.status) ||
+      freshInvite.token_hash !== typedInvite.token_hash || freshInvite.recipient?.trim() !== recipient) {
+    return json({ code: "INVITE_NOT_SENDABLE" }, 409);
+  }
+  const { data: suppression, error: suppressionError } = await admin
+    .from("outreach_email_suppressions").select("email").eq("email", recipient.toLowerCase()).eq("active", true).maybeSingle();
+  if (suppressionError) return json({ code: "OUTREACH_UNAVAILABLE" }, 503);
+  if (suppression) return json({ code: "SUPPLIER_EMAIL_SUPPRESSED" }, 409);
+
   const supplierUrl = new URL(`/supplier-request/${encodeURIComponent(token)}`, request.nextUrl.origin).toString();
   const content = emailContent((supplier as SupplierRow).name, requestRecord as RequestRow, supplierUrl);
   const from = process.env.RESEND_FROM_EMAIL?.trim() || "My Agent Air <notifications@bifavia.uz>";
