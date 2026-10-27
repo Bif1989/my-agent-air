@@ -21,6 +21,15 @@ test('P6 Geo-Tender uses trust as a bounded quality signal', () => {
   assert.match(sql, /'completed_deals',completed_deals/);
 });
 
+test('P6 final matcher preserves the P3 supplier prefilter and bounded target limit', () => {
+  const sql = read(migration);
+  assert.match(sql, /v_capability_types text\[\]/);
+  assert.match(sql, /c\.capability_type=any\(v_capability_types\)/);
+  assert.match(sql, /when 'Mehmonxona' then array\['hotel','travel_agent','tour_operator'\]/);
+  assert.match(sql, /when 'Transfer' then array\['transport','travel_agent','tour_operator'\]/);
+  assert.match(sql, /limit greatest\(1,least\(coalesce\(p_limit,20\),30\)\)/);
+});
+
 test('P6 refresh preserves durable Geo-Tender engagement history', () => {
   const sql = read(migration);
   assert.match(sql, /where request_id=p_request_id and status='matched'/);

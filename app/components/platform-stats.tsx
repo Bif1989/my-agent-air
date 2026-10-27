@@ -58,6 +58,7 @@ export default function PlatformStats({ isRu }: { isRu: boolean }) {
     let cancelled = false;
 
     async function loadStats() {
+      if (document.visibilityState !== "visible" || !navigator.onLine) return;
       try {
         const response = await fetch("/api/public/platform-stats", { cache: "no-store" });
         if (!response.ok) {
@@ -75,11 +76,18 @@ export default function PlatformStats({ isRu }: { isRu: boolean }) {
       }
     }
 
-    void loadStats();
-    const timer = window.setInterval(loadStats, 60_000);
+    const refresh = () => { void loadStats(); };
+    const onVisibility = () => { if (document.visibilityState === "visible") refresh(); };
+
+    refresh();
+    const timer = window.setInterval(refresh, 300_000);
+    window.addEventListener("online", refresh);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
+      window.removeEventListener("online", refresh);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 

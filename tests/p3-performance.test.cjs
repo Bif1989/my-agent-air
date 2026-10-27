@@ -58,19 +58,18 @@ test('P3 Geo Tender client fetches only fields used by the UI', () => {
   assert.doesNotMatch(api, /SELECT_FIELDS = .*updated_at/);
 });
 
-test('P3 shares concurrent messenger conversation reads instead of duplicating RPC calls', () => {
+test('P3 shares messenger conversation reads only within the same authenticated user', () => {
   const api = read('app/messenger/messenger-api.ts');
-  assert.match(api, /let conversationsInFlight: Promise<MessengerConversation\[\]> \| null = null/);
-  assert.match(api, /if \(conversationsInFlight\) return conversationsInFlight/);
-  assert.match(api, /finally\(\(\) => \{ conversationsInFlight = null; \}\)/);
+  assert.match(api, /const userId = currentUserId\(\)/);
+  assert.match(api, /dedupeInFlight\("messenger:conversations", userId/);
+  assert.doesNotMatch(api, /let conversationsInFlight/);
 });
 
-test('P3 shares concurrent reads for the same agent profile', () => {
+test('P3 shares agent profile reads only within the same authenticated user', () => {
   const api = read('app/agents/agents-api.ts');
-  assert.match(api, /const agentReadsInFlight = new Map<string, Promise<AgentRecord \| null>>\(\)/);
-  assert.match(api, /const existing = agentReadsInFlight\.get\(id\)/);
-  assert.match(api, /agentReadsInFlight\.set\(id, task\)/);
-  assert.match(api, /agentReadsInFlight\.delete\(id\)/);
+  assert.match(api, /const userId = currentUserId\(\)/);
+  assert.match(api, /dedupeInFlight\("agents:get", `\$\{userId\}:\$\{id\}`/);
+  assert.doesNotMatch(api, /agentReadsInFlight/);
 });
 
 test('P3 deduplicates concurrent AI history outbox flushes per user', () => {
@@ -79,6 +78,15 @@ test('P3 deduplicates concurrent AI history outbox flushes per user', () => {
   assert.match(history, /const existing = outboxFlushes\.get\(userId\)/);
   assert.match(history, /outboxFlushes\.set\(userId, task\)/);
   assert.match(history, /outboxFlushes\.delete\(userId\)/);
+});
+
+test('P3 homepage stats avoid hidden or offline background polling', () => {
+  const stats = read('app/components/platform-stats.tsx');
+  assert.match(stats, /document\.visibilityState !== "visible" \|\| !navigator\.onLine/);
+  assert.match(stats, /setInterval\(refresh, 300_000\)/);
+  assert.match(stats, /window\.addEventListener\("online", refresh\)/);
+  assert.match(stats, /document\.addEventListener\("visibilitychange", onVisibility\)/);
+  assert.doesNotMatch(stats, /setInterval\(loadStats, 60_000\)/);
 });
 
 test('P3 keeps automatic Vercel deployment disabled for batched promotion', () => {
