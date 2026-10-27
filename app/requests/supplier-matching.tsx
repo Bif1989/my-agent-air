@@ -47,7 +47,7 @@ type GeneratedInvite = SupplierInviteDraft & {
 };
 
 type OutreachChannel = "sms" | "email";
-type ErrorCode = "match" | "invite" | "";
+type ErrorCode = "match" | "invite" | "reconcile" | "";
 
 const typeLabel = (type: SupplierType, isRu: boolean) => isRu ? TYPE_LABELS[type].ru : TYPE_LABELS[type].uz;
 const statusLabel = (status: string, isRu: boolean) => STATUS_LABELS[status] ? (isRu ? STATUS_LABELS[status].ru : STATUS_LABELS[status].uz) : status;
@@ -79,6 +79,9 @@ function responseSummary(invite: SupplierInviteRow, isRu: boolean) {
 
 function deliveryMessage(invite: GeneratedInvite, isRu: boolean) {
   const delivery = invite.delivery;
+  if (delivery?.code === "DELIVERY_RECONCILIATION_REQUIRED") {
+    return tr(isRu, "SMS yuborilgan bo‘lishi mumkin. Takror yuborish bloklangan. Natijani tekshirish uchun qo‘llab-quvvatlash xizmatiga murojaat qiling.", "SMS могло быть отправлено. Повторная отправка заблокирована. Обратитесь в поддержку для проверки результата.");
+  }
   if (delivery?.sent) {
     const channel = invite.channel === "sms" ? "SMS" : "Email";
     return tr(
@@ -175,8 +178,8 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
       }
       setGenerated({ ...draft, url, delivery });
       setInvites(await listSupplierInvites(request.id));
-    } catch {
-      setError("invite");
+    } catch (cause) {
+      setError(cause instanceof Error && cause.message.includes("delivery_reconciliation_required") ? "reconcile" : "invite");
     } finally {
       setWorkingKey("");
     }
@@ -188,7 +191,10 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
     setCopied(true);
   }
 
-  const errorText = error === "match"
+  const deliveryNeedsReview = generated?.delivery?.status === "failed" || generated?.delivery?.code === "DELIVERY_RECONCILIATION_REQUIRED";
+  const errorText = error === "reconcile"
+    ? tr(isRu, "Avvalgi SMS natijasi tekshirilmaguncha yangi taklif yuborilmaydi. Qo‘llab-quvvatlash xizmatiga murojaat qiling.", "Новая отправка заблокирована до проверки предыдущего SMS. Обратитесь в поддержку.")
+    : error === "match"
     ? tr(isRu, "Tashqi hamkorlarni topishda xatolik yuz berdi. Qayta urinib ko‘ring.", "Не удалось найти внешних поставщиков. Попробуйте ещё раз.")
     : error === "invite"
       ? tr(isRu, "Taklif so‘rovini yuborib bo‘lmadi. Qayta urinib ko‘ring.", "Не удалось отправить запрос предложения. Попробуйте ещё раз.")
@@ -220,9 +226,9 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
 
       {errorText && <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errorText}</p>}
 
-      {generated && <div className={`mt-5 rounded-2xl border p-5 ${generated.delivery?.status === "failed" ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}>
-        <p className={`font-semibold ${generated.delivery?.status === "failed" ? "text-amber-900" : "text-emerald-900"}`}>{tr(isRu, `${generated.supplier_name} uchun individual so‘rov tayyor.`, `Индивидуальный запрос для ${generated.supplier_name} готов.`)}</p>
-        <p className={`mt-1 text-sm ${generated.delivery?.status === "failed" ? "text-amber-800" : "text-emerald-800"}`}>{deliveryMessage(generated, isRu)}</p>
+      {generated && <div className={`mt-5 rounded-2xl border p-5 ${deliveryNeedsReview ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}>
+        <p className={`font-semibold ${deliveryNeedsReview ? "text-amber-900" : "text-emerald-900"}`}>{tr(isRu, `${generated.supplier_name} uchun individual so‘rov tayyor.`, `Индивидуальный запрос для ${generated.supplier_name} готов.`)}</p>
+        <p className={`mt-1 text-sm ${deliveryNeedsReview ? "text-amber-800" : "text-emerald-800"}`}>{deliveryMessage(generated, isRu)}</p>
         <div className="mt-4 flex flex-col gap-2 sm:flex-row"><input readOnly value={generated.url} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-700" /><button type="button" onClick={() => void copyLink()} className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white">{copied ? tr(isRu, "Nusxalandi", "Скопировано") : tr(isRu, "Linkni nusxalash", "Скопировать ссылку")}</button></div>
       </div>}
 
