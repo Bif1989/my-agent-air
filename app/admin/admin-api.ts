@@ -1,5 +1,6 @@
 import { authenticatedSupabaseFetch } from "@/lib/supabase-auth";
 import { PROFILE_FIELDS, type ProfileRecord } from "@/app/profile/profile-api";
+import { requestFreshnessFilter } from "@/lib/request-freshness";
 
 export type AdminStats = {
   totalAgentProfiles: number;
@@ -8,6 +9,8 @@ export type AdminStats = {
   incompleteProfiles: number;
   inactiveAgents: number;
   openRequests: number;
+  expiredOpenRequests: number;
+  totalOpenRequests: number;
   activeDeals: number;
 };
 export type AdminAgent = ProfileRecord;
@@ -36,10 +39,14 @@ async function countDirectoryAgents() {
 }
 
 export async function loadAdminStats(): Promise<AdminStats> {
-  const [totalAgentProfiles, activeAccounts, directoryAgents, openRequests, activeDeals] = await Promise.all([
+  const currentRequestFilter = requestFreshnessFilter("current");
+  const expiredRequestFilter = requestFreshnessFilter("expired");
+  const [totalAgentProfiles, activeAccounts, directoryAgents, openRequests, expiredOpenRequests, totalOpenRequests, activeDeals] = await Promise.all([
     countRows("profiles?select=id&role=eq.agent"),
     countRows("profiles?select=id&is_active=eq.true&role=eq.agent"),
     countDirectoryAgents(),
+    countRows(`requests?select=id&status=eq.open&${currentRequestFilter}`),
+    countRows(`requests?select=id&status=eq.open&${expiredRequestFilter}`),
     countRows("requests?select=id&status=eq.open"),
     countRows("deals?select=id&status=in.(accepted,processing,issued)"),
   ]);
@@ -51,6 +58,8 @@ export async function loadAdminStats(): Promise<AdminStats> {
     incompleteProfiles: Math.max(0, activeAccounts - directoryAgents),
     inactiveAgents: Math.max(0, totalAgentProfiles - activeAccounts),
     openRequests,
+    expiredOpenRequests,
+    totalOpenRequests,
     activeDeals,
   };
 }
