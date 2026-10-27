@@ -1,4 +1,5 @@
-import { authenticatedSupabaseFetch } from "@/lib/supabase-auth";
+import { dedupeInFlight } from "@/lib/inflight-dedupe";
+import { authenticatedSupabaseFetch, getStoredSession } from "@/lib/supabase-auth";
 
 const AGENT_FIELDS = "id,full_name,avatar_url,company_name,city,phone,agent_type,services,is_verified,is_active,registration_status,created_at";
 const COMPLETE_AGENT_FILTER = "(company_name.not.is.null,city.not.is.null,phone.not.is.null,agent_type.not.is.null,agent_type.neq.agent)";
@@ -30,10 +31,15 @@ export type AgentFilterOptions = {
 
 export type AgentSort = "trust_desc" | "newest" | "oldest" | "name_asc" | "name_desc";
 export type AgentDirectoryFilters = { search?: string; city?: string; agentType?: string; service?: string; verifiedOnly?: boolean };
-const agentReadsInFlight = new Map<string, Promise<AgentRecord | null>>();
 
 async function readJson<T>(response: Response) {
   return response.json() as Promise<T>;
+}
+
+function currentUserId() {
+  const session = getStoredSession();
+  if (!session) throw new Error("AUTH_SESSION_MISSING");
+  return session.user.id;
 }
 
 function directoryFilterPayload(options: AgentDirectoryFilters) {
@@ -77,10 +83,9 @@ export async function getAgentFilterOptions() {
   return readJson<AgentFilterOptions>(response);
 }
 
-export async function getAgent(id: string) {
-  const existing = agentReadsInFlight.get(id);
-  if (existing) return existing;
-  const task = (async () => {
+export function getAgent(id: string) {
+  const userId = currentUserId();
+  return dedupeInFlight("agents:get", `${userId}:${id}`, async () => {
     const params = new URLSearchParams({
       select: AGENT_FIELDS,
       id: `eq.${id}`,
@@ -93,9 +98,7 @@ export async function getAgent(id: string) {
     const response = await authenticatedSupabaseFetch(`profiles?${params}`);
     const rows = await readJson<AgentRecord[]>(response);
     return rows[0] || null;
-  })().finally(() => { agentReadsInFlight.delete(id); });
-  agentReadsInFlight.set(id, task);
-  return task;
+  });
 }
 
 export function loadAgentFilterOptions(agents: AgentRecord[]): AgentFilterOptions {
