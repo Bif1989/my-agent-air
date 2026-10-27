@@ -147,7 +147,7 @@ async function sendEskizSms(token: string, phone: string, message: string, from:
   return { response, payload };
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest, deliveryClaimId?: string) {
   if (requestIsCrossSite(request)) return json({ code: "FORBIDDEN", message: "So‘rov qabul qilinmadi." }, 403);
 
   const accessToken = bearerToken(request);
@@ -241,11 +241,25 @@ export async function POST(request: NextRequest) {
     return json({ sent: false, configured: false, status: typedInvite.status, channel: "sms", code: "SMS_NOT_CONFIGURED" });
   }
 
+  if (!deliveryClaimId || !UUID_RE.test(deliveryClaimId)) {
+    return json({ code: "OUTREACH_UNAVAILABLE" }, 503);
+  }
+
   const supplierUrl = new URL(`/s/${encodeURIComponent(token)}`, "https://agent.bifavia.uz").toString();
   const message = supplierSmsText(requestRecord as RequestRow, supplierUrl);
 
+  let attemptStarted = false;
   try {
     let eskizToken = await getEskizToken(eskizEmail, eskizPassword);
+    // The RPC rechecks the current supplier, request, recipient and token under
+    // the invite lock and records a durable pending attempt before any SMS call.
+    const { data: begun, error: beginError } = await admin.rpc("begin_supplier_sms_delivery", {
+      p_invite_id: typedInvite.id, p_claim_id: deliveryClaimId,
+      p_token: token, p_recipient: typedInvite.recipient,
+    });
+    if (beginError) return json({ code: "OUTREACH_UNAVAILABLE" }, 503);
+    if (begun !== true) return json({ code: "INVITE_NOT_SENDABLE" }, 409);
+    attemptStarted = true;
     let result = await sendEskizSms(eskizToken, phone, message, eskizFrom);
     if (result.response.status === 401) {
       cachedEskizToken = "";
@@ -254,25 +268,31 @@ export async function POST(request: NextRequest) {
       result = await sendEskizSms(eskizToken, phone, message, eskizFrom);
     }
 
-    if (!result.response.ok) {
-      const providerStatus = typeof result.payload.status === "string" ? result.payload.status : "unknown";
-      const providerMessage = typeof result.payload.message === "string" ? result.payload.message.replace(/\s+/g, " ").trim().slice(0, 200) : "";
-      const failureReason = `eskiz_send_failed:${result.response.status}:${providerStatus}${providerMessage ? `:${providerMessage}` : ""}`;
-      await markInviteFailed(typedInvite.id, failureReason);
-      return json({ code: "SMS_SEND_FAILED", message: "SMS yuborilmadi." }, 502);
-    }
-
     const providerId = typeof result.payload.id === "string" ? result.payload.id : String(result.payload.id || "");
-    const { error: updateError } = await admin
-      .from("supplier_invites")
-      .update({
-        status: "sent",
-        provider_message_id: providerId || null,
-        sent_at: new Date().toISOString(),
-        failure_reason: null,
-      })
-      .eq("id", typedInvite.id);
-    if (updateError) return json({ code: "STATUS_UPDATE_FAILED", message: "SMS yuborildi, lekin holatni saqlab bo‘lmadi." }, 500);
+    if (!result.response.ok) {
+      const providerMessage = typeof result.payload.message === "string" ? result.payload.message.slice(0, 200) : "";
+      console.error("Supplier SMS provider rejected or failed", { status: result.response.status, providerMessage });
+      // A server error may occur after acceptance. Only explicit client-side
+      // rejection allows a retry; transport errors retain the durable marker.
+      if ([400, 401, 403, 404, 405, 413, 415, 422, 429].includes(result.response.status)) {
+        await admin.rpc("finish_supplier_sms_delivery", {
+          p_invite_id: typedInvite.id, p_attempt_id: deliveryClaimId,
+          p_outcome: "rejected", p_provider_id: null,
+        });
+        return json({ code: "SMS_SEND_FAILED", message: "SMS provayder tomonidan rad etildi." }, 502);
+      }
+      return json({ code: "DELIVERY_RECONCILIATION_REQUIRED", message: "SMS natijasi noaniq. Takror yuborish bloklangan." }, 503);
+    }
+    if (!providerId) {
+      return json({ code: "DELIVERY_RECONCILIATION_REQUIRED", message: "SMS natijasi noaniq. Takror yuborish bloklangan." }, 503);
+    }
+    const { data: completed, error: updateError } = await admin.rpc("finish_supplier_sms_delivery", {
+      p_invite_id: typedInvite.id, p_attempt_id: deliveryClaimId,
+      p_outcome: "accepted", p_provider_id: providerId,
+    });
+    if (updateError || completed !== true) {
+      return json({ code: "DELIVERY_RECONCILIATION_REQUIRED", message: "SMS qabul qilindi; holati tekshirilmaguncha qayta yuborilmaydi." }, 503);
+    }
 
     const typedSupplier = supplier as SupplierRow;
     await admin
@@ -286,6 +306,9 @@ export async function POST(request: NextRequest) {
     return json({ sent: true, configured: true, status: "sent", channel: "sms", provider: "eskiz", provider_message_id: providerId || undefined });
   } catch (error) {
     const reason = error instanceof Error ? error.message : "sms_send_failed";
+    if (attemptStarted) {
+      return json({ code: "DELIVERY_RECONCILIATION_REQUIRED", message: "SMS natijasi noaniq. Takror yuborish bloklangan." }, 503);
+    }
     await markInviteFailed(typedInvite.id, reason);
     console.error("Supplier SMS outreach failed", { inviteId: typedInvite.id, reason });
     return json({ code: "SMS_SEND_FAILED", message: "SMS yuborilmadi." }, 502);
