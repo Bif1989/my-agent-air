@@ -80,6 +80,15 @@ test('P3 deduplicates concurrent AI history outbox flushes per user', () => {
   assert.match(history, /outboxFlushes\.delete\(userId\)/);
 });
 
+test('P3 homepage stats avoid hidden or offline background polling', () => {
+  const stats = read('app/components/platform-stats.tsx');
+  assert.match(stats, /document\.visibilityState !== "visible" \|\| !navigator\.onLine/);
+  assert.match(stats, /setInterval\(refresh, 300_000\)/);
+  assert.match(stats, /window\.addEventListener\("online", refresh\)/);
+  assert.match(stats, /document\.addEventListener\("visibilitychange", onVisibility\)/);
+  assert.doesNotMatch(stats, /setInterval\(loadStats, 60_000\)/);
+});
+
 test('P3 keeps automatic Vercel deployment disabled for batched promotion', () => {
   const vercel = JSON.parse(read('vercel.json'));
   assert.equal(vercel.git.deploymentEnabled, false);
