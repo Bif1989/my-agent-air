@@ -26,6 +26,7 @@ test('P4 deduplicates high-frequency authenticated reads without caching mutatio
   const profile = read('app/profile/profile-api.ts');
   const notificationPreferences = read('app/profile/notification-preferences-api.ts');
   const aiHistory = read('lib/ai-chat-history.ts');
+  const support = read('lib/support-api.ts');
 
   assert.match(requests, /dedupeInFlight\("requests:list"/);
   assert.match(requests, /dedupeInFlight\("requests:get"/);
@@ -44,6 +45,8 @@ test('P4 deduplicates high-frequency authenticated reads without caching mutatio
   assert.match(notificationPreferences, /dedupeInFlight\("profile:notification-preferences"/);
   assert.match(aiHistory, /dedupeInFlight\("ai-history:conversations"/);
   assert.match(aiHistory, /dedupeInFlight\("ai-history:messages"/);
+  assert.match(support, /dedupeInFlight\("support:contact", userId/);
+  assert.match(support, /dedupeInFlight\("support:admin-threads", userId/);
 
   assert.doesNotMatch(requests, /dedupeInFlight\("requests:(create|update|delete)/);
   assert.doesNotMatch(deals, /dedupeInFlight\("deals:update/);
@@ -52,6 +55,9 @@ test('P4 deduplicates high-frequency authenticated reads without caching mutatio
   assert.doesNotMatch(profile, /dedupeInFlight\("profile:update/);
   assert.doesNotMatch(notificationPreferences, /dedupeInFlight\("profile:update-notification-preferences"/);
   assert.doesNotMatch(aiHistory, /dedupeInFlight\("ai-history:(save|rename|delete)/);
+  assert.doesNotMatch(support, /dedupeInFlight\("support:(create-chat|set-status)/);
+  assert.doesNotMatch(support, /dedupeInFlight[\s\S]*getOrCreateSupportChat/);
+  assert.doesNotMatch(support, /dedupeInFlight[\s\S]*setAdminSupportThreadStatus/);
 });
 
 test('P4 memoizes validated session parsing while still observing cross-tab storage changes', () => {
