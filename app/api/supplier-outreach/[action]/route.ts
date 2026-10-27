@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const action = actionFrom(request);
   if (action === "admin-sms-campaigns") return adminSmsPost(request);
-  const handler = handlers[action];
+  const handler = Object.hasOwn(handlers, action) ? handlers[action] : undefined;
   if (!handler) return notFound();
   return withDeliveryClaim(request, handler);
 }

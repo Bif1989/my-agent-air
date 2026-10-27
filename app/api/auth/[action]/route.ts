@@ -26,7 +26,7 @@ const handlers: Record<string, Handler> = {
 
 export async function POST(request: NextRequest) {
   const action = request.nextUrl.pathname.split("/").filter(Boolean).at(-1) || "";
-  const handler = handlers[action];
+  const handler = Object.hasOwn(handlers, action) ? handlers[action] : undefined;
   if (!handler) {
     return NextResponse.json(
       { code: "NOT_FOUND", message: "Endpoint topilmadi." },
