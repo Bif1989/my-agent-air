@@ -1,4 +1,5 @@
-import { authenticatedSupabaseFetch } from "@/lib/supabase-auth";
+import { dedupeInFlight } from "@/lib/inflight-dedupe";
+import { authenticatedSupabaseFetch, getStoredSession } from "@/lib/supabase-auth";
 
 export type SupportContact = {
   ok: boolean;
@@ -32,13 +33,22 @@ async function readJson<T>(response: Response) {
   return response.json() as Promise<T>;
 }
 
-export async function getSupportContact() {
-  const response = await authenticatedSupabaseFetch("rpc/get_support_contact", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: "{}",
+function currentUserId() {
+  const session = getStoredSession();
+  if (!session) throw new Error("AUTH_SESSION_MISSING");
+  return session.user.id;
+}
+
+export function getSupportContact() {
+  const userId = currentUserId();
+  return dedupeInFlight("support:contact", userId, async () => {
+    const response = await authenticatedSupabaseFetch("rpc/get_support_contact", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    return readJson<SupportContact>(response);
   });
-  return readJson<SupportContact>(response);
 }
 
 export async function getOrCreateSupportChat() {
@@ -50,13 +60,16 @@ export async function getOrCreateSupportChat() {
   return readJson<string>(response);
 }
 
-export async function listAdminSupportThreads() {
-  const response = await authenticatedSupabaseFetch("rpc/admin_list_support_threads", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: "{}",
+export function listAdminSupportThreads() {
+  const userId = currentUserId();
+  return dedupeInFlight("support:admin-threads", userId, async () => {
+    const response = await authenticatedSupabaseFetch("rpc/admin_list_support_threads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    return readJson<AdminSupportThread[]>(response);
   });
-  return readJson<AdminSupportThread[]>(response);
 }
 
 export async function setAdminSupportThreadStatus(userId: string, status: "open" | "closed") {
