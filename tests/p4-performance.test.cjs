@@ -55,9 +55,13 @@ test('P4 deduplicates high-frequency authenticated reads without caching mutatio
   assert.doesNotMatch(profile, /dedupeInFlight\("profile:update/);
   assert.doesNotMatch(notificationPreferences, /dedupeInFlight\("profile:update-notification-preferences"/);
   assert.doesNotMatch(aiHistory, /dedupeInFlight\("ai-history:(save|rename|delete)/);
-  assert.doesNotMatch(support, /dedupeInFlight\("support:(create-chat|set-status)/);
-  assert.doesNotMatch(support, /dedupeInFlight[\s\S]*getOrCreateSupportChat/);
-  assert.doesNotMatch(support, /dedupeInFlight[\s\S]*setAdminSupportThreadStatus/);
+
+  const createChatStart = support.indexOf('export async function getOrCreateSupportChat');
+  const adminThreadsStart = support.indexOf('export function listAdminSupportThreads');
+  const setStatusStart = support.indexOf('export async function setAdminSupportThreadStatus');
+  assert.ok(createChatStart >= 0 && adminThreadsStart > createChatStart && setStatusStart > adminThreadsStart);
+  assert.doesNotMatch(support.slice(createChatStart, adminThreadsStart), /dedupeInFlight/);
+  assert.doesNotMatch(support.slice(setStatusStart), /dedupeInFlight/);
 });
 
 test('P4 memoizes validated session parsing while still observing cross-tab storage changes', () => {
