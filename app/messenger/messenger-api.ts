@@ -1,3 +1,4 @@
+import { dedupeInFlight } from "@/lib/inflight-dedupe";
 import { authenticatedSupabaseFetch, getStoredSession } from "@/lib/supabase-auth";
 
 export type MessengerRoomType = "public" | "direct" | "group";
@@ -69,7 +70,6 @@ export type MessengerMessage = {
 };
 
 const MESSAGE_SELECT = "id,room_id,sender_id,message,message_type,reply_to_id,created_at,edited_at,deleted_at,sender:profiles!chat_messages_sender_id_fkey(id,full_name,company_name,avatar_url,is_verified)";
-let conversationsInFlight: Promise<MessengerConversation[]> | null = null;
 
 async function readJson<T>(response: Response) {
   return response.json() as Promise<T>;
@@ -85,17 +85,16 @@ function currentUserId() {
   return session.user.id;
 }
 
-export async function listMessengerConversations() {
-  if (conversationsInFlight) return conversationsInFlight;
-  conversationsInFlight = (async () => {
+export function listMessengerConversations() {
+  const userId = currentUserId();
+  return dedupeInFlight("messenger:conversations", userId, async () => {
     const response = await authenticatedSupabaseFetch("rpc/list_messenger_conversations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
     });
     return readJson<MessengerConversation[]>(response);
-  })().finally(() => { conversationsInFlight = null; });
-  return conversationsInFlight;
+  });
 }
 
 export async function getPublicMessengerRoom() {
