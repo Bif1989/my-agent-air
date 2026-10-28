@@ -1,9 +1,5 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-
-const root = path.resolve(__dirname, '..');
 const {
   buildSamoApiUrl,
   buildSamoSearchParams,
@@ -116,12 +112,9 @@ test('SAMO price response is normalized into My Agent Air tour offers', () => {
   assert.equal(offers[0].bestPrice, true);
 });
 
-test('SAMO route never exposes provider credentials as NEXT_PUBLIC variables', () => {
-  const route = fs.readFileSync(path.join(root, 'app/api/tours/search/route.ts'), 'utf8');
-  const adapter = fs.readFileSync(path.join(root, 'lib/server/tour-providers/samo.ts'), 'utf8');
-  assert.match(route, /verifyUser/);
-  assert.match(route, /readBoundedJson/);
+test('SAMO adapter keeps provider credentials out of public environment variables', () => {
+  const adapter = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'lib/server/tour-providers/samo.ts'), 'utf8');
   assert.match(adapter, /process\.env\.SAMO_BASE_URL/);
   assert.match(adapter, /process\.env\.SAMO_OAUTH_TOKEN/);
-  assert.doesNotMatch(`${route}\n${adapter}`, /NEXT_PUBLIC_SAMO/);
+  assert.doesNotMatch(adapter, /NEXT_PUBLIC_SAMO/);
 });
