@@ -46,7 +46,8 @@ async function verifyUser(request: NextRequest) {
 }
 
 function integer(value: unknown, min: number, max: number) {
-  return Number.isInteger(value) && Number(value) >= min && Number(value) <= max ? Number(value) : null;
+  if (typeof value !== "number" || !Number.isInteger(value)) return null;
+  return value >= min && value <= max ? value : null;
 }
 
 function idList(value: unknown) {
