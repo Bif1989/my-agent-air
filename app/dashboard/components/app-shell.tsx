@@ -56,6 +56,7 @@ export default function AppShell({ children, session, activePath = "" }: { child
   const seenMessageIds = useRef<Set<string>>(new Set());
   const pathnameRef = useRef(pathname);
   const activeFloatingRoom = useRef<string | null>(null);
+  const accountId = useRef(session?.user.id || getStoredSession()?.user.id);
   const isDashboard = activePath === "/dashboard";
 
   const inAiSection = pathname === "/dashboard" || pathname === "/feed" || pathname.startsWith("/feed/");
@@ -136,6 +137,13 @@ export default function AppShell({ children, session, activePath = "" }: { child
     const update = () => {
       const stored = getStoredSession();
       if (!stored) { window.location.replace("/login"); return; }
+      // A full document reset also clears page-local state and pending callbacks.
+      // Updating only the shell session leaves private data from the old account.
+      if (accountId.current && accountId.current !== stored.user.id) {
+        window.location.reload();
+        return;
+      }
+      accountId.current = stored.user.id;
       setCurrentSession((current) => current?.user.id === stored.user.id ? current : stored);
     };
     const onStorage = (event: StorageEvent) => { if (event.key === SESSION_STORAGE_KEY || event.key === null) update(); };

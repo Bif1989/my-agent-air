@@ -80,7 +80,7 @@ async function withDeliveryClaim(request: NextRequest, handler: Handler) {
 
   const claim = (data || {}) as DeliveryClaim;
   if (claim.claimed !== true) {
-    if (claim.status === "delivery_unknown") return response("DELIVERY_RECONCILIATION_REQUIRED", "SMS natijasi tekshirilmoqda. Takror yuborish bloklangan; qo‘llab-quvvatlash xizmatiga murojaat qiling.", 409);
+    if (claim.status === "delivery_unknown") return response("DELIVERY_RECONCILIATION_REQUIRED", "Xabar natijasi tekshirilmoqda. Takror yuborish bloklangan; qo‘llab-quvvatlash xizmatiga murojaat qiling.", 409);
     if (claim.status === "in_flight") return response("DELIVERY_IN_PROGRESS", "Bu xabar hozir yuborilmoqda. Biroz kuting.", 409);
     if (["sent", "opened", "responded"].includes(String(claim.status))) return handler(request);
     return response("INVITE_NOT_SENDABLE", "Bu taklifni yuborishga ruxsat yo‘q.", 409);

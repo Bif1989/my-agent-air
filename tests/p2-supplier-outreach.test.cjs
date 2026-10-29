@@ -22,7 +22,8 @@ test('supplier outreach uses Resend idempotently and records sent or failed stat
   assert.match(route, /https:\/\/api\.resend\.com\/emails/);
   assert.match(route, /"Idempotency-Key"/);
   assert.match(route, /status: "sent"/);
-  assert.match(route, /provider_message_id: providerId/);
+  assert.match(route, /finish_supplier_email_delivery/);
+  assert.match(route, /p_provider_id: providerId/);
   assert.match(route, /status: "failed"/);
   assert.match(route, /configured: false/);
 });
