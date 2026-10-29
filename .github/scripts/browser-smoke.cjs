@@ -132,6 +132,49 @@ async function checkProfile(browser, label, contextOptions) {
   await context.close();
 }
 
+// All data is synthetic; no authenticated request reaches a real backend.
+async function checkAccountSwitch(browser, label, contextOptions) {
+  const context = await browser.newContext({ ...contextOptions, serviceWorkers: 'block' });
+  const ids = ['00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002'];
+  const session = (id) => ({ user: { id }, refresh_token: `fixture-${id}`, access_token: `e30.${Buffer.from(JSON.stringify({ sub: id, exp: 4102444800 })).toString('base64url')}.fixture` });
+  await context.addInitScript((initial) => {
+    if (!localStorage.getItem('my_agent_air_session')) localStorage.setItem('my_agent_air_session', JSON.stringify(initial));
+  }, session(ids[0]));
+  await context.route('https://*.supabase.co/**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const token = (request.headers().authorization || '').replace('Bearer ', '');
+    const uid = token ? JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()).sub : ids[0];
+    const name = uid === ids[0] ? 'PRIVATE_ACCOUNT_A' : 'PRIVATE_ACCOUNT_B';
+    let body = [];
+    if (url.pathname.endsWith('/profiles')) body = [{ id: uid, full_name: name, company_name: 'Fixture Travel', region: 'Toshkent', city: 'Toshkent', phone: '998901234567', agent_type: 'Turagent', services: [], avatar_url: null, role: 'admin', is_active: true, is_verified: false, registration_status: 'active', created_at: '2026-10-01T00:00:00Z', updated_at: null }];
+    if (url.pathname.endsWith('/rpc/list_messenger_conversations')) body = [{ room_id: 'fixture-room', room_type: 'direct', counterpart_full_name: name, counterpart_company_name: 'Fixture Travel', last_message: name, last_message_at: null, unread_count: 0 }];
+    if (url.pathname.endsWith('/rpc/get_unread_deal_message_count')) body = 0;
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
+  });
+  const page = await context.newPage();
+  await page.routeWebSocket(/supabase\.co/, (socket) => socket.close());
+  await page.goto(`${baseURL}/messenger`, { waitUntil: 'domcontentloaded' });
+  await page.locator('a[href="/messenger/fixture-room"]').getByText('PRIVATE_ACCOUNT_A', { exact: true }).first().waitFor();
+  const before = await page.evaluate(() => performance.timeOrigin);
+  // A second tab writes the shared session, firing the real browser storage event.
+  const second = await context.newPage();
+  await second.goto(`${baseURL}/login`, { waitUntil: 'domcontentloaded' });
+  await second.evaluate((next) => localStorage.setItem('my_agent_air_session', JSON.stringify(next)), session(ids[1]));
+  await page.waitForFunction((old) => performance.timeOrigin !== old, before);
+  await page.locator('a[href="/messenger/fixture-room"]').getByText('PRIVATE_ACCOUNT_B', { exact: true }).first().waitFor();
+  assert(!((await page.locator('body').innerText()).includes('PRIVATE_ACCOUNT_A')), `${label}: old account data survived storage switch`);
+  const after = await page.evaluate(() => performance.timeOrigin);
+  await page.evaluate((next) => {
+    localStorage.setItem('my_agent_air_session', JSON.stringify(next));
+    dispatchEvent(new Event('my-agent-air:session-changed'));
+  }, session(ids[0]));
+  await page.waitForFunction((old) => performance.timeOrigin !== old, after);
+  await page.locator('a[href="/messenger/fixture-room"]').getByText('PRIVATE_ACCOUNT_A', { exact: true }).first().waitFor();
+  assert(!((await page.locator('body').innerText()).includes('PRIVATE_ACCOUNT_B')), `${label}: old account data survived local switch`);
+  await context.close();
+}
+
 async function checkHomeLayout(browser, label, widths) {
   const context = await browser.newContext({ serviceWorkers: 'block' });
   const page = await context.newPage();
@@ -168,6 +211,8 @@ async function checkHomeLayout(browser, label, widths) {
   try {
     await checkProfile(chromiumBrowser, 'desktop-chromium', { viewport: { width: 1440, height: 900 } });
     await checkProfile(chromiumBrowser, 'android-chromium', { ...devices['Pixel 7'] });
+    await checkAccountSwitch(chromiumBrowser, 'desktop-account-switch', { viewport: { width: 1440, height: 900 } });
+    await checkAccountSwitch(chromiumBrowser, 'android-account-switch', { ...devices['Pixel 7'] });
     await checkHomeLayout(chromiumBrowser, 'chromium-layout', [320, 375, 768, 1024, 1440]);
   } finally {
     await chromiumBrowser.close();
@@ -176,12 +221,13 @@ async function checkHomeLayout(browser, label, widths) {
   const webkitBrowser = await webkit.launch({ headless: true });
   try {
     await checkProfile(webkitBrowser, 'ios-webkit', { ...devices['iPhone 15'] });
+    await checkAccountSwitch(webkitBrowser, 'ios-account-switch', { ...devices['iPhone 15'] });
     await checkHomeLayout(webkitBrowser, 'webkit-layout', [320, 390, 1440]);
   } finally {
     await webkitBrowser.close();
   }
 
-  console.log('Browser smoke passed: auth navigation + Turnstile remount on desktop Chromium, Android Chromium and iOS WebKit');
+  console.log('Browser smoke passed: account-switch isolation + auth navigation + Turnstile remount on desktop Chromium, Android Chromium and iOS WebKit');
 })().catch((error) => {
   console.error(error);
   process.exit(1);

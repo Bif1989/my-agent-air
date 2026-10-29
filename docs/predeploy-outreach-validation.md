@@ -66,3 +66,50 @@ contact corrections, legacy replacements, chains, unknown-attempt persistence,
 reissue blocking, inactive/opt-out checks, and completion permissions. Only crypto
 primitives and prerequisite account/date/phone helpers are shimmed in this isolated
 fixture; it does not replace a complete Supabase migration reset or live receipt test.
+
+## Account and email-attempt release follow-up
+
+Apply `20261028235510_supplier_email_delivery_attempt_guard.sql` **before** promoting
+this runtime. Keep the existing migrations unchanged. Until the new RPCs are
+installed, email delivery fails closed without calling Resend. Old runtime workers
+must be drained during the release: do not allow an old email handler to continue
+sending while deploying the new attempt protocol. Review the legacy quarantine
+counts before migration; do not clear pending markers to make retries work.
+
+The migration quarantines existing queued email invites and failed email invites
+with `resend_*` reasons. The previous runtime could leave these rows after accepting
+an email but losing its receipt, so even an apparently unattempted queued link needs
+provider reconciliation. New invites start with pending=false. Sent/opened/responded
+history is preserved. Contact/suppression edits still commit while delivery is
+pending; the attempted recipient stays frozen. A verified rejection applies the
+latest contact/suppression before any deliberate retry.
+
+Email delivery persists `email_delivery_pending`, `email_delivery_attempt_id` and
+`email_delivery_started_at` under the live claim before the provider request.
+Transport errors, any non-success provider response, missing receipts and failed
+completion writes retain pending. Claim release/expiry and switching the channel
+or rotating the token cannot bypass it. The provider key is bound to the persisted
+attempt, not to a reissued token. All non-success provider responses conservatively
+require reconciliation, including validation/rate-limit responses.
+
+For support reconciliation, verify the attempted address, timestamp and outcome
+in Resend records. Call service-only `finish_supplier_email_delivery` with the
+exact invite and attempt IDs, `accepted` plus the verified provider ID, or
+`rejected` only after verifying non-acceptance. An unknown result remains pending.
+Check the RPC returned true and reload the row. No recipient data or credentials
+belong in CI logs. This change does not send any production test messages.
+
+Authenticated Supabase requests now bind their lifetime to the initiating account.
+A switch or logout rejects delayed responses and prevents refresh/401 retry from
+replaying an old read or mutation as a new user. Same-account token rotation still
+works. AppShell reloads the document on an account switch, clearing page-local
+private data and callbacks. Admin request counters use a nested `and=(or(...))`
+query; the shared expression helper still works inside the request-list query.
+
+Required validation: full unit suite (including account race, Admin URL and email
+handler tests), all three SQL suites (including legacy quarantine and email
+reissue/permissions), lint, production build, dependency audit and browser smoke.
+Run account-switch browser fixtures with no real Supabase traffic. A live profile
+save, installed-PWA upgrade and real provider receipt check remain controlled
+post-release checks with a designated test account/contact; CI mocks do not
+substitute for those checks.

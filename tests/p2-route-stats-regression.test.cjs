@@ -25,8 +25,8 @@ test('admin open-request stats distinguish current, expired and total open reque
 
   assert.match(api, /requestFreshnessFilter\("current"\)/);
   assert.match(api, /requestFreshnessFilter\("expired"\)/);
-  assert.match(api, /status=eq\.open&\$\{currentRequestFilter\}/);
-  assert.match(api, /status=eq\.open&\$\{expiredRequestFilter\}/);
+  assert.match(api, /status=eq\.open&and=\(\$\{currentRequestFilter\}\)/);
+  assert.match(api, /status=eq\.open&and=\(\$\{expiredRequestFilter\}\)/);
   assert.match(api, /countRows\("requests\?select=id&status=eq\.open"\)/);
 
   assert.match(page, /Joriy ochiq so‘rovlar/);

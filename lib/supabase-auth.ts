@@ -33,6 +33,13 @@ let cachedSession: AuthSession | null = null;
 let legacyTokenCleaned = false;
 let cachedClaimsToken: string | null = null;
 let cachedClaims: JwtClaims | null = null;
+let accountGeneration = 0;
+
+function cacheSession(raw: string | null, session: AuthSession | null) {
+  if (cachedSession?.user.id !== session?.user.id) accountGeneration++;
+  cachedSessionRaw = raw;
+  cachedSession = session;
+}
 
 export class SupabaseRequestError extends Error {
   constructor(message: string, public status: number, public code = "") {
@@ -126,8 +133,7 @@ export function saveSession(data: AuthResponse) {
   const raw = JSON.stringify(session);
   localStorage.setItem(SESSION_STORAGE_KEY, raw);
   cleanupLegacyToken();
-  cachedSessionRaw = raw;
-  cachedSession = session;
+  cacheSession(raw, session);
   window.dispatchEvent(new Event(AUTH_SESSION_CHANGED_EVENT));
 }
 
@@ -135,8 +141,7 @@ export function clearSession() {
   if (!isBrowser()) return;
   localStorage.removeItem(SESSION_STORAGE_KEY);
   cleanupLegacyToken();
-  cachedSessionRaw = null;
-  cachedSession = null;
+  cacheSession(null, null);
   window.dispatchEvent(new Event(AUTH_SESSION_CHANGED_EVENT));
 }
 
@@ -145,15 +150,14 @@ export function getStoredSession(): AuthSession | null {
   cleanupLegacyToken();
   const storedSession = localStorage.getItem(SESSION_STORAGE_KEY);
   if (storedSession === cachedSessionRaw) return cachedSession;
-  if (!storedSession) { cachedSessionRaw = null; cachedSession = null; return null; }
+  if (!storedSession) { cacheSession(null, null); return null; }
   try {
     const session = JSON.parse(storedSession) as Partial<AuthSession> & { user?: Partial<SupabaseUser> };
     if (!session.access_token || !session.refresh_token || !session.user?.id) { clearSession(); return null; }
     const subject = accessTokenSubject(session.access_token);
     if (!subject || subject !== session.user.id) { clearSession(); return null; }
     const validated: AuthSession = { access_token: session.access_token, refresh_token: session.refresh_token, user: { id: session.user.id, email: session.user.email } };
-    cachedSessionRaw = storedSession;
-    cachedSession = validated;
+    cacheSession(storedSession, validated);
     return validated;
   } catch {
     clearSession();
@@ -203,8 +207,17 @@ export function sessionNeedsRefresh(session: AuthSession, now = Date.now()) {
 export async function authenticatedSupabaseFetch(path: string, init: RequestInit = {}) {
   let session = getStoredSession();
   if (!session) throw new Error("AUTH_SESSION_MISSING");
+  const userId = session.user.id;
+  const generation = accountGeneration;
+  const assertSameAccount = () => {
+    const current = getStoredSession();
+    if (!current || current.user.id !== userId || accountGeneration !== generation) {
+      throw new Error("AUTH_SESSION_CHANGED");
+    }
+  };
   if (sessionNeedsRefresh(session)) {
     session = await refreshSession();
+    assertSameAccount();
     if (!session) throw new Error("AUTH_SESSION_EXPIRED");
   }
 
@@ -216,10 +229,13 @@ export async function authenticatedSupabaseFetch(path: string, init: RequestInit
   });
 
   let response = await request(session.access_token);
+  assertSameAccount();
   if (response.status === 401) {
     session = await refreshSession();
+    assertSameAccount();
     if (!session) throw new Error("AUTH_SESSION_EXPIRED");
     response = await request(session.access_token);
+    assertSameAccount();
   }
   if (!response.ok) {
     const data = await response.json().catch(() => ({})) as AuthResponse;
@@ -234,13 +250,15 @@ export async function authenticatedSupabaseFetch(path: string, init: RequestInit
       billing_insufficient_balance: "Bitimni yakunlash uchun balans yetarli emas. Balansingizni to‘ldiring. Agar hamkor tomonda ham mablag‘ yetarli bo‘lmasa, u ham o‘z balansini to‘ldirishi kerak.",
       system_message_forbidden: "Tizim xabarini yuborishga ruxsat yo‘q.",
       profile_incomplete: "Avval kompaniya, shahar va aloqa ma’lumotlarini to‘ldiring.",
+      delivery_reconciliation_required: "Avvalgi xabar natijasi tekshirilmoqda. Qo‘llab-quvvatlash xizmatiga murojaat qiling.",
     };
     const message = Object.entries(messages).find(([code]) => reason.includes(code))?.[1]
       || (data.code === "23505" ? "Bu yozuv allaqachon mavjud. Sahifani yangilang."
         : data.code === "23514" ? "Kiritilgan qiymatlar talabga mos emas. Narx, sana va valyutani tekshiring."
           : response.status === 403 ? "Bu amal uchun ruxsat yo‘q. Hisob va profil holatini tekshiring."
             : "Ma’lumotlarni saqlash yoki yuklashda xatolik. Qayta urinib ko‘ring.");
-    throw new SupabaseRequestError(message, response.status, data.code);
+    throw new SupabaseRequestError(message, response.status,
+      reason.includes("delivery_reconciliation_required") ? "DELIVERY_RECONCILIATION_REQUIRED" : data.code);
   }
   return response;
 }

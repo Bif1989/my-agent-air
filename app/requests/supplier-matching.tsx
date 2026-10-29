@@ -80,7 +80,7 @@ function responseSummary(invite: SupplierInviteRow, isRu: boolean) {
 function deliveryMessage(invite: GeneratedInvite, isRu: boolean) {
   const delivery = invite.delivery;
   if (delivery?.code === "DELIVERY_RECONCILIATION_REQUIRED") {
-    return tr(isRu, "SMS yuborilgan bo‘lishi mumkin. Takror yuborish bloklangan. Natijani tekshirish uchun qo‘llab-quvvatlash xizmatiga murojaat qiling.", "SMS могло быть отправлено. Повторная отправка заблокирована. Обратитесь в поддержку для проверки результата.");
+    return tr(isRu, "Xabar yuborilgan bo‘lishi mumkin. Takror yuborish bloklangan. Natijani tekshirish uchun qo‘llab-quvvatlash xizmatiga murojaat qiling.", "Сообщение могло быть отправлено. Повторная отправка заблокирована. Обратитесь в поддержку для проверки результата.");
   }
   if (delivery?.sent) {
     const channel = invite.channel === "sms" ? "SMS" : "Email";
@@ -179,7 +179,11 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
       setGenerated({ ...draft, url, delivery });
       setInvites(await listSupplierInvites(request.id));
     } catch (cause) {
-      setError(cause instanceof Error && cause.message.includes("delivery_reconciliation_required") ? "reconcile" : "invite");
+      const needsReconciliation = cause instanceof Error && (
+        cause.message.includes("delivery_reconciliation_required") ||
+        (cause as Error & { code?: string }).code === "DELIVERY_RECONCILIATION_REQUIRED"
+      );
+      setError(needsReconciliation ? "reconcile" : "invite");
     } finally {
       setWorkingKey("");
     }
@@ -193,7 +197,7 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
 
   const deliveryNeedsReview = generated?.delivery?.status === "failed" || generated?.delivery?.code === "DELIVERY_RECONCILIATION_REQUIRED";
   const errorText = error === "reconcile"
-    ? tr(isRu, "Avvalgi SMS natijasi tekshirilmaguncha yangi taklif yuborilmaydi. Qo‘llab-quvvatlash xizmatiga murojaat qiling.", "Новая отправка заблокирована до проверки предыдущего SMS. Обратитесь в поддержку.")
+    ? tr(isRu, "Avvalgi xabar natijasi tekshirilmaguncha yangi taklif yuborilmaydi. Qo‘llab-quvvatlash xizmatiga murojaat qiling.", "Новая отправка заблокирована до проверки предыдущего сообщения. Обратитесь в поддержку.")
     : error === "match"
     ? tr(isRu, "Tashqi hamkorlarni topishda xatolik yuz berdi. Qayta urinib ko‘ring.", "Не удалось найти внешних поставщиков. Попробуйте ещё раз.")
     : error === "invite"

@@ -45,8 +45,8 @@ export async function loadAdminStats(): Promise<AdminStats> {
     countRows("profiles?select=id&role=eq.agent"),
     countRows("profiles?select=id&is_active=eq.true&role=eq.agent"),
     countDirectoryAgents(),
-    countRows(`requests?select=id&status=eq.open&${currentRequestFilter}`),
-    countRows(`requests?select=id&status=eq.open&${expiredRequestFilter}`),
+    countRows(`requests?select=id&status=eq.open&and=(${currentRequestFilter})`),
+    countRows(`requests?select=id&status=eq.open&and=(${expiredRequestFilter})`),
     countRows("requests?select=id&status=eq.open"),
     countRows("deals?select=id&status=in.(accepted,processing,issued)"),
   ]);

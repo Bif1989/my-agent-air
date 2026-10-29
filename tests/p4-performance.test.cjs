@@ -70,11 +70,9 @@ test('P4 memoizes validated session parsing while still observing cross-tab stor
   assert.match(auth, /let cachedSession: AuthSession \| null = null/);
   assert.match(auth, /const storedSession = localStorage\.getItem\(SESSION_STORAGE_KEY\)/);
   assert.match(auth, /if \(storedSession === cachedSessionRaw\) return cachedSession/);
-  assert.match(auth, /cachedSessionRaw = storedSession/);
-  assert.match(auth, /cachedSession = validated/);
+  assert.match(auth, /cacheSession\(storedSession, validated\)/);
+  assert.match(auth, /cacheSession\(null, null\)/);
   assert.match(auth, /cachedSessionRaw = raw/);
   assert.match(auth, /cachedSession = session/);
-  assert.match(auth, /cachedSessionRaw = null/);
-  assert.match(auth, /cachedSession = null/);
   assert.match(auth, /if \(token === cachedClaimsToken\) return cachedClaims/);
 });

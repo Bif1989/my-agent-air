@@ -147,7 +147,7 @@ function emailContent(supplierName: string, record: RequestRow, supplierUrl: str
   return { subject, text, html };
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest, deliveryClaimId?: string) {
   if (requestIsCrossSite(request)) return json({ code: "FORBIDDEN", message: "So‘rov qabul qilinmadi." }, 403);
 
   const accessToken = bearerToken(request);
@@ -275,6 +275,17 @@ export async function POST(request: NextRequest) {
   const supplierUrl = new URL(`/supplier-request/${encodeURIComponent(token)}`, request.nextUrl.origin).toString();
   const content = emailContent((supplier as SupplierRow).name, requestRecord as RequestRow, supplierUrl);
   const from = process.env.RESEND_FROM_EMAIL?.trim() || "My Agent Air <notifications@bifavia.uz>";
+  if (!deliveryClaimId || !UUID_RE.test(deliveryClaimId)) return json({ code: "OUTREACH_UNAVAILABLE" }, 503);
+  const { data: begun, error: beginError } = await admin.rpc("begin_supplier_email_delivery", {
+    p_invite_id: typedInvite.id, p_claim_id: deliveryClaimId, p_token: token, p_recipient: recipient,
+  });
+  if (beginError) return json({ code: "OUTREACH_UNAVAILABLE" }, 503);
+  if (begun !== true) return json({ code: "INVITE_NOT_SENDABLE" }, 409);
+
+  const unknownDelivery = () => json({
+    code: "DELIVERY_RECONCILIATION_REQUIRED",
+    message: "Email natijasi noaniq. Takror yuborish bloklangan. Qo‘llab-quvvatlash xizmatiga murojaat qiling.",
+  }, 503);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), RESEND_TIMEOUT_MS);
   let providerResponse: Response;
@@ -286,7 +297,7 @@ export async function POST(request: NextRequest) {
       headers: {
         "Authorization": `Bearer ${resendApiKey}`,
         "Content-Type": "application/json",
-        "Idempotency-Key": `supplier-invite-${typedInvite.id}-${typedInvite.token_hash.slice(0, 16)}`,
+        "Idempotency-Key": `supplier-email-${typedInvite.id}-${deliveryClaimId}`,
       },
       body: JSON.stringify({
         from,
@@ -303,36 +314,26 @@ export async function POST(request: NextRequest) {
       signal: controller.signal,
     });
     providerData = await providerResponse.json().catch(() => ({})) as ResendPayload;
-  } catch (error) {
-    const reason = controller.signal.aborted ? "resend_timeout" : `resend_network_${error instanceof Error ? error.name : "unknown"}`;
-    await markInviteFailed(typedInvite.id, reason);
-    return json({ code: "EMAIL_SEND_FAILED", message: "Email yuborilmadi. Havolani qo‘lda yuborish mumkin." }, controller.signal.aborted ? 504 : 502);
+  } catch {
+    // A lost response does not prove rejection. Keep the durable attempt pending.
+    return unknownDelivery();
   } finally {
     clearTimeout(timeout);
   }
 
   const providerId = typeof providerData.id === "string" ? providerData.id : "";
   if (!providerResponse.ok || !providerId) {
-    const providerCode = typeof providerData.name === "string" ? providerData.name : "provider_error";
-    await markInviteFailed(typedInvite.id, `resend_${providerResponse.status}_${providerCode}`);
-    return json({ code: "EMAIL_SEND_FAILED", message: "Email yuborilmadi. Havolani qo‘lda yuborish mumkin." }, 502);
+    return unknownDelivery();
   }
 
   const sentAt = new Date().toISOString();
-  const { error: sentError } = await admin
-    .from("supplier_invites")
-    .update({
-      status: "sent",
-      provider_message_id: providerId,
-      sent_at: sentAt,
-      failure_reason: null,
-    })
-    .eq("id", typedInvite.id)
-    .in("status", ["queued", "failed"]);
+  const { data: finished, error: sentError } = await admin.rpc("finish_supplier_email_delivery", {
+    p_invite_id: typedInvite.id, p_attempt_id: deliveryClaimId,
+    p_outcome: "accepted", p_provider_id: providerId,
+  });
 
-  if (sentError) {
-    console.error("Supplier outreach status update failed", sentError.code || "unknown");
-    return json({ code: "STATUS_UPDATE_FAILED", message: "Email yuborildi, lekin status yangilanmadi." }, 503);
+  if (sentError || finished !== true) {
+    return unknownDelivery();
   }
 
   const supplierRow = supplier as SupplierRow;
