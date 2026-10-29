@@ -69,7 +69,7 @@ fixture; it does not replace a complete Supabase migration reset or live receipt
 
 ## Account and email-attempt release follow-up
 
-Apply `20261028235510_supplier_email_delivery_attempt_guard.sql` **before** promoting
+Apply `20261029041818_supplier_email_delivery_attempt_guard.sql` **before** promoting
 this runtime. Keep the existing migrations unchanged. Until the new RPCs are
 installed, email delivery fails closed without calling Resend. Old runtime workers
 must be drained during the release: do not allow an old email handler to continue
