@@ -1,6 +1,6 @@
 // Supabase Edge Function: meta-leads-webhook
 // Receives Meta Page `leadgen` webhook events, verifies the Meta HMAC signature,
-// retrieves the authoritative lead by leadgen_id, and upserts it into the
+// retrieves the authoritative lead by leadgen_id, and inserts it into the
 // server-only marketing_leads table. Provider credentials must stay in Edge
 // Function secrets and are never returned to clients or stored in source.
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -170,7 +170,12 @@ async function ingestLead(value: LeadgenValue) {
     updated_at: new Date().toISOString(),
   };
 
-  const { error } = await supabase.from("marketing_leads").upsert(row, { onConflict: "leadgen_id" });
+  // Meta retries webhook deliveries. Ignore a duplicate leadgen_id so a retry can
+  // never reset an operator's CRM status/notes back to a new lead.
+  const { error } = await supabase.from("marketing_leads").upsert(row, {
+    onConflict: "leadgen_id",
+    ignoreDuplicates: true,
+  });
   if (error) throw error;
 }
 
