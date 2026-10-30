@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import AppShell from "@/app/dashboard/components/app-shell";
 import AiCommandCenter from "@/app/dashboard/components/ai-command-center";
+import RequestQuickBuilder from "@/app/dashboard/components/request-quick-builder";
 import { loadDashboardData } from "@/app/dashboard/components/dashboard-data";
 import { getStoredSession, type AuthSession } from "@/lib/supabase-auth";
 import { useUiSettings } from "@/lib/ui-settings";
@@ -52,7 +53,10 @@ export default function DashboardPage() {
               <Link href="/deals" className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0b1f3a] transition hover:border-blue-300">{isRu ? "Кабинет" : "Kabinet"}</Link>
             </div>
           </header>
-          <AiCommandCenter session={session} displayName={displayName} stats={data.stats} />
+          <RequestQuickBuilder session={session} />
+          <div id="ai-chat" className="min-h-0 scroll-mt-3">
+            <AiCommandCenter session={session} displayName={displayName} stats={data.stats} />
+          </div>
         </div>
       )}
     </AppShell>
