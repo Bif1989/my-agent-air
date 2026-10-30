@@ -1,6 +1,13 @@
 import type { NextConfig } from "next";
 
+// Supplied at build time, including prebuilt releases. Omit for local development.
+const releaseCommit = process.env.RELEASE_COMMIT_SHA || process.env.VERCEL_GIT_COMMIT_SHA || "";
+if (releaseCommit && !/^[0-9a-f]{40}$/.test(releaseCommit)) {
+  throw new Error("Release commit must be a full 40-character Git SHA");
+}
+
 const securityHeaders = [
+  ...(releaseCommit ? [{ key: "X-Release-Commit", value: releaseCommit }] : []),
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "X-DNS-Prefetch-Control", value: "off" },
