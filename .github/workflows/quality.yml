@@ -57,6 +57,11 @@ jobs:
           BASE_URL: http://127.0.0.1:3000
           NODE_PATH: /tmp/browser-smoke/node_modules
         run: node .github/scripts/browser-smoke.cjs
+      - name: Dashboard focus browser smoke
+        env:
+          BASE_URL: http://127.0.0.1:3000
+          NODE_PATH: /tmp/browser-smoke/node_modules
+        run: node .github/scripts/dashboard-focus-smoke.cjs
       - name: Print app log on failure
         if: failure()
         run: cat /tmp/my-agent-air.log || true
