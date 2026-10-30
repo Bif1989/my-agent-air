@@ -136,7 +136,7 @@ function isDefaultConversationTitle(title: string) {
   return title === "Yangi chat" || title === "Новый чат";
 }
 
-export default function AiCommandCenter({ session, displayName, stats }: { session: AuthSession; displayName: string; stats: DashboardStats }) {
+export default function AiCommandCenter({ session, displayName, stats, onComposerFocus }: { session: AuthSession; displayName: string; stats: DashboardStats; onComposerFocus?: () => void }) {
   const router = useRouter();
   const { isRu, locale } = useUiSettings();
   const actions = actionMap(isRu);
@@ -165,7 +165,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
   const [threadError, setThreadError] = useState("");
   const [deletingHistory, setDeletingHistory] = useState(false);
   const sequence = useRef(0);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
 
   const activeConversation = conversations.find((item) => item.id === activeConversationId) || null;
   const recentConversations = conversations.slice(0, 3);
@@ -223,7 +223,8 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
 
   useEffect(() => {
     if (!historyReady) return;
-    bottomRef.current?.scrollIntoView({ block: "end" });
+    const panel = chatScrollRef.current;
+    if (panel) panel.scrollTop = panel.scrollHeight;
   }, [entries, historyReady]);
 
   async function startNewConversation() {
@@ -467,7 +468,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
 
         {threadError && <div className="border-b border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{threadError}</div>}
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-blue-50/40 via-white to-white px-3 py-3 dark:from-slate-900 dark:via-slate-950 dark:to-slate-950 sm:px-5 sm:py-5" aria-live="polite">
+        <div ref={chatScrollRef} className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-blue-50/40 via-white to-white px-3 py-3 dark:from-slate-900 dark:via-slate-950 dark:to-slate-950 sm:px-5 sm:py-5" aria-live="polite">
           <div className="mx-auto flex min-h-full max-w-3xl flex-col">
             {!historyReady && !historyError && activeConversationId && <div className="flex min-h-32 items-center justify-center text-xs text-slate-400">{isRu ? "Загрузка истории чата..." : "Chat tarixi yuklanmoqda..."}</div>}
             {historyError && <div role="alert" className="my-auto rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"><p>{historyError}</p><button type="button" onClick={() => { setHistoryError(""); setHistoryReady(false); setEntries([]); setHistoryReloadKey((value) => value + 1); }} className="mt-3 rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-700">{isRu ? "Загрузить снова" : "Qayta yuklash"}</button></div>}
@@ -482,7 +483,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
                 </div>
               ))}
               {busy && <div className="flex items-center gap-3"><div className="hidden h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-[11px] font-bold text-white sm:flex">AI</div><div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700 dark:border-slate-700 dark:bg-slate-800 dark:text-blue-200">{isRu ? "AI продолжает текущую тему…" : "AI joriy mavzuni davom ettiryapti…"}</div></div>}
-              <div ref={bottomRef} />
+
             </div>}
 
             {historyReady && entries.length === 1 && entries[0]?.id === "greeting" && <div className="mt-auto pt-3 sm:pt-5 md:pt-8"><p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-400">{isRu ? "БЫСТРЫЙ СТАРТ" : "Tez boshlash"}</p><div className="grid grid-cols-2 gap-2">{quickPrompts.map((item, index) => <button key={item.prompt} type="button" onClick={() => void send(item.prompt)} className={`min-h-12 rounded-xl border p-2 text-left transition sm:min-h-0 sm:rounded-2xl sm:p-3 ${index === 0 ? "border-blue-200 bg-blue-50 hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950/40" : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"}`}><p className="text-[11px] font-semibold text-[#0b1f3a] dark:text-slate-100 sm:text-xs">{item.title}</p><p className="mt-1 hidden text-[11px] leading-4 text-slate-400 sm:block">{item.detail}</p></button>)}</div></div>}
@@ -491,7 +492,7 @@ export default function AiCommandCenter({ session, displayName, stats }: { sessi
 
         <div className="shrink-0 border-t border-blue-100 bg-blue-50/80 px-2.5 pb-2.5 pt-2.5 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90 sm:px-5 sm:pb-4 sm:pt-3">
           <form onSubmit={(event) => { event.preventDefault(); void send(); }} className="mx-auto max-w-3xl rounded-[22px] border-2 border-blue-300 bg-white p-1.5 shadow-[0_8px_30px_rgba(37,99,235,0.12)] transition focus-within:border-blue-500 focus-within:shadow-[0_10px_35px_rgba(37,99,235,0.2)] dark:border-slate-700 dark:bg-slate-950 sm:rounded-[26px] sm:p-2">
-            <textarea aria-label={isRu ? "Напишите AI-помощнику" : "AI yordamchiga yozing"} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} rows={1} maxLength={1500} placeholder={entries.some((entry) => entry.sender === "user") ? (isRu ? "Продолжите текущую задачу: измените, уточните или дополните…" : "Joriy masalani davom ettiring: o‘zgartiring, aniqlik kiriting…") : (isRu ? "Опишите одну задачу или турпакет…" : "Bitta masala yoki tur paketini yozing…")} className="w-full resize-none bg-transparent px-3 py-2 text-sm text-[#0b1f3a] outline-none placeholder:text-blue-300 dark:text-slate-100 sm:py-2.5" />
+            <textarea onFocus={onComposerFocus} aria-label={isRu ? "Напишите AI-помощнику" : "AI yordamchiga yozing"} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} rows={1} maxLength={1500} placeholder={entries.some((entry) => entry.sender === "user") ? (isRu ? "Продолжите текущую задачу: измените, уточните или дополните…" : "Joriy masalani davom ettiring: o‘zgartiring, aniqlik kiriting…") : (isRu ? "Опишите одну задачу или турпакет…" : "Bitta masala yoki tur paketini yozing…")} className="w-full resize-none bg-transparent px-3 py-2 text-sm text-[#0b1f3a] outline-none placeholder:text-blue-300 dark:text-slate-100 sm:py-2.5" />
             <div className="flex items-center justify-end px-1.5 pb-1 sm:justify-between sm:px-2"><p className="hidden text-[11px] text-slate-400 sm:block">{isRu ? "Этот чат помнит текущую задачу · Новый чат — новая задача" : "Bu chat joriy masalani eslaydi · Yangi chat — yangi masala"}</p><button type="submit" disabled={busy || !input.trim() || !historyReady} className="flex h-8 min-w-8 items-center justify-center rounded-xl bg-blue-600 px-3 text-[11px] font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40 sm:h-9 sm:px-4 sm:text-xs">{isRu ? "Отправить" : "Yuborish"}</button></div>
           </form>
           <p className="mx-auto mt-1.5 hidden max-w-3xl text-center text-[9px] text-blue-400 md:block">{isRu ? "AI внутреннего туризма разделяет сложный маршрут на отдельные запросы по транспорту и услугам в городах." : "Ichki turizm AI murakkab marshrutni transport va shaharma-shahar xizmat so‘rovlariga ajratadi."}</p>
