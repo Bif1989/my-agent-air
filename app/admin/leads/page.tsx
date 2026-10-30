@@ -67,9 +67,9 @@ export default function AdminMarketingLeadsPage() {
   useEffect(() => {
     const stored = getStoredSession();
     if (!stored) { window.location.replace("/login"); return; }
-    setSession(stored);
     getCurrentProfile().then((profile) => {
       if (profile?.role !== "admin") { window.location.replace("/dashboard"); return; }
+      setSession(stored);
       return listMarketingLeads({ limit: 200 });
     }).then((rows) => {
       if (!rows) return;

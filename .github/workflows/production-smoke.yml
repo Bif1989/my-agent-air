@@ -1,20 +1,12 @@
 name: Production Smoke
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "app/**"
-      - "lib/**"
-      - "data/**"
-      - "public/**"
-      - "package.json"
-      - "package-lock.json"
-      - "next.config.ts"
-      - "postcss.config.mjs"
-      - "tsconfig.json"
-      - "vercel.json"
   workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Full Git commit SHA of the production release to verify
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -27,11 +19,15 @@ jobs:
   production-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    env:
+      EXPECTED_RELEASE_SHA: ${{ inputs.expected_sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Verify deployed release identity
+        run: node .github/scripts/verify-production-release.cjs
       - name: Wait for production app
         shell: bash
         run: |
