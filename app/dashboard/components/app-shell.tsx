@@ -288,9 +288,9 @@ export default function AppShell({ children, session, activePath = "" }: { child
           </div>
         </header>
 
-        <main className={`mx-auto w-full max-w-[1500px] ${isDashboard ? "px-2 py-2 sm:px-4 sm:py-3 lg:px-6 lg:py-5" : "px-4 py-5 sm:px-8 sm:py-8"}`}>
-          {sectionTabs.length > 0 && <nav aria-label={isRu ? "Навигация раздела" : "Bo‘lim navigatsiyasi"} className="mb-4 flex gap-1 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
-            {sectionTabs.map((tab) => <Link key={tab.href} href={tab.href} className={`shrink-0 rounded-xl px-3.5 py-2 text-xs font-semibold transition sm:text-sm ${tab.active ? "bg-[#0b1f3a] text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 hover:text-[#0b1f3a]"}`}>{tab.label}</Link>)}
+        <main className={`mx-auto w-full max-w-[1500px] ${inAiSection ? "px-2 pb-2 pt-0 sm:px-4 lg:px-6" : "px-4 py-5 sm:px-8 sm:py-8"}`}>
+          {sectionTabs.length > 0 && <nav aria-label={isRu ? "Навигация раздела" : "Bo‘lim navigatsiyasi"} className={inAiSection ? "sticky top-0 z-20 mb-1 flex gap-0.5 overflow-x-auto border-b border-slate-300 bg-[#eef5fb] pt-0.5 dark:border-slate-700 dark:bg-slate-950" : "mb-4 flex gap-1 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1 shadow-sm"}>
+            {sectionTabs.map((tab) => <Link key={tab.href} href={tab.href} aria-current={tab.active ? "page" : undefined} className={`shrink-0 text-xs font-semibold transition ${inAiSection ? `rounded-t-lg border border-b-0 px-3 py-1.5 ${tab.active ? "border-slate-300 bg-white text-[#0b1f3a] dark:border-slate-700 dark:bg-slate-900 dark:text-white" : "border-transparent text-slate-500 hover:bg-white/60 dark:text-slate-400"}` : `rounded-xl px-3.5 py-2 sm:text-sm ${tab.active ? "bg-[#0b1f3a] text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 hover:text-[#0b1f3a]"}`}`}>{tab.label}</Link>)}
           </nav>}
           {(!accountActive || registrationStatus === "suspended") && <div role="alert" className="mb-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 sm:mb-4 sm:p-4 sm:text-sm">{isRu ? "Ваш аккаунт заблокирован. Новые действия ограничены." : "Hisobingiz bloklangan. Yangi amallar cheklangan."}</div>}
           {registrationStatus === "pending_email" && <div role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{isRu ? "Подтвердите email, чтобы продолжить регистрацию." : "Registratsiyani davom ettirish uchun emailingizni tasdiqlang."}</div>}
