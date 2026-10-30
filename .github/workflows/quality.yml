@@ -33,6 +33,7 @@ jobs:
           node tests/integration/supplier-location-price.cjs
           node tests/integration/supplier-email-suppression.cjs
           node tests/integration/supplier-delivery-recovery-p1.cjs
+          node tests/integration/marketing-leads-upsert.cjs
       - run: npm run lint
       - name: Build with Turnstile enabled for navigation smoke
         env:
