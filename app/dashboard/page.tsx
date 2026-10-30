@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import AppShell from "@/app/dashboard/components/app-shell";
 import AiCommandCenter from "@/app/dashboard/components/ai-command-center";
@@ -43,20 +42,10 @@ export default function DashboardPage() {
       {isLoading && <div className="flex min-h-[70vh] items-center justify-center text-sm text-slate-500">{isRu ? "Загрузка AI-центра..." : "AI boshqaruv markazi yuklanmoqda..."}</div>}
       {error && <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">{error}</div>}
       {data && session && (
-        <div className={`flex min-h-0 flex-col lg:h-[calc(100dvh-7rem)] lg:overflow-hidden ${chatExpanded ? "h-[calc(100dvh-12.5rem)] min-h-[260px] overflow-hidden" : ""}`}>
-          <header className={`mb-1 hidden shrink-0 items-center justify-between gap-3 px-1 ${chatExpanded ? "" : "lg:flex"}`}>
-            <div className="min-w-0">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-blue-600">{isRu ? "AI ЦЕНТР УПРАВЛЕНИЯ" : "AI boshqaruv markazi"}</p>
-              <h1 className="truncate text-lg font-semibold tracking-tight text-[#0b1f3a]">{isRu ? "Добро пожаловать" : "Xush kelibsiz"}, {displayName}</h1>
-            </div>
-            <div className="flex shrink-0 gap-1.5">
-              <Link href="/requests/new" className="rounded-lg bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-blue-700">+ {isRu ? "Запрос" : "So‘rov"}</Link>
-              <Link href="/deals" className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-[#0b1f3a] transition hover:border-blue-300">{isRu ? "Кабинет" : "Kabinet"}</Link>
-            </div>
-          </header>
-          <div className="mb-2 flex shrink-0 items-center justify-between gap-2 px-1">
+        <div className={`flex min-h-0 flex-col lg:h-[calc(100dvh-3rem)] lg:overflow-hidden ${chatExpanded ? "h-[calc(100dvh-11rem)] min-h-[260px] overflow-hidden" : ""}`}>
+          <div className="mb-1 flex shrink-0 items-center justify-between gap-2 px-1">
             <span className="text-xs font-semibold text-slate-500">{chatExpanded ? (isRu ? "AI-чат" : "AI chat") : (isRu ? "Запрос и AI-чат" : "So‘rov va AI chat")}</span>
-            <button type="button" aria-expanded={!chatExpanded} aria-controls="dashboard-request-panel" onClick={() => setChatExpanded(!chatExpanded)} className="min-h-9 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-900 dark:bg-slate-900 dark:text-blue-300">
+            <button type="button" aria-expanded={!chatExpanded} aria-controls="dashboard-request-panel" onClick={() => setChatExpanded(!chatExpanded)} className="min-h-7 rounded-md border border-blue-200 bg-white px-2 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-900 dark:bg-slate-900 dark:text-blue-300">
               {chatExpanded ? (isRu ? "Открыть панель запроса" : "So‘rov panelini ochish") : (isRu ? "Свернуть панель запроса" : "So‘rov panelini yig‘ish")} {chatExpanded ? "+" : "−"}
             </button>
           </div>
