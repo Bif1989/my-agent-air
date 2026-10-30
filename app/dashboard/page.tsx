@@ -42,19 +42,21 @@ export default function DashboardPage() {
       {isLoading && <div className="flex min-h-[70vh] items-center justify-center text-sm text-slate-500">{isRu ? "Загрузка AI-центра..." : "AI boshqaruv markazi yuklanmoqda..."}</div>}
       {error && <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">{error}</div>}
       {data && session && (
-        <div className="flex min-h-0 flex-col">
-          <header className="mb-3 hidden items-center justify-between gap-3 px-1 lg:flex">
+        <div className="flex min-h-0 flex-col lg:h-[calc(100dvh-7rem)] lg:overflow-hidden">
+          <header className="mb-1 hidden shrink-0 items-center justify-between gap-3 px-1 lg:flex">
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-600">{isRu ? "AI ЦЕНТР УПРАВЛЕНИЯ" : "AI boshqaruv markazi"}</p>
-              <h1 className="mt-0.5 truncate text-xl font-semibold tracking-tight text-[#0b1f3a]">{isRu ? "Добро пожаловать" : "Xush kelibsiz"}, {displayName}</h1>
+              <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-blue-600">{isRu ? "AI ЦЕНТР УПРАВЛЕНИЯ" : "AI boshqaruv markazi"}</p>
+              <h1 className="truncate text-lg font-semibold tracking-tight text-[#0b1f3a]">{isRu ? "Добро пожаловать" : "Xush kelibsiz"}, {displayName}</h1>
             </div>
-            <div className="flex shrink-0 gap-2">
-              <Link href="/requests/new" className="rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700">+ {isRu ? "Запрос" : "So‘rov"}</Link>
-              <Link href="/deals" className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-[#0b1f3a] transition hover:border-blue-300">{isRu ? "Кабинет" : "Kabinet"}</Link>
+            <div className="flex shrink-0 gap-1.5">
+              <Link href="/requests/new" className="rounded-lg bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-blue-700">+ {isRu ? "Запрос" : "So‘rov"}</Link>
+              <Link href="/deals" className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-[#0b1f3a] transition hover:border-blue-300">{isRu ? "Кабинет" : "Kabinet"}</Link>
             </div>
           </header>
-          <RequestQuickBuilder session={session} />
-          <div id="ai-chat" className="min-h-0 scroll-mt-3">
+          <div className="shrink-0">
+            <RequestQuickBuilder session={session} />
+          </div>
+          <div id="ai-chat" className="min-h-0 scroll-mt-2 lg:flex-1 lg:[&>section]:h-full lg:[&>section]:min-h-0 lg:[&>section>div]:!h-full lg:[&>section>div]:!min-h-0 lg:[&>section>div]:!max-h-none">
             <AiCommandCenter session={session} displayName={displayName} stats={data.stats} />
           </div>
         </div>
