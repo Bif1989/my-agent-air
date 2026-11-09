@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 
 type PlatformStatsData = {
-  supplier_records: number;
-  hotels: number;
-  tour_operators: number;
-  travel_agents: number;
-  total_active: number;
-  agent_profiles: number;
+  supplier_records: number | null;
+  hotels: number | null;
+  tour_operators: number | null;
+  travel_agents: number | null;
+  total_active: number | null;
+  agent_profiles: number | null;
   updated_at: string;
+  degraded?: boolean;
 };
 
 type StatKey = keyof Pick<
@@ -47,8 +48,9 @@ function isPlatformStatsData(value: unknown): value is PlatformStatsData {
   const record = value as Record<string, unknown>;
   return STAT_KEYS.every((key) => {
     const metric = record[key];
-    return typeof metric === "number" && Number.isFinite(metric) && metric >= 0;
-  }) && typeof record.updated_at === "string";
+    return metric === null || (typeof metric === "number" && Number.isFinite(metric) && metric >= 0);
+  }) && typeof record.updated_at === "string" &&
+    (record.degraded === undefined || typeof record.degraded === "boolean");
 }
 
 export default function PlatformStats({ isRu }: { isRu: boolean }) {
@@ -98,7 +100,9 @@ export default function PlatformStats({ isRu }: { isRu: boolean }) {
           {isRu ? "База платформы сейчас" : "Platforma bazasida hozir"}
         </p>
         <p className="hidden text-[11px] text-blue-200 sm:block">
-          {isRu ? "Обновляется автоматически" : "Avtomatik yangilanadi"}
+          {stats?.degraded
+            ? (isRu ? "Часть показателей недоступна" : "Ayrim ko‘rsatkichlar mavjud emas")
+            : (isRu ? "Обновляется автоматически" : "Avtomatik yangilanadi")}
         </p>
       </div>
 
@@ -111,7 +115,7 @@ export default function PlatformStats({ isRu }: { isRu: boolean }) {
             <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
               <span className="shrink-0 text-lg" aria-hidden="true">{card.icon}</span>
               <span className="min-w-0 max-w-full break-words text-xl font-bold tabular-nums tracking-tight text-white sm:text-2xl">
-                {stats ? stats[card.key].toLocaleString(isRu ? "ru-RU" : "uz-UZ") : "—"}
+                {stats?.[card.key]?.toLocaleString(isRu ? "ru-RU" : "uz-UZ") ?? "—"}
               </span>
             </div>
             <p className="mt-2 break-words text-[11px] font-medium leading-4 text-blue-100 sm:text-xs">
