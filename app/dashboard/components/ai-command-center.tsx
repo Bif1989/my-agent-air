@@ -280,10 +280,13 @@ export default function AiCommandCenter({ session, displayName, stats, onCompose
     }
   }
 
-  function openRequestDraft(action: AiHistoryAction) {
+  function openRequestDraft(action: AiHistoryAction, originalText = "") {
     const draft = draftFromActionHref(action.href);
     if (!draft) return;
-    try { router.push(stageRequestDraft(draft, session.user.id, window.sessionStorage)); }
+    // Source text is attached only to staged browser storage, never added to the URL.
+    const text = originalText.trim().slice(0, 2000);
+    const prepared = text ? { ...draft, service_details: { ...(draft.service_details || {}), source_text: text } } : draft;
+    try { router.push(stageRequestDraft(prepared, session.user.id, window.sessionStorage)); }
     catch { setThreadError(isRu ? "Не удалось открыть черновик. Разрешите хранение данных сайта и попробуйте снова." : "Qoralamani ochib bo‘lmadi. Brauzerda sayt ma’lumotlarini saqlashga ruxsat bering va qayta urining."); }
   }
 
@@ -473,12 +476,12 @@ export default function AiCommandCenter({ session, displayName, stats, onCompose
             {!historyReady && !historyError && activeConversationId && <div className="flex min-h-32 items-center justify-center text-xs text-slate-400">{isRu ? "Загрузка истории чата..." : "Chat tarixi yuklanmoqda..."}</div>}
             {historyError && <div role="alert" className="my-auto rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"><p>{historyError}</p><button type="button" onClick={() => { setHistoryError(""); setHistoryReady(false); setEntries([]); setHistoryReloadKey((value) => value + 1); }} className="mt-3 rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-700">{isRu ? "Загрузить снова" : "Qayta yuklash"}</button></div>}
             {historyReady && <div className="space-y-3 sm:space-y-5">
-              {entries.map((entry) => (
+              {entries.map((entry, index) => (
                 <div key={entry.id} className={`flex gap-3 ${entry.sender === "user" ? "justify-end" : "justify-start"}`}>
                   {entry.sender === "assistant" && <div className="mt-1 hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-[11px] font-bold text-white sm:flex">AI</div>}
                   <div className={entry.sender === "user" ? "max-w-[90%] sm:max-w-[78%]" : "max-w-[96%] sm:max-w-[84%]"}>
                     <div className={`whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[13px] leading-5 sm:px-4 sm:py-3 sm:text-sm sm:leading-6 ${entry.sender === "user" ? "bg-[#0b1f3a] text-white shadow-sm" : "border border-blue-100 bg-blue-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"}`}>{entry.sender === "assistant" ? <AiResponseText text={entry.id === "greeting" ? greeting.text : entry.text} isRu={isRu} /> : entry.text}</div>
-                    {Boolean(entry.actions?.length) && <div className="mt-2 flex flex-wrap gap-2">{entry.actions?.map((entryAction) => <span key={`${entry.id}-${entryAction.href}`}>{entryAction.href.startsWith("/requests/new?draft=") ? <button type="button" onClick={() => openRequestDraft(entryAction)} className="inline-flex rounded-xl bg-blue-600 px-3 py-2 text-[11px] font-semibold text-white shadow-sm transition hover:bg-blue-700 sm:px-4 sm:text-xs">{entryAction.label} →</button> : <Link href={entryAction.href} className="inline-flex rounded-xl bg-blue-600 px-3 py-2 text-[11px] font-semibold text-white shadow-sm transition hover:bg-blue-700 sm:px-4 sm:text-xs">{entryAction.label} →</Link>}</span>)}</div>}
+                    {Boolean(entry.actions?.length) && <div className="mt-2 flex flex-wrap gap-2">{entry.actions?.map((entryAction) => <span key={`${entry.id}-${entryAction.href}`}>{entryAction.href.startsWith("/requests/new?draft=") ? <button type="button" onClick={() => openRequestDraft(entryAction, entries.slice(0, index).reverse().find((row) => row.sender === "user")?.text || "")} className="inline-flex rounded-xl bg-blue-600 px-3 py-2 text-[11px] font-semibold text-white shadow-sm transition hover:bg-blue-700 sm:px-4 sm:text-xs">{entryAction.label} →</button> : <Link href={entryAction.href} className="inline-flex rounded-xl bg-blue-600 px-3 py-2 text-[11px] font-semibold text-white shadow-sm transition hover:bg-blue-700 sm:px-4 sm:text-xs">{entryAction.label} →</Link>}</span>)}</div>}
                   </div>
                 </div>
               ))}
