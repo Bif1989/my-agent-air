@@ -77,3 +77,25 @@ test('price sort avoids comparing amounts in different currencies', () => {
   ], 'price');
   assert.deepEqual(rows.map((x) => x.key), ['usd-1', 'usd-2', 'uzs']);
 });
+
+test('a supplier matching two service types is not incorrectly collapsed into one service', () => {
+  const multi = { ...base, category: 'Tur paket' };
+  const match = {
+    id: 'supplier-1', name: 'Multi-service partner', city: 'Samarqand',
+    region: 'Samarqand', match_score: 80,
+  };
+  const rows = buildRfqRows([{
+    request: multi, offers: [],
+    matches: [
+      { ...match, supplier_type: 'hotel' },
+      { ...match, supplier_type: 'restaurant' },
+    ],
+    invites: [{
+      id: 'invite-1', supplier_id: 'supplier-1', supplier_name: 'Multi-service partner',
+      status: 'responded', created_at: '2026-11-10T10:00:00Z',
+      responded_at: '2026-11-10T11:00:00Z', response: { available: true, price: 200, currency: 'USD' },
+    }],
+  }]);
+  assert.deepEqual(rows.map((row) => row.service).sort(), ['Mehmonxona', 'Restoran', 'Tur paket']);
+  assert.equal(rows.filter((row) => row.state === 'responded').length, 1);
+});
