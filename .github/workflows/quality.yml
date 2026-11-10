@@ -13,7 +13,14 @@ permissions:
 jobs:
   test-build-browser-smoke:
     runs-on: ubuntu-latest
+    # Playwright image includes matching Chromium/WebKit browsers and OS packages.
+    # Avoid slow Ubuntu apt mirrors causing CI cancellation before browser smoke.
+    container:
+      image: mcr.microsoft.com/playwright:v1.56.1-noble
     timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -41,7 +48,7 @@ jobs:
       - name: Install browser smoke dependencies
         run: |
           npm install --prefix /tmp/browser-smoke --no-package-lock playwright@1.56.1
-          /tmp/browser-smoke/node_modules/.bin/playwright install --with-deps chromium webkit
+          # Browser binaries and native dependencies are supplied by the pinned image.
       - name: Start production build
         run: |
           npm run start > /tmp/my-agent-air.log 2>&1 &
