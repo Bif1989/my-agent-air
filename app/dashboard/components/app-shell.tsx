@@ -60,6 +60,7 @@ export default function AppShell({ children, session, activePath = "" }: { child
   const isDashboard = activePath === "/dashboard";
 
   const inAiSection = pathname === "/dashboard" || pathname === "/feed" || pathname.startsWith("/feed/");
+  const inRequestSection = pathname === "/rfq-control" || pathname === "/requests" || pathname.startsWith("/requests/");
   const inChatSection = pathname === "/support" || pathname === "/messenger" || pathname.startsWith("/messenger/");
   const inCabinetSection = pathname === "/deals" || pathname.startsWith("/deals/") || pathname.startsWith("/messages/") || pathname === "/billing" || pathname.startsWith("/billing/") || pathname === "/profile" || pathname === "/referral" || pathname.startsWith("/referral/") || pathname === "/admin" || pathname.startsWith("/admin/");
 
@@ -76,7 +77,7 @@ export default function AppShell({ children, session, activePath = "" }: { child
 
   const mainNavActive = (href: string) => {
     if (href === "/dashboard") return inAiSection;
-    if (href === "/requests") return pathname === "/requests" || pathname.startsWith("/requests/");
+    if (href === "/requests") return inRequestSection;
     if (href === "/agents") return pathname === "/agents" || pathname.startsWith("/agents/");
     if (href === "/messenger") return inChatSection;
     if (href === "/deals") return inCabinetSection;
@@ -88,7 +89,12 @@ export default function AppShell({ children, session, activePath = "" }: { child
         { label: isRu ? "AI центр" : "AI markaz", href: "/dashboard", active: pathname === "/dashboard" },
         { label: isRu ? "Посты" : "Postlar", href: "/feed", active: pathname === "/feed" || pathname.startsWith("/feed/") },
       ]
-    : inChatSection
+    : inRequestSection
+      ? [
+          { label: isRu ? "Запросы" : "So‘rovlar", href: "/requests", active: pathname === "/requests" || pathname.startsWith("/requests/") },
+          { label: isRu ? "RFQ контроль" : "RFQ nazorat", href: "/rfq-control", active: pathname === "/rfq-control" },
+        ]
+      : inChatSection
       ? [
           { label: isRu ? "Чаты" : "Chatlar", href: "/messenger", active: pathname === "/messenger" || pathname.startsWith("/messenger/") },
           { label: isRu ? "Связь с администратором" : "Admin bilan aloqa", href: "/support", active: pathname === "/support" },
