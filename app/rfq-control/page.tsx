@@ -125,9 +125,9 @@ export default function RfqControlPage() {
       })).then((loaded) => {
         if (!active) return;
         setDetails(loaded.map((entry) => entry.data));
-        if (loaded.some((entry) => entry.failed)) setDetailError("Айрим ҳамкор ёки таклифлар ҳозирча юкланмади. Мавжуд маълумотлар кўрсатилди.");
+        if (loaded.some((entry) => entry.failed)) setDetailError("Ayrim hamkor yoki takliflar hozircha yuklanmadi. Mavjud ma’lumotlar ko‘rsatildi.");
       }).catch(() => {
-        if (active) setDetailError("RFQ маълумотларини юклаб бўлмади.");
+        if (active) setDetailError("RFQ ma’lumotlarini yuklab bo‘lmadi.");
       }).finally(() => { if (active) setLoadingDetails(false); });
     }, 0);
     return () => { active = false; window.clearTimeout(timer); };
@@ -180,12 +180,13 @@ export default function RfqControlPage() {
       const next = await listRequests({ createdBy: session.user.id, offset: requests.length, limit: PAGE_SIZE });
       setRequests((old) => [...new Map([...old, ...next].map((item) => [item.id, item])).values()]);
       setHasMore(next.length === PAGE_SIZE);
-    } catch { setError("Қўшимча сўровларни юклаб бўлмади."); }
+    } catch { setError("Qo‘shimcha so‘rovlarni yuklab bo‘lmadi."); }
     finally { setLoadingMore(false); }
   }
 
   const responded = allRows.filter((row) => ["responded", "accepted"].includes(row.state)).length;
   const waiting = allRows.filter((row) => row.state === "waiting").length;
+  const sent = allRows.filter((row) => ["Yuborilgan", "Ochilgan", "Javob berdi"].includes(row.stage)).length;
   const savedForSelected = allRows.filter((row) => savedRows.includes(row.key)).length;
   const original = selected ? sourceText(selected) || selected.description || requestTitle(selected) : "";
   const searchName = selected ? requestTitle(selected) : "";
@@ -249,8 +250,9 @@ export default function RfqControlPage() {
                 </div>
               </div>
               {members.length > 1 && <p className="mt-3 rounded-lg bg-cyan-50 px-3 py-2 text-xs text-cyan-800">Bir xil asl matndan 30 daqiqa ichida yaratilgan xizmatlar bir guruhda ko‘rsatildi.</p>}
-              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
                 <Stat title="Mos hamkor va taklif" value={allRows.length} />
+                <Stat title="Yuborilgan" value={sent} />
                 <Stat title="Kelgan javoblar" value={responded} />
                 <Stat title="Javob kutilmoqda" value={waiting} />
                 <Stat title="Saqlangan variant" value={savedForSelected} />
@@ -278,7 +280,7 @@ export default function RfqControlPage() {
             <div className={cardClass}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div><h2 className="font-bold">Hamkorlar va kelgan takliflar</h2><p className="mt-1 text-xs text-slate-500">Bir hamkorning ayni xizmatga tegishli takroriy yozuvlari birlashtiriladi. Turli valyutalar kurs bo‘yicha solishtirilmaydi.</p></div>
-                <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-600">{filteredRows.length} та</span>
+                <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-600">{filteredRows.length} ta</span>
               </div>
               <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 <label className="text-xs font-semibold text-slate-500">Holat
@@ -299,7 +301,7 @@ export default function RfqControlPage() {
               </div>
               {detailError && <p role="alert" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{detailError}</p>}
               <div className="mt-4 space-y-2">
-                {!loadingDetails && !filteredRows.length && <p className="rounded-xl bg-slate-50 p-5 text-sm text-slate-500">Hozircha bu tanlov bo‘yicha ma’lumot йўқ. Агар ҳамкорлар ҳали жавоб бермаган бўлса, кейинроқ “Yangilash”ни босинг.</p>}
+                {!loadingDetails && !filteredRows.length && <p className="rounded-xl bg-slate-50 p-5 text-sm text-slate-500">Hozircha bu tanlov bo‘yicha ma’lumot yo‘q. Hamkorlar hali javob bermagan bo‘lsa, “Yangilash” tugmasini bosing.</p>}
                 {filteredRows.map((row) => <div key={row.key} className="rounded-xl border border-slate-200 p-3 sm:p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
@@ -310,6 +312,7 @@ export default function RfqControlPage() {
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-600">
                     <span className="font-bold text-[#0b1f3a]">{amount(row)}</span>
+                    {row.stage && <span>{row.stage}</span>}
                     {row.score !== null && <span>Moslik: {row.score}</span>}
                     {row.responseHours !== null && <span>Javob: {row.responseHours} soatda</span>}
                     {row.respondedAt && <span>{formatDate(row.respondedAt)}</span>}
@@ -335,12 +338,12 @@ export default function RfqControlPage() {
                 </div>
                 <div className="rounded-xl bg-emerald-50 p-3"><p className="text-xs font-semibold text-emerald-800">Tavsiya</p>
                   <p className="mt-2 text-sm text-slate-700">{waiting > 0 ? "Javobi kutilayotgan hamkorlarni kuzating; mavjud takliflarni xizmat, narx va moslik bo‘yicha solishtiring." : responded > 0 ? "Kelgan takliflar shartlarini taqqoslang. Turli valyutani bitta kursga keltirmasdan eng arzon variantni tanlamang." : "Mos hamkorlarni ko‘rib chiqing. Hali javob yoki mos hamkor topilmagan bo‘lishi mumkin."}</p>
-                  <p className="mt-2 text-[11px] text-emerald-800">Бу бўлим сақланган майдонлар ва текширув қоидалари асосида тузилган; янги AI API чақируви амалга оширилмайди.</p>
+                  <p className="mt-2 text-[11px] text-emerald-800">Bu bo‘lim saqlangan maydonlar va tekshiruv qoidalari asosida tuzilgan; yangi AI API chaqiruvi bajarilmaydi.</p>
                 </div>
               </div>
             </div>
 
-            <p className="text-xs text-slate-500">Бу панель серверда маълумот ўзгартирмайди ва хабар юбормайди. Юлдузланган сўров ва вариантлар фақат шу браузерда, шу аккаунт учун сақланади. Ягона RFQга боғлаш бир хил асл матн ва яратилиш вақти асосида тахминий амалга оширилади.</p>
+            <p className="text-xs text-slate-500">Bu panel serverdagi ma’lumotlarni o‘zgartirmaydi va xabar yubormaydi. Yulduzlangan so‘rov va variantlar faqat shu brauzerda, shu akkaunt uchun saqlanadi. Bitta RFQga bog‘lash asl matn va yaratilish vaqti asosida taxminan amalga oshiriladi.</p>
           </>}
         </section>
       </div>
