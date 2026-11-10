@@ -86,5 +86,8 @@ test('CI blocks high production dependency vulnerabilities and runs Chromium plu
   assert.match(source, /npm run lint/);
   assert.match(source, /npm run build/);
   assert.match(source, /browser-smoke\.cjs/);
-  assert.match(source, /chromium webkit/);
+  // Both direct browser installation and pinned official Playwright images
+  // provide Chromium and WebKit; the browser script must exercise both.
+  assert.match(source, /(?:playwright install --with-deps chromium webkit|image: mcr\.microsoft\.com\/playwright:v\d+\.\d+\.\d+-noble)/);
+  assert.match(read(".github/scripts/browser-smoke.cjs"), /const \{ chromium, webkit/);
 });
