@@ -24,6 +24,7 @@ export type RfqRow = {
   respondedAt: string | null;
   responseHours: number | null;
   note: string;
+  stage: string;
 };
 
 export type RfqSort = "match" | "price" | "location" | "service" | "reply" | "newest";
@@ -69,7 +70,7 @@ export function buildRfqRows(details: RfqDetail[]): RfqRow[] {
   const map = new Map<string, RfqRow>();
   for (const { request, offers, invites, matches } of details) {
     for (const match of matches) {
-      const key = "supplier:" + request.id + ":" + match.id;
+      const key = "supplier:" + request.id + ":" + match.id + ":" + match.supplier_type;
       const old = map.get(key);
       if (!old || (match.match_score || 0) > (old.score || 0)) {
         map.set(key, {
@@ -77,12 +78,14 @@ export function buildRfqRows(details: RfqDetail[]): RfqRow[] {
           company: match.name, location: [match.city, match.region].filter(Boolean).join(", "),
           channel: "supplier", state: "matched", price: null, currency: "",
           score: Number.isFinite(match.match_score) ? match.match_score : null,
-          createdAt: null, respondedAt: null, responseHours: null, note: "",
+          createdAt: null, respondedAt: null, responseHours: null, note: "", stage: "Topilgan",
         });
       }
     }
     for (const invite of invites) {
-      const key = "supplier:" + request.id + ":" + invite.supplier_id;
+      const prefix = "supplier:" + request.id + ":" + invite.supplier_id + ":";
+      const matchingKeys = [...map.keys()].filter((key) => key.startsWith(prefix) && !key.endsWith(":invite"));
+      const key = matchingKeys.length === 1 ? matchingKeys[0] : prefix + "invite";
       const old = map.get(key);
       const reply = invite.response || {};
       const respondedAt = invite.responded_at || reply.submitted_at || null;
@@ -98,6 +101,7 @@ export function buildRfqRows(details: RfqDetail[]): RfqRow[] {
         currency: reply.currency || "UZS", score: old?.score ?? null,
         createdAt: date, respondedAt, responseHours: replyDuration(date, respondedAt),
         note: reply.comment || (invite.channel ? invite.channel.toUpperCase() : ""),
+        stage: ({ queued: "Navbatda", sent: "Yuborilgan", opened: "Ochilgan", responded: "Javob berdi", failed: "Yuborilmadi", expired: "Muddati tugagan", opted_out: "Rad etgan" } as Record<string, string>)[invite.status] || invite.status,
       };
       // Keep the newest invitation for the same supplier and same service request.
       if (!old?.createdAt || !date || Date.parse(date) >= Date.parse(old.createdAt)) map.set(key, newRow);
@@ -114,7 +118,7 @@ export function buildRfqRows(details: RfqDetail[]): RfqRow[] {
         location: offer.agent?.city || "", channel: "agent", state,
         price: typeof offer.price === "number" && Number.isFinite(offer.price) ? offer.price : null,
         currency: offer.currency || "", score: null, createdAt: offer.created_at,
-        respondedAt: offer.created_at, responseHours: null, note: offer.comment || "",
+        respondedAt: offer.created_at, responseHours: null, note: offer.comment || "", stage: "Agent taklifi",
       });
     }
   }
