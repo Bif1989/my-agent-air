@@ -104,7 +104,7 @@ test('Hobby uses one Tokyo function region close to the Supabase database', () =
 
 test('server functions keep bounded execution windows', () => {
   assert.ok(maxDuration('app/api/auth/[action]/route.ts') <= 20);
-  assert.ok(maxDuration('app/api/supplier-outreach/[action]/route.ts') <= 15);
+  assert.ok(maxDuration('app/api/supplier-outreach/[action]/route.ts') <= 55);
   assert.ok(maxDuration('app/api/payments/click/[stage]/route.ts') <= 15);
   assert.ok(maxDuration('app/api/ai/transcribe/route.ts') <= 30);
   assert.ok(maxDuration('app/api/ai/route.ts') <= 60);

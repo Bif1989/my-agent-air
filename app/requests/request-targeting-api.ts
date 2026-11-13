@@ -23,9 +23,11 @@ export type RequestTargetRecord = {
     completed_deals?: number;
   };
   status: RequestTargetStatus;
+  push_sent_at: string | null;
+  push_outcome: "no_subscription" | "failed" | "disabled" | "sent" | null;
 };
 
-const SELECT_FIELDS = "request_id,profile_id,match_score,distance_km,match_reason,status";
+const SELECT_FIELDS = "request_id,profile_id,match_score,distance_km,match_reason,status,push_sent_at,push_outcome";
 
 export async function listRequestTargets(requestId: string) {
   const params = new URLSearchParams({

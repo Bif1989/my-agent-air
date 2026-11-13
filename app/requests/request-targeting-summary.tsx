@@ -68,12 +68,12 @@ type FunnelStage = "matched" | "notified" | "viewed" | "responded" | "declined";
 
 function targetsForStage(targets: RequestTargetRecord[], stage: FunnelStage | null) {
   if (!stage || stage === "matched") return targets;
-  if (stage === "notified") return targets.filter((target) => ["notified", "viewed", "responded"].includes(target.status));
+  if (stage === "notified") return targets.filter((target) => Boolean(target.push_sent_at));
   if (stage === "viewed") return targets.filter((target) => ["viewed", "responded"].includes(target.status));
   return targets.filter((target) => target.status === stage);
 }
 
-export default function RequestTargetingSummary({ requestId, isOwner, distributionMode = "targeted" }: { requestId: string; isOwner: boolean; distributionMode?: "targeted" | "broadcast" }) {
+export default function RequestTargetingSummary({ requestId, isOwner, canRecordView = !isOwner, distributionMode = "targeted" }: { requestId: string; isOwner: boolean; canRecordView?: boolean; distributionMode?: "targeted" | "broadcast" }) {
   const router = useRouter();
   const { isRu } = useUiSettings();
   const isTargeted = distributionMode === "targeted";
@@ -92,7 +92,7 @@ export default function RequestTargetingSummary({ requestId, isOwner, distributi
     let active = true;
     const task = isOwner
       ? listRequestTargets(requestId)
-      : markOwnRequestTargetViewed(requestId).catch(() => false).then(() => getOwnRequestTarget(requestId));
+      : canRecordView ? markOwnRequestTargetViewed(requestId).catch(() => false).then(() => getOwnRequestTarget(requestId)) : Promise.resolve(null);
     Promise.resolve(task)
       .then((data) => {
         if (!active) return;
@@ -105,7 +105,7 @@ export default function RequestTargetingSummary({ requestId, isOwner, distributi
       .catch(() => { if (active) setError("load"); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [isOwner, isTargeted, requestId]);
+  }, [canRecordView, isOwner, isTargeted, requestId]);
 
   const refreshOwner = useCallback(async (showSpinner = true, showError = true) => {
     if (!isOwner) return;
@@ -164,7 +164,7 @@ export default function RequestTargetingSummary({ requestId, isOwner, distributi
 
   const funnel = useMemo(() => {
     const total = targets.length;
-    const notified = targets.filter((target) => ["notified", "viewed", "responded"].includes(target.status)).length;
+    const notified = targets.filter((target) => Boolean(target.push_sent_at)).length;
     const viewed = targets.filter((target) => ["viewed", "responded"].includes(target.status)).length;
     const responded = targets.filter((target) => target.status === "responded").length;
     const declined = targets.filter((target) => target.status === "declined").length;
@@ -237,9 +237,9 @@ export default function RequestTargetingSummary({ requestId, isOwner, distributi
       {!profilesLoading && visibleStageTargets.length > 0 && <div className="mt-4 grid gap-3 lg:grid-cols-2">{visibleStageTargets.map((target) => {
         const profile = profiles[target.profile_id];
         return <article key={target.profile_id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold text-[#0b1f3a]">{profile?.full_name || profile?.company_name || tr(isRu, "Hamkor profili", "Профиль партнёра")}</p><p className="mt-1 truncate text-sm text-slate-500">{profile?.company_name || agentTypeLabel(profile?.agent_type || target.match_reason?.capability_type || null, isRu)}{profile?.city ? ` · ${profile.city}` : target.match_reason?.city ? ` · ${target.match_reason.city}` : ""}</p></div><span className="shrink-0 rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-bold text-cyan-800">{target.match_score}</span></div>
+          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold text-[#0b1f3a]">{profile?.company_name || profile?.full_name || tr(isRu, "Hamkor profili", "Профиль партнёра")}</p><p className="mt-1 truncate text-sm text-slate-500">{agentTypeLabel(profile?.agent_type || target.match_reason?.capability_type || null, isRu)}{profile?.city ? ` · ${profile.city}` : target.match_reason?.city ? ` · ${target.match_reason.city}` : ""}</p></div><span className="shrink-0 rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-bold text-cyan-800">{target.match_score}</span></div>
           <p className="mt-3 text-xs leading-5 text-slate-500">{reasonText(target, isRu)}</p>
-          <div className="mt-3 flex flex-wrap gap-2"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">{statusLabel(target.status, isRu)}</span>{target.match_reason?.trust_score != null && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">Trust {target.match_reason.trust_score}/100</span>}{profile?.is_verified && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">{tr(isRu, "Tasdiqlangan", "Проверен")}</span>}{profile?.services?.slice(0, 2).map((service) => <span key={service} className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">{service}</span>)}</div>
+          <div className="mt-3 flex flex-wrap gap-2"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">{statusLabel(target.status === "notified" && !target.push_sent_at ? "matched" : target.status, isRu)}</span>{target.push_outcome && target.push_outcome !== "sent" && <span className="text-xs text-amber-700">{target.push_outcome === "no_subscription" ? tr(isRu, "Push ulanmagan", "Push не подключён") : tr(isRu, "Xabar yuborilmadi", "Уведомление не отправлено")}</span>}{target.match_reason?.trust_score != null && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">Trust {target.match_reason.trust_score}/100</span>}{profile?.is_verified && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">{tr(isRu, "Tasdiqlangan", "Проверен")}</span>}{profile?.services?.slice(0, 2).map((service) => <span key={service} className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">{service}</span>)}</div>
         </article>;
       })}</div>}
       {!visibleStageTargets.length && <p className="mt-4 rounded-xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">{tr(isRu, "Bu bosqichda hali hamkor yo‘q.", "На этом этапе пока нет партнёров.")}</p>}

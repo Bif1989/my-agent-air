@@ -7,7 +7,7 @@ import { readBoundedJson } from "@/lib/server/bounded-json";
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase-config";
 
 export const runtime = "nodejs";
-export const maxDuration = 15;
+export const maxDuration = 55;
 
 const MAX_BODY_BYTES = 4 * 1024;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -20,6 +20,7 @@ type DeliveryClaim = { claimed?: boolean; claim_id?: unknown; status?: unknown }
 const handlers: Record<string, Handler> = {
   send: sendEmailPost,
   "send-sms": sendSmsPost,
+  "send-preferred": sendSmsPost,
 };
 
 function actionFrom(request: NextRequest) {
@@ -93,7 +94,17 @@ async function withDeliveryClaim(request: NextRequest, handler: Handler) {
   }
 
   try {
-    return await handler(request, claimId);
+    if (actionFrom(request) !== "send-preferred") return await handler(request, claimId);
+    const sms = await sendSmsPost(new NextRequest(request.clone()), claimId);
+    const result = await sms.clone().json().catch(() => null) as { code?: string } | null;
+    if (result?.code === "CHANNEL_NOT_SMS") return await sendEmailPost(request, claimId);
+    if (!result?.code || !["SMS_NOT_CONFIGURED", "INVALID_RECIPIENT", "SMS_SEND_FAILED"].includes(result.code)) return sms;
+    const { data: ready, error: fallbackError } = await admin.rpc("prepare_supplier_email_fallback", {
+      p_invite_id: inviteId,
+      p_claim_id: claimId,
+    });
+    if (fallbackError) return response("OUTREACH_UNAVAILABLE", "Yuborish xizmati vaqtincha ishlamayapti.", 503);
+    return ready === true ? await sendEmailPost(request, claimId) : sms;
   } finally {
     const { error: releaseError } = await admin.rpc("release_supplier_invite_delivery", {
       p_invite_id: inviteId,

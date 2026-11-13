@@ -38,7 +38,8 @@ async function fullName(userId: string) {
 async function filterByPreference(recipients: Recipient[]) {
   const ids = [...new Set(recipients.map((r) => r.userId))];
   if (!ids.length) return [];
-  const { data } = await supabase.from("notification_preferences").select("user_id,chat_messages,deal_messages,offers,new_requests").in("user_id", ids);
+  const { data, error } = await supabase.from("notification_preferences").select("user_id,chat_messages,deal_messages,offers,new_requests").in("user_id", ids);
+  if (error) throw error;
   const prefsById = new Map((data || []).map((row) => [row.user_id, row]));
   return recipients.filter((recipient) => {
     const prefs = prefsById.get(recipient.userId);
@@ -51,13 +52,18 @@ async function filterByPreference(recipients: Recipient[]) {
 async function sendToRecipients(recipients: Recipient[], payload: NotificationPayload) {
   const allowed = await filterByPreference(recipients);
   const userIds = [...new Set(allowed.map((r) => r.userId))];
-  if (!userIds.length) return [] as string[];
-  const { data: subscriptions } = await supabase.from("push_subscriptions").select("id,user_id,endpoint,p256dh,auth_key").in("user_id", userIds);
+  const outcomes = new Map(recipients.map(({ userId }) => [userId, "disabled"]));
+  if (!userIds.length) return outcomes;
+  const { data: subscriptions, error: subscriptionError } = await supabase.from("push_subscriptions").select("id,user_id,endpoint,p256dh,auth_key").in("user_id", userIds);
+  if (subscriptionError) throw subscriptionError;
+  for (const id of userIds) outcomes.set(id, "no_subscription");
   for (const subscription of subscriptions || []) {
     const pushSubscription = { endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth_key } };
     try {
       await webpush.sendNotification(pushSubscription, JSON.stringify(payload));
+      outcomes.set(subscription.user_id, "sent");
     } catch (error) {
+      if (outcomes.get(subscription.user_id) !== "sent") outcomes.set(subscription.user_id, "failed");
       const statusCode = (error as { statusCode?: number })?.statusCode;
       if (statusCode === 404 || statusCode === 410) {
         // Expired/invalid subscription cleanup.
@@ -65,7 +71,7 @@ async function sendToRecipients(recipients: Recipient[], payload: NotificationPa
       }
     }
   }
-  return userIds;
+  return outcomes;
 }
 
 async function handleChatMessage(id: string) {
@@ -147,9 +153,23 @@ async function handleNewRequest(id: string) {
     url: `/requests/${id}`,
     tag: `request-${id}`,
   };
-  const notifiedIds = await sendToRecipients(recipientIds.map((userId) => ({ userId, preferenceKey: "new_requests" as const })), payload);
-  if (request.distribution_mode !== "broadcast" && notifiedIds.length) {
-    await supabase.from("request_targets").update({ status: "notified", updated_at: new Date().toISOString() }).eq("request_id", id).eq("status", "matched").in("profile_id", notifiedIds);
+  const outcomes = await sendToRecipients(recipientIds.map((userId) => ({ userId, preferenceKey: "new_requests" as const })), payload);
+  if (request.distribution_mode === "broadcast") return;
+
+  for (const outcome of ["no_subscription", "failed", "disabled", "sent"]) {
+    const ids = [...outcomes].filter(([, result]) => result === outcome).map(([id]) => id);
+    if (!ids.length) continue;
+    const now = new Date().toISOString();
+    const { error } = await supabase.from("request_targets")
+      .update({ push_outcome: outcome, push_sent_at: outcome === "sent" ? now : null, updated_at: now })
+      .eq("request_id", id).is("push_sent_at", null).in("profile_id", ids);
+    if (error) throw error;
+    if (outcome === "sent") {
+      const { error: statusError } = await supabase.from("request_targets")
+        .update({ status: "notified", updated_at: now })
+        .eq("request_id", id).eq("status", "matched").in("profile_id", ids);
+      if (statusError) throw statusError;
+    }
   }
 }
 

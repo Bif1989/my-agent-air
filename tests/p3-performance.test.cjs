@@ -52,7 +52,7 @@ test('P3 realtime session upkeep avoids hidden or offline background work', () =
 
 test('P3 Geo Tender client fetches only fields used by the UI', () => {
   const api = read('app/requests/request-targeting-api.ts');
-  assert.match(api, /const SELECT_FIELDS = "request_id,profile_id,match_score,distance_km,match_reason,status"/);
+  assert.match(api, /const SELECT_FIELDS = "request_id,profile_id,match_score,distance_km,match_reason,status,push_sent_at,push_outcome"/);
   assert.doesNotMatch(api, /SELECT_FIELDS = .*capability_id/);
   assert.doesNotMatch(api, /SELECT_FIELDS = .*created_at/);
   assert.doesNotMatch(api, /SELECT_FIELDS = .*updated_at/);

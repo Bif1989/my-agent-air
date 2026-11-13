@@ -6,7 +6,7 @@ import RequestTargetingSummary from "@/app/requests/request-targeting-summary";
 import {
   createSupplierInvite,
   deliverSupplierInviteEmail,
-  deliverSupplierInviteSms,
+  deliverPreferredSupplierInvite,
   listSupplierInvites,
   matchSuppliersForRequest,
   type SupplierDeliveryResult,
@@ -83,11 +83,11 @@ function deliveryMessage(invite: GeneratedInvite, isRu: boolean) {
     return tr(isRu, "Xabar yuborilgan bo‘lishi mumkin. Takror yuborish bloklangan. Natijani tekshirish uchun qo‘llab-quvvatlash xizmatiga murojaat qiling.", "Сообщение могло быть отправлено. Повторная отправка заблокирована. Обратитесь в поддержку для проверки результата.");
   }
   if (delivery?.sent) {
-    const channel = invite.channel === "sms" ? "SMS" : "Email";
+    const channel = delivery.channel === "sms" ? "SMS" : "Email";
     return tr(
       isRu,
-      `${channel} yuborildi: ${invite.recipient_hint}. Hamkor linkni ochganda holat avtomatik yangilanadi.`,
-      `${channel} отправлен: ${invite.recipient_hint}. После открытия ссылки статус обновится автоматически.`,
+      `${channel} yuborildi. Hamkor linkni ochganda holat avtomatik yangilanadi.`,
+      `${channel} отправлен. После открытия ссылки статус обновится автоматически.`,
     );
   }
   if (delivery?.configured === false) {
@@ -159,12 +159,12 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
     setCopied(false);
     setError("");
     try {
-      const draft = await createSupplierInvite(request.id, supplier.id, channel);
+      const draft = await createSupplierInvite(request.id, supplier.id, channel === "sms" ? "auto" : channel);
       const url = `${window.location.origin}/s/${draft.token}`;
       let delivery: SupplierDeliveryResult | undefined;
       try {
         delivery = channel === "sms"
-          ? await deliverSupplierInviteSms(draft.invite_id, draft.token)
+          ? await deliverPreferredSupplierInvite(draft.invite_id, draft.token)
           : await deliverSupplierInviteEmail(draft.invite_id, draft.token);
       } catch (cause) {
         const deliveryError = cause as Error & { delivery?: SupplierDeliveryResult };
@@ -176,7 +176,7 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
           code: channel === "sms" ? "SMS_SEND_FAILED" : "EMAIL_SEND_FAILED",
         };
       }
-      setGenerated({ ...draft, url, delivery });
+      setGenerated({ ...draft, recipient_hint: delivery?.channel === "email" && draft.channel === "sms" ? "" : draft.recipient_hint, url, delivery });
       setInvites(await listSupplierInvites(request.id));
     } catch (cause) {
       const needsReconciliation = cause instanceof Error && (
@@ -272,7 +272,7 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
         <div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold text-[#0b1f3a]">{tr(isRu, "Tashqi so‘rovlar holati", "Статус внешних запросов")}</h3><p className="mt-1 text-sm text-slate-500">{tr(isRu, "Yuborish, ochish va hamkor javoblari bo‘yicha funnel.", "Воронка отправки, открытия и ответов поставщиков.")}</p></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{invites.length} {tr(isRu, "ta", "шт.")}</span></div>
         <div className="mt-4 space-y-3">{invites.map((invite) => {
           const summary = responseSummary(invite, isRu);
-          return <div key={invite.id} className="rounded-xl border border-slate-100 px-4 py-3 text-sm"><div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center"><div><span className="font-semibold text-[#0b1f3a]">{invite.supplier_name}</span><span className="ml-2 text-slate-400">{invite.channel.toUpperCase()} · {invite.recipient_hint}</span></div><span className={`font-semibold ${invite.status === "failed" ? "text-amber-700" : "text-blue-700"}`}>{statusLabel(invite.status, isRu)}</span></div>{summary && <p className={`mt-2 ${invite.response?.available === false ? "text-amber-700" : "text-emerald-700"}`}>{summary}</p>}</div>;
+          return <div key={invite.id} className="rounded-xl border border-slate-100 px-4 py-3 text-sm"><div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center"><div><span className="font-semibold text-[#0b1f3a]">{invite.supplier_name}</span><span className="ml-2 text-slate-400">{invite.channel.toUpperCase()} · {invite.recipient_hint}</span></div><span className={`font-semibold ${invite.status === "failed" ? "text-amber-700" : "text-blue-700"}`}>{statusLabel(invite.status, isRu)}</span></div>{invite.converted && <span className="text-xs text-emerald-700">{tr(isRu, "Platformaga bog‘langan", "Профиль привязан")}</span>}{invite.delivery_error && <p className="mt-1 text-xs text-amber-700">{invite.delivery_error}</p>}{summary && <p className={`mt-2 ${invite.response?.available === false ? "text-amber-700" : "text-emerald-700"}`}>{summary}</p>}</div>;
         })}</div>
       </div>}
     </section>

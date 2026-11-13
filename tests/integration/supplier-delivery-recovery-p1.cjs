@@ -170,6 +170,57 @@ const request = '00000000-0000-4000-8000-000000000003';
     await assert.rejects(db.query('select finish_supplier_email_delivery($1,$2,$3,$4)',[email.invite_id,ec.claim_id,'accepted','resend-123']),/permission denied/);
     await db.exec('reset role;');
     assert(first.invite_id);
+    await db.exec(`create table request_targets (request_id uuid, profile_id uuid);
+      create table auth.users (id uuid, phone text, phone_confirmed_at timestamptz, email text, email_confirmed_at timestamptz, raw_app_meta_data jsonb);`);
+    await db.exec(read('20261113080000_p2_delivery_and_supplier_attribution.sql'));
+    const p2Supplier = '00000000-0000-4000-8000-000000000006';
+    const claimId = '00000000-0000-4000-8000-000000000007';
+    const token = 'a'.repeat(48);
+    await db.query(`insert into external_suppliers(id,supplier_type,name,email,phone,source_record_id)
+      values($1,'transport','P2 fixture','p2@example.com','998901234567','p2-fixture')`, [p2Supplier]);
+    const p2Invite = (await db.query(`insert into supplier_invites
+      (request_id,supplier_id,created_by,channel,recipient,token_hash,status,expires_at,delivery_claim_id,delivery_claimed_at,sms_delivery_pending)
+      values($1,$2,$3,'sms','998901234567',encode(extensions.digest($4,'sha256'),'hex'),'queued',now()+interval '1 day',$5,now(),true)
+      returning id`, [request,p2Supplier,actor,token,claimId])).rows[0].id;
+    const prepare = () => db.query('select prepare_supplier_email_fallback($1,$2) as ok',[p2Invite,claimId]).then(r => r.rows[0].ok);
+    assert.equal(await prepare(), false, 'ambiguous SMS cannot fall back');
+    await db.query(`update supplier_invites set status='failed',sms_delivery_pending=false where id=$1`, [p2Invite]);
+    await db.query(`insert into outreach_email_suppressions(email,reason) values('p2@example.com','test')`);
+    assert.equal(await prepare(), false, 'suppressed email cannot receive fallback');
+    await db.query(`update external_suppliers set email='invalid' where id=$1`, [p2Supplier]);
+    assert.equal(await prepare(), false, 'invalid email cannot receive fallback');
+    await db.query(`update external_suppliers set email='valid@example.com' where id=$1`, [p2Supplier]);
+    assert.equal(await prepare(), true);
+    assert.equal(await prepare(), false, 'fallback can transition the claim only once');
+    await db.query(`update supplier_invites set status='sent',expires_at=now()-interval '1 day' where id=$1`, [p2Invite]);
+    await db.query(`insert into auth.users(id,email,email_confirmed_at) values($1,'valid@example.com',now())`, [actor]);
+    const link = () => db.query('select claim_external_supplier_profile($1) as ok',[token]).then(r => r.rows[0].ok);
+    assert.equal(await link(), false, 'expired invite cannot link');
+    await db.query(`update supplier_invites set expires_at=now()+interval '1 day' where id=$1`, [p2Invite]);
+    await db.query(`update auth.users set email='wrong@example.com' where id=$1`, [actor]);
+    assert.equal(await link(), false, 'mismatched verified contact cannot link');
+    await db.query(`update auth.users set email='valid@example.com' where id=$1`, [actor]);
+    await db.exec('set role authenticated');
+    assert.equal(await link(), true);
+    await db.exec('reset role');
+    assert.equal((await db.query('select platform_profile_id from external_suppliers where id=$1',[p2Supplier])).rows[0].platform_profile_id,actor);
+    const p2List = () => db.query('select converted,delivery_error,recipient_hint from list_request_supplier_invites_p2($1) where id=$2', [request,p2Invite]);
+    const admin = '00000000-0000-4000-8000-000000000008';
+    const outsider = '00000000-0000-4000-8000-000000000009';
+    await db.query("insert into profiles values($1,'admin',true,'active'),($2,'agent',true,'active')", [admin,outsider]);
+    await db.exec('set role authenticated');
+    assert.deepEqual((await p2List()).rows, [{ converted: true, delivery_error: null, recipient_hint: 'v***@example.com' }]);
+    await db.query("select set_config('request.jwt.claim.sub',$1,false)",[admin]);
+    assert.equal((await p2List()).rows[0].converted, true);
+    await db.query("select set_config('request.jwt.claim.sub',$1,false)",[outsider]);
+    await assert.rejects(p2List, /not_request_owner/);
+    await db.exec('reset role');
+    await db.query("select set_config('request.jwt.claim.sub',$1,false)",[actor]);
+    await db.query(`update supplier_invites set channel='sms',recipient='998901234567' where id=$1`, [p2Invite]);
+    await db.query(`update auth.users set raw_app_meta_data='{"verified_signup_phone":"998901234567"}' where id=$1`,[actor]);
+    assert.equal(await link(), true, 'server-verified Eskiz signup phone can link');
+    await db.query(`update auth.users set raw_app_meta_data='{}' where id=$1`,[actor]);
+    assert.equal(await link(), false, 'an unverified phone cannot link');
     console.log('SQL PASS: real invite RPC, legacy/current contact recovery, replacement chains, pending SMS persistence, denial rechecks, email/SMS retries and service-only reconciliation');
   } finally { await db.close(); }
 })().catch(error => { console.error(error); process.exit(1); });

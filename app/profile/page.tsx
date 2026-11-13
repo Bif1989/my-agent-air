@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import AppShell from "@/app/dashboard/components/app-shell";
 import { getStoredSession, type AuthSession } from "@/lib/supabase-auth";
-import { getCurrentProfile, listUzLocations, updateCurrentProfile, type EditableProfile, type ProfileRecord, type UzLocation } from "@/app/profile/profile-api";
+import { claimPendingSupplierInvite, getCurrentProfile, listUzLocations, updateCurrentProfile, type EditableProfile, type ProfileRecord, type UzLocation } from "@/app/profile/profile-api";
 import NotificationSettings from "@/app/profile/notification-settings";
 import SupplierCapabilities from "@/app/profile/supplier-capabilities";
 import { AGENT_TYPES as agentTypes, missingProfileFields } from "@/lib/profile-completion";
@@ -102,6 +102,7 @@ export default function ProfilePage() {
         .then(([loaded, loadedLocations]) => {
           if (!loaded) throw new Error("PROFILE_NOT_FOUND");
           setProfile(loaded);
+          if (loaded.registration_status === "active") void claimPendingSupplierInvite().catch(() => false);
           setLocations(loadedLocations);
           setForm({
             full_name: loaded.full_name || "",
@@ -172,7 +173,8 @@ export default function ProfilePage() {
       });
       if (updated) setProfile(updated);
       setDirty(false);
-      setMessage("Profil muvaffaqiyatli saqlandi.");
+      const linked = await claimPendingSupplierInvite().catch(() => false);
+      setMessage(linked ? "Profil saqlandi va hamkor taklifiga bog‘landi." : "Profil muvaffaqiyatli saqlandi.");
     } catch (saveError: unknown) {
       setError(saveError instanceof Error && saveError.message.includes("AUTH_SESSION") ? "Sessiya tugagan. Qayta kiring." : "Profilni saqlashda xatolik yuz berdi.");
     } finally {

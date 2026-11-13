@@ -14,6 +14,7 @@ import AppShell from "@/app/dashboard/components/app-shell";
 import { deleteRequest, getRequest, updateRequestStatus, type RequestRecord } from "@/app/requests/requests-api";
 import { acceptOffer, getOffersForRequest, type OfferRecord } from "@/app/offers/offers-api";
 import { getStoredSession, type AuthSession } from "@/lib/supabase-auth";
+import { getCurrentProfile } from "@/app/profile/profile-api";
 import { formatAirline } from "@/data/airlines";
 
 const requestStatuses = { open: "Ochiq", accepted: "Qabul qilingan", closed: "Yopilgan", cancelled: "Bekor qilingan" } as const;
@@ -73,6 +74,7 @@ export default function RequestDetailPage() {
   const [id, setId] = useState("");
   const [session, setSession] = useState<AuthSession | null>(null);
   const [request, setRequest] = useState<RequestRecord | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [dealId, setDealId] = useState<string | null>(null);
   const [offers, setOffers] = useState<OfferRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -94,6 +96,7 @@ export default function RequestDetailPage() {
       }
       setId(requestId);
       setSession(storedSession);
+      void getCurrentProfile().then((profile) => setIsAdmin(profile?.role === "admin" && profile.is_active === true && profile.registration_status === "active")).catch(() => setIsAdmin(false));
       getRequest(requestId).then((loadedRequest) => {
         setRequest(loadedRequest);
         if (!loadedRequest) throw new Error("REQUEST_NOT_FOUND");
@@ -207,8 +210,8 @@ export default function RequestDetailPage() {
       </div>
 
       {!isOwner && <RequestOfferPanel key={request.id} request={request} />}
-      {!isOwner && id && <RequestTargetingSummary requestId={id} isOwner={false} distributionMode={request.distribution_mode || "targeted"} />}
-      {isOwner && isOpen && <SupplierMatching request={request} />}
+      {id && ((!isOwner && !isAdmin) || !isOpen) && <RequestTargetingSummary key={`${id}:${isOwner || isAdmin}`} requestId={id} isOwner={isOwner || isAdmin === true} canRecordView={!isOwner && isAdmin === false} distributionMode={request.distribution_mode || "targeted"} />}
+      {(isOwner || isAdmin) && isOpen && <SupplierMatching request={request} />}
 
       {isOwner && <section className="mt-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">

@@ -270,15 +270,17 @@ export async function POST(request: NextRequest, deliveryClaimId?: string) {
 
     const providerId = typeof result.payload.id === "string" ? result.payload.id : String(result.payload.id || "");
     if (!result.response.ok) {
-      const providerMessage = typeof result.payload.message === "string" ? result.payload.message.slice(0, 200) : "";
-      console.error("Supplier SMS provider rejected or failed", { status: result.response.status, providerMessage });
+      console.error("Supplier SMS provider rejected or failed", { status: result.response.status });
       // A server error may occur after acceptance. Only explicit client-side
       // rejection allows a retry; transport errors retain the durable marker.
       if ([400, 401, 403, 404, 405, 413, 415, 422, 429].includes(result.response.status)) {
-        await admin.rpc("finish_supplier_sms_delivery", {
+        const { data: rejected, error: rejectionError } = await admin.rpc("finish_supplier_sms_delivery", {
           p_invite_id: typedInvite.id, p_attempt_id: deliveryClaimId,
           p_outcome: "rejected", p_provider_id: null,
         });
+        if (rejectionError || rejected !== true) {
+          return json({ code: "DELIVERY_RECONCILIATION_REQUIRED", message: "SMS natijasi tekshirilmoqda." }, 503);
+        }
         return json({ code: "SMS_SEND_FAILED", message: "SMS provayder tomonidan rad etildi." }, 502);
       }
       return json({ code: "DELIVERY_RECONCILIATION_REQUIRED", message: "SMS natijasi noaniq. Takror yuborish bloklangan." }, 503);

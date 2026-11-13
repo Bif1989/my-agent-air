@@ -53,6 +53,8 @@ export type SupplierInviteRow = {
   opened_at: string | null;
   responded_at: string | null;
   response: SupplierInviteResponse;
+  converted: boolean;
+  delivery_error: string | null;
 };
 
 export type SupplierDeliveryResult = {
@@ -95,7 +97,7 @@ export function createSupplierInvite(requestId: string, supplierId: string, chan
 }
 
 export function listSupplierInvites(requestId: string) {
-  return rpc<SupplierInviteRow[]>("list_request_supplier_invites", { p_request_id: requestId });
+  return rpc<SupplierInviteRow[]>("list_request_supplier_invites_p2", { p_request_id: requestId });
 }
 
 async function deliverSupplierInvite(path: string, inviteId: string, token: string) {
@@ -128,4 +130,8 @@ export function deliverSupplierInviteEmail(inviteId: string, token: string) {
 
 export function deliverSupplierInviteSms(inviteId: string, token: string) {
   return deliverSupplierInvite("/api/supplier-outreach/send-sms", inviteId, token);
+}
+
+export function deliverPreferredSupplierInvite(inviteId: string, token: string) {
+  return deliverSupplierInvite("/api/supplier-outreach/send-preferred", inviteId, token);
 }
