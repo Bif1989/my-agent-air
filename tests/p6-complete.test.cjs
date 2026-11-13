@@ -76,7 +76,7 @@ test('P6 Geo-Tender UI explains trust contribution without expanding target payl
   assert.match(summary, /Trust \$\{reason\.trust_score\}\/100/);
   assert.match(summary, /reason\.trust_bonus/);
   assert.match(summary, /reason\.rating_average/);
-  assert.match(api, /const SELECT_FIELDS = "request_id,profile_id,match_score,distance_km,match_reason,status"/);
+  assert.match(api, /const SELECT_FIELDS = "request_id,profile_id,match_score,distance_km,match_reason,status,push_sent_at,push_outcome"/);
 });
 
 test('P6 review panel follows current Uzbek/Russian UI language', () => {

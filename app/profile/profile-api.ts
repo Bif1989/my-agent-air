@@ -98,3 +98,17 @@ export async function updateCurrentProfile(profile: EditableProfile) {
   window.dispatchEvent(new Event("my-agent-air:profile-updated"));
   return rows[0] || null;
 }
+
+export async function claimPendingSupplierInvite() {
+  const token = sessionStorage.getItem("supplier-invite-registration");
+  if (!token) return false;
+  const response = await authenticatedSupabaseFetch("rpc/claim_external_supplier_profile", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ p_token: token }),
+  });
+  if (!response.ok) return false;
+  const linked = await response.json() === true;
+  if (linked) sessionStorage.removeItem("supplier-invite-registration");
+  return linked;
+}

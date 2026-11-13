@@ -170,7 +170,9 @@ export default function SupplierRequestPage() {
       <section className="mt-6 grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-xs font-bold text-blue-600">01</p><h2 className="mt-2 font-semibold text-[#0b1f3a]">{tr(lang, "So‘rovni ko‘ring", "Посмотрите запрос")}</h2><p className="mt-2 text-sm leading-6 text-slate-500">{tr(lang, "Sana, hudud, mehmonlar soni va xizmat talablarini tekshiring.", "Проверьте дату, регион, количество гостей и требования к услуге.")}</p></div>
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-xs font-bold text-blue-600">02</p><h2 className="mt-2 font-semibold text-[#0b1f3a]">{tr(lang, "Taklif bering", "Отправьте предложение")}</h2><p className="mt-2 text-sm leading-6 text-slate-500">{tr(lang, "Mavjudlik, narx va shartlaringizni to‘g‘ridan-to‘g‘ri agentga yuboring.", "Отправьте агенту наличие, цену и условия напрямую.")}</p></div>
-        <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-5 shadow-sm"><p className="text-xs font-bold text-cyan-700">03</p><h2 className="mt-2 font-semibold text-[#0b1f3a]">{tr(lang, "Yangi mijozlarni oling", "Получайте новые заявки")}</h2><p className="mt-2 text-sm leading-6 text-slate-600">{tr(lang, "Bepul ro‘yxatdan o‘ting va keyingi mos B2B so‘rovlarni platformada qabul qiling.", "Зарегистрируйтесь бесплатно и получайте следующие подходящие B2B-запросы на платформе.")}</p><Link href="/register" className="mt-4 inline-flex rounded-xl bg-cyan-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-cyan-800">{tr(lang, "Bepul ro‘yxatdan o‘tish", "Бесплатная регистрация")}</Link></div>
+        <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-5 shadow-sm"><p className="text-xs font-bold text-cyan-700">03</p><h2 className="mt-2 font-semibold text-[#0b1f3a]">{tr(lang, "Yangi mijozlarni oling", "Получайте новые заявки")}</h2><p className="mt-2 text-sm leading-6 text-slate-600">{tr(lang, "Bepul ro‘yxatdan o‘ting va keyingi mos B2B so‘rovlarni platformada qabul qiling.", "Зарегистрируйтесь бесплатно и получайте следующие подходящие B2B-запросы на платформе.")}</p><Link href="/register" onClick={() => {
+              if (/^[0-9a-f]{48}$/.test(token)) sessionStorage.setItem("supplier-invite-registration", token);
+            }} className="mt-4 inline-flex rounded-xl bg-cyan-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-cyan-800">{tr(lang, "Bepul ro‘yxatdan o‘tish", "Бесплатная регистрация")}</Link></div>
       </section>
 
       {loading && <div className="mt-6 rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-500">{tr(lang, "So‘rov yuklanmoqda...", "Запрос загружается...")}</div>}
@@ -200,7 +202,9 @@ export default function SupplierRequestPage() {
           <div className="mx-auto mt-6 max-w-xl rounded-2xl border border-emerald-200 bg-white p-5">
             <p className="font-semibold text-[#0b1f3a]">{tr(lang, "Keyingi so‘rovlarni o‘tkazib yubormang", "Не пропускайте следующие запросы")}</p>
             <p className="mt-2 text-sm leading-6 text-slate-600">{tr(lang, "My Agent Air’da bepul ro‘yxatdan o‘ting va sizning xizmatlaringizga mos yangi B2B so‘rovlarni platformada qabul qiling.", "Зарегистрируйтесь бесплатно в My Agent Air и получайте новые B2B-запросы, подходящие вашим услугам.")}</p>
-            <Link href="/register" className="mt-4 inline-flex rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700">{tr(lang, "Platformaga qo‘shilish", "Присоединиться к платформе")}</Link>
+            <Link href="/register" onClick={() => {
+              if (/^[0-9a-f]{48}$/.test(token)) sessionStorage.setItem("supplier-invite-registration", token);
+            }} className="mt-4 inline-flex rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700">{tr(lang, "Platformaga qo‘shilish", "Присоединиться к платформе")}</Link>
           </div>
         </section> : <form onSubmit={submit} className="mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           <h2 className="text-xl font-semibold text-[#0b1f3a]">{tr(lang, "Taklif yuborish", "Отправить предложение")}</h2>
@@ -224,7 +228,9 @@ export default function SupplierRequestPage() {
 
       <footer className="py-8 text-center text-xs leading-6 text-slate-400">
         <p>My Agent Air · {tr(lang, "O‘zbekiston turizm biznesi uchun B2B platforma", "B2B-платформа для туристического бизнеса Узбекистана")}</p>
-        <p><a href={SUPPORT_PHONE_HREF} className="font-semibold text-slate-500">{SUPPORT_PHONE}</a> · <Link href="/register" className="font-semibold text-blue-600">{tr(lang, "Ro‘yxatdan o‘tish", "Регистрация")}</Link></p>
+        <p><a href={SUPPORT_PHONE_HREF} className="font-semibold text-slate-500">{SUPPORT_PHONE}</a> · <Link href="/register" onClick={() => {
+              if (/^[0-9a-f]{48}$/.test(token)) sessionStorage.setItem("supplier-invite-registration", token);
+            }} className="font-semibold text-blue-600">{tr(lang, "Ro‘yxatdan o‘tish", "Регистрация")}</Link></p>
       </footer>
     </div>
   </main>;

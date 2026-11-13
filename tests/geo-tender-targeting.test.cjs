@@ -134,3 +134,35 @@ test('external supplier matching shows bilingual operational status and match sc
   assert.match(source, /Статус внешних запросов/);
   assert.match(source, /supplier\.match_score/);
 });
+test('push reports success only for an accepted send, regardless of mixed subscription order', async () => {
+  const ts = require('typescript');
+  const vm = require('node:vm');
+  const source = read('supabase/functions/push-dispatch/index.ts');
+  const dispatch = source.slice(source.indexOf('async function sendToRecipients'), source.indexOf('async function handleChatMessage'));
+  const removed = [];
+  const subscriptions = [
+    { id: 'bad', user_id: 'failed', endpoint: 'expired' },
+    { id: 'good-mixed', user_id: 'mixed', endpoint: 'good' },
+    { id: 'bad-mixed', user_id: 'mixed', endpoint: 'expired' },
+    { id: 'good', user_id: 'sent', endpoint: 'good' },
+  ];
+  const context = {
+    filterByPreference: async (rows) => rows.filter((row) => row.userId !== 'disabled'),
+    supabase: { from: () => ({
+      select: () => ({ in: async () => ({ data: subscriptions }) }),
+      delete: () => ({ eq: async (_column, id) => removed.push(id) }),
+    }) },
+    webpush: { async sendNotification({ endpoint }) {
+      if (endpoint === 'expired') throw Object.assign(new Error('expired'), { statusCode: 410 });
+    } },
+  };
+  vm.runInNewContext(ts.transpile(dispatch, { target: ts.ScriptTarget.ES2022 }), context);
+  const outcomes = await context.sendToRecipients(
+    ['none', 'failed', 'mixed', 'sent', 'disabled'].map(userId => ({ userId })), {},
+  );
+  assert.deepEqual(Object.fromEntries(outcomes), {
+    none: 'no_subscription', failed: 'failed', mixed: 'sent', sent: 'sent', disabled: 'disabled',
+  });
+  assert.deepEqual(removed, ['bad', 'bad-mixed']);
+  assert.match(read('app/requests/request-targeting-summary.tsx'), /target\.push_sent_at/);
+});

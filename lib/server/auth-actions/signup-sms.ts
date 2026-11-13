@@ -217,6 +217,7 @@ export async function POST(request: NextRequest) {
       email,
       password,
       email_confirm: true,
+      app_metadata: { verified_signup_phone: phone },
       user_metadata: { phone: `+${phone}`, phone_verified: true, auth_source: "phone" },
     });
     if (createError || !created.user?.id) {

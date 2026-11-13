@@ -44,7 +44,7 @@ test('supplier SMS uses the short branded public link and a routing-layer redire
   assert.match(route, /new URL\(`\/s\/\$\{encodeURIComponent\(token\)\}`/);
   assert.match(route, /My Agent Air: Yangi B2B so'rov/);
   assert.match(route, /Taklif yuborish: \$\{url\}/);
-  assert.match(route, /providerMessage/);
+  assert.doesNotMatch(route, /providerMessage/);
   assert.match(config, /source: "\/s\/:token"/);
   assert.match(config, /destination: "\/supplier-request\/:token"/);
   assert.equal(fs.existsSync(path.join(process.cwd(), 'app/s/[token]/page.tsx')), false);
@@ -74,9 +74,9 @@ test('supplier outreach client automatically delivers SMS and keeps email fallba
   assert.match(api, /deliverSupplierInviteSms/);
   assert.match(api, /\/api\/supplier-outreach\/send-sms/);
   assert.match(ui, /delivery = channel === "sms"/);
-  assert.match(ui, /deliverSupplierInviteSms/);
+  assert.match(ui, /deliverPreferredSupplierInvite/);
   assert.match(ui, /deliverSupplierInviteEmail/);
-  assert.match(ui, /channel === "sms" \? "SMS" : "Email"/);
+  assert.match(ui, /delivery.channel === "sms" \? "SMS" : "Email"/);
   assert.match(ui, /channel === "sms" \? "SMS_SEND_FAILED" : "EMAIL_SEND_FAILED"/);
 });
 
