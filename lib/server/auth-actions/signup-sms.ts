@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { readBoundedJson } from "@/lib/server/bounded-json";
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase-config";
 import { checkPasswordExposure, newPasswordValidationMessage } from "@/lib/server/password-security";
+import { makeSignupTermsReceipt, verifiedSignupTerms } from "@/lib/server/signup-terms";
 import { verifyTurnstile } from "@/lib/server/turnstile";
 
 export const runtime = "nodejs";
@@ -156,7 +157,8 @@ export async function POST(request: NextRequest) {
       await admin.from("registration_sms_otps").delete().eq("id", challenge.id);
       return json({ code: "SMS_SEND_FAILED", message: "SMS yuborilmadi. Keyinroq qayta urinib ko‘ring." }, 502);
     }
-    return json({ ok: true, challenge_id: challenge.id, phone });
+    const receipt = makeSignupTermsReceipt(secret, "sms", `${phone}:${challenge.id}`, input?.terms_version);
+    return json({ ok: true, challenge_id: challenge.id, phone, ...(receipt ? { terms_receipt: receipt } : {}) });
   }
 
   const challengeId = clean(input?.challenge_id, 64);
@@ -212,12 +214,13 @@ export async function POST(request: NextRequest) {
     const passwordCheck = await passwordIsAcceptable(password);
     if (!passwordCheck.ok) return json({ code: "PASSWORD_COMPROMISED", message: passwordCheck.message }, 422);
 
+    const evidence = verifiedSignupTerms(secret, "sms", `${phone}:${challengeId}`, input?.terms_receipt, 60 * 60_000);
     const email = phoneSyntheticEmail(phone);
     const { data: created, error: createError } = await admin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
-      app_metadata: { verified_signup_phone: phone },
+      app_metadata: { verified_signup_phone: phone, ...(evidence ? { signup_terms: evidence } : {}) },
       user_metadata: { phone: `+${phone}`, phone_verified: true, auth_source: "phone" },
     });
     if (createError || !created.user?.id) {

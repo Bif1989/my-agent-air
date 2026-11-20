@@ -79,9 +79,16 @@ async function checkProfile(browser, label, contextOptions) {
   let response = await page.goto(`${baseURL}/`, { waitUntil: 'domcontentloaded' });
   assert(response && response.status() < 400, `${label}: home did not load`);
   assert.match(await page.locator('body').innerText(), /MY AGENT AIR/i, `${label}: brand missing`);
+  assert.equal(new URL(await page.locator('link[rel="canonical"]').getAttribute('href')).href, 'https://agent.bifavia.uz/');
+  for (const path of ['/privacy', '/terms', '/cookies']) {
+    assert(await page.locator(`footer a[href="${path}"]`).count(), `${label}: missing policy link ${path}`);
+    assert((await context.request.get(`${baseURL}${path}`)).ok(), `${label}: policy unavailable: ${path}`);
+  }
+  assert.equal(await page.locator('[data-testid="landing-measurement"]').count(), 0, `${label}: optional analytics ran without consent`);
 
   response = await page.goto(`${baseURL}/login`, { waitUntil: 'domcontentloaded' });
   assert(response && response.status() < 400, `${label}: login did not load`);
+  assert.match(response.headers()['x-robots-tag'] || '', /noindex/i, `${label}: login is not for indexing`);
   await page.locator('input[name="identifier"]').waitFor();
   await page.locator('input[type="password"]').waitFor();
   await expectTurnstile(page, 'login', label);

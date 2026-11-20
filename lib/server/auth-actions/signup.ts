@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase-config";
 import { checkPasswordExposure, newPasswordValidationMessage } from "@/lib/server/password-security";
+import { makeSignupTermsReceipt, persistVerifiedEmailSignupTerms } from "@/lib/server/signup-terms";
 import { verifyTurnstile } from "@/lib/server/turnstile";
 
 export const runtime = "nodejs";
@@ -16,6 +17,7 @@ type SignupBody = {
   email?: unknown;
   password?: unknown;
   captcha_token?: unknown;
+  terms_version?: unknown;
 };
 type Quota = { allowed?: boolean; retry_after?: number };
 
@@ -91,18 +93,24 @@ export async function POST(request: NextRequest) {
   }
   if (exposure.status === "unavailable") console.warn("Pwned-password check unavailable during signup", exposure.reason);
 
+  const receipt = makeSignupTermsReceipt(secret, "email", email, input?.terms_version);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
   try {
     const upstream = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
       method: "POST",
       headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, data: { auth_source: "email" } }),
+      body: JSON.stringify({ email, password, data: { auth_source: "email", ...(receipt ? { signup_terms_receipt: receipt } : {}) } }),
       cache: "no-store",
       signal: controller.signal,
     });
     const result = await upstream.json().catch(() => ({})) as Record<string, unknown>;
-    if (upstream.ok) return json(result);
+    if (upstream.ok) {
+      if (result.access_token && result.refresh_token && result.user && typeof result.user === "object") {
+        await persistVerifiedEmailSignupTerms(secret, SUPABASE_URL, email, result.user);
+      }
+      return json(result);
+    }
     if (upstream.status === 429) return json({ code: "TOO_MANY_ATTEMPTS", message: "Juda ko‘p urinish. Birozdan keyin qayta urinib ko‘ring." }, 429, Number(upstream.headers.get("retry-after") || 60));
     if ([400, 422].includes(upstream.status)) return json({ code: "INVALID_INPUT", message: "Email yoki parol talabga mos kelmadi. Tekshirib qayta kiriting." }, 422);
     return json({ code: "AUTH_UNAVAILABLE", message: "Ro‘yxatdan o‘tish xizmati vaqtincha ishlamayapti." }, 503);

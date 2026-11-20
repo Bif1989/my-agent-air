@@ -18,3 +18,16 @@ the header deliberately fail; HTTP availability alone is not release verificatio
 This change can ship with other verified site fixes. It does not depend on Meta,
 CRM schemas or Edge Functions. PR #60's marketing migration remains held while CRM
 integration is postponed; do not apply it as part of this independent change.
+
+## Public launch checks
+
+Build the public release with Vercel's system target set to production. For a
+prebuilt release without Vercel's system environment variables, also set
+`MY_AGENT_AIR_INDEXABLE=1` only in the production build. Never reuse that build
+for a preview. Check the live homepage canonical URL, the five public entries in
+`/sitemap.xml`, the sitemap pointer in `/robots.txt` and the noindex headers on
+auth and private routes. Sitemap/noindex are not authorization controls.
+
+Verify ownership and sitemap submission in the site's own Google Search Console
+property, and use URL Inspection to check indexing. Record mobile and desktop
+PageSpeed results separately; a single lab test is not field Core Web Vitals.

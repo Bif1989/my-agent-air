@@ -1,3 +1,4 @@
+import { persistVerifiedEmailSignupTerms } from "@/lib/server/signup-terms";
 import { readBoundedJson } from "@/lib/server/bounded-json";
 import { createHmac } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
@@ -102,6 +103,7 @@ export async function POST(request: NextRequest) {
     });
     const data = await upstream.json().catch(() => ({})) as AuthSuccess;
     if (upstream.ok && data.access_token && data.refresh_token && data.user?.id) {
+      await persistVerifiedEmailSignupTerms(secret, SUPABASE_URL, email, data.user);
       return json({
         access_token: data.access_token,
         refresh_token: data.refresh_token,
