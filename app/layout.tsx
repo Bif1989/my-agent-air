@@ -1,6 +1,9 @@
 import RecoveryRedirect from "@/app/components/recovery-redirect";
 import PwaInstall from "@/app/components/pwa-install";
 import PwaSplash from "@/app/components/pwa-splash";
+import AnalyticsConsent from "@/app/components/analytics-consent";
+import { getLandingAnalyticsConfig } from "@/lib/landing-analytics";
+import { CANONICAL_ORIGIN } from "@/app/seo-config";
 import AiVoiceLoader from "@/app/components/ai-voice-loader";
 import VkLaunchAuth from "@/app/components/vk-launch-auth";
 import type { Metadata, Viewport } from "next";
@@ -19,6 +22,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(CANONICAL_ORIGIN),
   title: "My Agent Air — Travel Agent B2B Platform",
   applicationName: "My Agent Air",
   description: "Aviakassa, turagent va turoperatorlar uchun AI, Geo-Tender, so‘rov, taklif va bitim platformasi.",
@@ -63,6 +67,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <RecoveryRedirect />
           <VkLaunchAuth />
           {children}
+          <AnalyticsConsent config={getLandingAnalyticsConfig()} />
           <AiVoiceLoader />
           <PwaInstall />
         </UiSettingsProvider>

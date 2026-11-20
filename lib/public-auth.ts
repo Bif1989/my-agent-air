@@ -7,6 +7,7 @@ type PublicAuthResponse = {
   refresh_token?: string;
   user?: { id?: string; email?: string };
   challenge_id?: string;
+  terms_receipt?: unknown;
   phone?: string;
   code?: string;
   message?: string;
@@ -17,11 +18,13 @@ type EmailSignupInput = {
   email: string;
   password: string;
   captcha_token?: string;
+  terms_version?: string;
 };
 
 type PhoneSignupInput = {
   phone: string;
   password: string;
+  terms_receipt?: unknown;
 };
 
 async function post(path: string, body: Record<string, unknown>) {
@@ -60,11 +63,12 @@ export function signUpProtected(input: EmailSignupInput) {
     email: input.email.trim().toLowerCase(),
     password: input.password,
     captcha_token: input.captcha_token || "",
+    terms_version: input.terms_version,
   });
 }
 
-export function requestSignupSmsProtected(phone: string, password: string, captchaToken: string) {
-  return post("/api/auth/signup-sms", { phase: "request", phone: phone.trim(), password, captcha_token: captchaToken });
+export function requestSignupSmsProtected(phone: string, password: string, captchaToken: string, termsVersion?: string) {
+  return post("/api/auth/signup-sms", { phase: "request", phone: phone.trim(), password, captcha_token: captchaToken, terms_version: termsVersion });
 }
 
 export function verifySignupSmsProtected(challengeId: string, phone: string, token: string) {
@@ -81,6 +85,7 @@ export function completeSignupSmsProtected(input: PhoneSignupInput, challengeId:
     challenge_id: challengeId,
     phone: input.phone.trim(),
     password: input.password,
+    terms_receipt: input.terms_receipt,
   });
 }
 

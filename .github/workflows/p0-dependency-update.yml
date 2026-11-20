@@ -28,8 +28,8 @@ jobs:
       - name: Upgrade patched Next.js dependency set
         run: |
           npm pkg delete devDependencies.next
-          npm install --save-prod --save-exact next@16.4.1
-          npm install --save-dev --save-exact eslint-config-next@16.4.1
+          npm install --save-prod --save-exact next@16.4.6
+          npm install --save-dev --save-exact eslint-config-next@16.4.6
       - name: Verify production dependency audit
         run: npm audit --omit=dev --audit-level=high
       - run: npm test
@@ -46,5 +46,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add package.json package-lock.json
-          git commit -m "Upgrade Next.js to 16.4.1 security patch"
+          git commit -m "Upgrade Next.js to 16.4.6 security patch"
           git push origin "HEAD:${TARGET_BRANCH}"
