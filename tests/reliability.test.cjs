@@ -116,6 +116,9 @@ test('message merge deduplicates realtime/send responses without changing other 
 
 test('safe return path rejects external and encoded redirect tricks', () => {
   for (const value of ['https://evil.invalid', '//evil.invalid', '/%2f%2fevil.invalid', '/%5cevil.invalid', '/login?next=/dashboard']) assert.equal(safeNextPath(value), '/dashboard');
+  assert.equal(safeNextPath('/deals/..//example.com'), '/dashboard');
+  assert.equal(safeNextPath('/deals/%2e%2e//example.com'), '/dashboard');
+  assert.equal(safeNextPath('/\t/example.com'), '/dashboard');
   assert.equal(safeNextPath('/deals/123#chat'), '/deals/123#chat');
 });
 
