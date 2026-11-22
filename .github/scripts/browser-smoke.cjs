@@ -72,7 +72,7 @@ async function clickPath(page, href, pathname, label) {
 }
 
 async function checkProfile(browser, label, contextOptions) {
-  const context = await browser.newContext(contextOptions);
+  const context = await browser.newContext({ ...contextOptions, serviceWorkers: 'block' });
   const page = await context.newPage();
   await installTurnstileMock(page);
 
@@ -85,6 +85,14 @@ async function checkProfile(browser, label, contextOptions) {
     assert((await context.request.get(`${baseURL}${path}`)).ok(), `${label}: policy unavailable: ${path}`);
   }
   assert.equal(await page.locator('[data-testid="landing-measurement"]').count(), 0, `${label}: optional analytics ran without consent`);
+
+  // Exercise the landing page's registration before /login, even on a fast navigation.
+  const workerRegistered = await page.evaluate(async () => {
+    if (!navigator.serviceWorker) return false;
+    await navigator.serviceWorker.register('/sw.js');
+    return Boolean(await navigator.serviceWorker.getRegistration());
+  });
+  assert.equal(workerRegistered, false, `${label}: a service worker can interfere with the Turnstile mock`);
 
   response = await page.goto(`${baseURL}/login`, { waitUntil: 'domcontentloaded' });
   assert(response && response.status() < 400, `${label}: login did not load`);
