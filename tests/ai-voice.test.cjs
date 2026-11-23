@@ -1,6 +1,6 @@
 const { test, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
-const { VoiceCapture, VoiceError, transcribeVoice, MAX_VOICE_BYTES } = require('../lib/ai-voice.ts');
+const { VoiceCapture, transcribeVoice, MAX_VOICE_BYTES } = require('../lib/ai-voice.ts');
 const auth = require('../lib/supabase-auth.ts');
 const { POST } = require('../app/api/ai/transcribe/route.ts');
 const { NextRequest } = require('next/server');
