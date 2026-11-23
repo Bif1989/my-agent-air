@@ -119,6 +119,20 @@ test('safe return path rejects external and encoded redirect tricks', () => {
   assert.equal(safeNextPath('/deals/123#chat'), '/deals/123#chat');
 });
 
+test('safe return path rejects a double slash after URL normalization', () => {
+  for (const value of ['/deals/..//', '/deals/%2e%2e//', '/\t/']) {
+    assert.equal(safeNextPath(value), '/dashboard', value);
+  }
+});
+
+test('safe return path avoids auth loops and preserves an internal query and fragment', () => {
+  for (const route of ['login', 'register', 'forgot-password', 'reset-password']) {
+    const next = new URLSearchParams(`next=%2Fdeals%2F..%2F${route}%3Ffrom%3Dmail%23form`).get('next');
+    assert.equal(safeNextPath(next), '/dashboard', route);
+  }
+  assert.equal(safeNextPath('/deals/../support?q=a%2Fb#chat'), '/support?q=a%2Fb#chat');
+});
+
 test('freshness uses the Tashkent calendar boundary and 30-day undated expiry', () => {
   const now = new Date('2026-10-04T20:00:00Z');
   assert.equal(tashkentDate(now), '2026-10-05');
