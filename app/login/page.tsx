@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import PolicyLinks from "@/app/components/policy-links";
 import { useRouter } from "next/navigation";
 import BrandMark from "@/app/components/brand-mark";
 import TurnstileChallenge, { TURNSTILE_SITE_KEY } from "@/app/components/turnstile-challenge";
@@ -55,6 +56,7 @@ export default function LoginPage() {
             <button type="submit" disabled={isLoading || (captchaRequired && !captchaToken)} className="w-full rounded-xl bg-blue-600 py-3.5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-4 focus:ring-blue-100">{isLoading ? (isRu ? "Вход..." : "Kirilmoqda...") : (isRu ? "Войти" : "Kirish")}</button>
           </form>
           <div className="mt-6 flex flex-wrap justify-between gap-3 text-sm"><Link href="/forgot-password" className="font-medium text-blue-600 hover:text-blue-700">{isRu ? "Забыли пароль?" : "Parolni unutdingizmi?"}</Link><Link href="/register" className="font-medium text-blue-600 hover:text-blue-700">{isRu ? "Регистрация" : "Ro‘yxatdan o‘tish"}</Link></div>
+          <div className="mt-5 text-xs leading-6 text-slate-600"><PolicyLinks /></div>
         </div></section>
       </div>
     </main>

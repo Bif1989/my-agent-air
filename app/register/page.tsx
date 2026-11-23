@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
+import { TERMS_VERSION } from "@/lib/terms-version";
 import BrandMark from "@/app/components/brand-mark";
 import TurnstileChallenge, { TURNSTILE_SITE_KEY } from "@/app/components/turnstile-challenge";
 import { UiControls, useUiSettings } from "@/lib/ui-settings";
@@ -21,7 +22,7 @@ import {
 const MIN_PASSWORD_LENGTH = 10;
 type SignupMethod = "phone" | "email";
 type PendingVerification =
-  | { method: "phone"; identifier: string; password: string; challengeId: string }
+  | { method: "phone"; identifier: string; password: string; challengeId: string; termsReceipt?: unknown }
   | { method: "email"; identifier: string };
 
 function maskPhone(phone: string) {
@@ -81,6 +82,10 @@ export default function RegisterPage() {
     const formData = new FormData(event.currentTarget);
     const identifier = String(formData.get("identifier") || "").trim();
     const password = String(formData.get("password") || "");
+    if (formData.get("terms") !== TERMS_VERSION) {
+      setError(isRu ? "Подтвердите условия использования и политику конфиденциальности." : "Foydalanish shartlari va maxfiylik qoidalariga rozilikni tasdiqlang.");
+      return;
+    }
 
     if (password.length < MIN_PASSWORD_LENGTH) {
       setError(isRu ? `Пароль должен содержать не менее ${MIN_PASSWORD_LENGTH} символов.` : `Parol kamida ${MIN_PASSWORD_LENGTH} belgidan iborat bo‘lsin.`);
@@ -94,11 +99,11 @@ export default function RegisterPage() {
     setIsLoading(true);
     try {
       if (method === "phone") {
-        const response = await requestSignupSmsProtected(identifier, password, captchaToken);
+        const response = await requestSignupSmsProtected(identifier, password, captchaToken, TERMS_VERSION);
         if (!response.challenge_id) throw new Error(isRu ? "Не удалось отправить SMS-код." : "SMS kodni yuborib bo‘lmadi.");
-        setPending({ method: "phone", identifier, password, challengeId: response.challenge_id });
+        setPending({ method: "phone", identifier, password, challengeId: response.challenge_id, termsReceipt: response.terms_receipt });
       } else {
-        const response = await signUpProtected({ email: identifier, password, captcha_token: captchaToken });
+        const response = await signUpProtected({ email: identifier, password, captcha_token: captchaToken, terms_version: TERMS_VERSION });
         if (response.access_token && response.refresh_token && response.user?.id) {
           saveSession(response);
           await claimReferralAfterSignup();
@@ -130,7 +135,7 @@ export default function RegisterPage() {
     try {
       if (pending.method === "phone") {
         await verifySignupSmsProtected(pending.challengeId, pending.identifier, otpCode);
-        const response = await completeSignupSmsProtected({ phone: pending.identifier, password: pending.password }, pending.challengeId);
+        const response = await completeSignupSmsProtected({ phone: pending.identifier, password: pending.password, terms_receipt: pending.termsReceipt }, pending.challengeId);
         if (response.access_token && response.refresh_token && response.user?.id) {
           saveSession(response);
           await claimReferralAfterSignup();
@@ -233,7 +238,7 @@ export default function RegisterPage() {
                   <span className="mt-2 block text-xs leading-5 text-slate-400">{isRu ? `Минимум ${MIN_PASSWORD_LENGTH} символов. Небезопасный пароль будет отклонён до отправки кода.` : `Kamida ${MIN_PASSWORD_LENGTH} belgi. Xavfsiz bo‘lmagan parol kod yuborilishidan oldin ko‘rsatiladi.`}</span>
                 </label>
 
-                <label className="flex items-start gap-3 text-sm text-slate-500"><input required name="terms" type="checkbox" className="mt-1 h-4 w-4 accent-blue-600" /><span>{isRu ? "Я согласен с " : ""}<Link href="/terms" target="_blank" className="text-blue-600 underline">{isRu ? "условиями использования" : "Foydalanish shartlari"}</Link>{isRu ? " и " : " va "}<Link href="/privacy" target="_blank" className="text-blue-600 underline">{isRu ? "политикой конфиденциальности" : "maxfiylik qoidalari"}</Link>{isRu ? "." : " bilan tanishdim va roziman."}</span></label>
+                <label className="flex items-start gap-3 text-sm text-slate-500"><input required name="terms" type="checkbox" value={TERMS_VERSION} className="mt-1 h-4 w-4 accent-blue-600" /><span>{isRu ? "Я согласен с " : ""}<Link href="/terms" target="_blank" className="text-blue-600 underline">{isRu ? "условиями использования" : "Foydalanish shartlari"}</Link>{isRu ? " и " : " va "}<Link href="/privacy" target="_blank" className="text-blue-600 underline">{isRu ? "политикой конфиденциальности" : "maxfiylik qoidalari"}</Link>{isRu ? "." : " bilan tanishdim va roziman."}</span></label>
                 <TurnstileChallenge action="signup" onToken={setCaptchaToken} resetNonce={captchaReset} />
                 {error && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
                 <button type="submit" disabled={isLoading || (captchaRequired && !captchaToken)} className="w-full rounded-xl bg-blue-600 py-3.5 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-4 focus:ring-blue-100">{isLoading ? (isRu ? "Отправка..." : "Yuborilmoqda...") : method === "phone" ? (isRu ? "Получить SMS-код" : "SMS kod olish") : (isRu ? "Получить код по email" : "Email kod olish")}</button>

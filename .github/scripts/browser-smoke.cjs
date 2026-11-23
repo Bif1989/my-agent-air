@@ -72,16 +72,31 @@ async function clickPath(page, href, pathname, label) {
 }
 
 async function checkProfile(browser, label, contextOptions) {
-  const context = await browser.newContext(contextOptions);
+  const context = await browser.newContext({ ...contextOptions, serviceWorkers: 'block' });
   const page = await context.newPage();
   await installTurnstileMock(page);
 
   let response = await page.goto(`${baseURL}/`, { waitUntil: 'domcontentloaded' });
   assert(response && response.status() < 400, `${label}: home did not load`);
   assert.match(await page.locator('body').innerText(), /MY AGENT AIR/i, `${label}: brand missing`);
+  assert.equal(new URL(await page.locator('link[rel="canonical"]').getAttribute('href')).href, 'https://agent.bifavia.uz/');
+  for (const path of ['/privacy', '/terms', '/cookies']) {
+    assert(await page.locator(`footer a[href="${path}"]`).count(), `${label}: missing policy link ${path}`);
+    assert((await context.request.get(`${baseURL}${path}`)).ok(), `${label}: policy unavailable: ${path}`);
+  }
+  assert.equal(await page.locator('[data-testid="landing-measurement"]').count(), 0, `${label}: optional analytics ran without consent`);
+
+  // Exercise the landing page's registration before /login, even on a fast navigation.
+  const workerRegistered = await page.evaluate(async () => {
+    if (!navigator.serviceWorker) return false;
+    await navigator.serviceWorker.register('/sw.js');
+    return Boolean(await navigator.serviceWorker.getRegistration());
+  });
+  assert.equal(workerRegistered, false, `${label}: a service worker can interfere with the Turnstile mock`);
 
   response = await page.goto(`${baseURL}/login`, { waitUntil: 'domcontentloaded' });
   assert(response && response.status() < 400, `${label}: login did not load`);
+  assert.match(response.headers()['x-robots-tag'] || '', /noindex/i, `${label}: login is not for indexing`);
   await page.locator('input[name="identifier"]').waitFor();
   await page.locator('input[type="password"]').waitFor();
   await expectTurnstile(page, 'login', label);

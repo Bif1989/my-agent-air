@@ -116,10 +116,21 @@ test('message merge deduplicates realtime/send responses without changing other 
 
 test('safe return path rejects external and encoded redirect tricks', () => {
   for (const value of ['https://evil.invalid', '//evil.invalid', '/%2f%2fevil.invalid', '/%5cevil.invalid', '/login?next=/dashboard']) assert.equal(safeNextPath(value), '/dashboard');
-  assert.equal(safeNextPath('/deals/..//example.com'), '/dashboard');
-  assert.equal(safeNextPath('/deals/%2e%2e//example.com'), '/dashboard');
-  assert.equal(safeNextPath('/\t/example.com'), '/dashboard');
   assert.equal(safeNextPath('/deals/123#chat'), '/deals/123#chat');
+});
+
+test('safe return path rejects a double slash after URL normalization', () => {
+  for (const value of ['/deals/..//', '/deals/%2e%2e//', '/\t/']) {
+    assert.equal(safeNextPath(value), '/dashboard', value);
+  }
+});
+
+test('safe return path avoids auth loops and preserves an internal query and fragment', () => {
+  for (const route of ['login', 'register', 'forgot-password', 'reset-password']) {
+    const next = new URLSearchParams(`next=%2Fdeals%2F..%2F${route}%3Ffrom%3Dmail%23form`).get('next');
+    assert.equal(safeNextPath(next), '/dashboard', route);
+  }
+  assert.equal(safeNextPath('/deals/../support?q=a%2Fb#chat'), '/support?q=a%2Fb#chat');
 });
 
 test('freshness uses the Tashkent calendar boundary and 30-day undated expiry', () => {

@@ -18,6 +18,15 @@ const securityHeaders = [
   { key: "Strict-Transport-Security", value: "max-age=31536000" },
 ];
 
+const privateRoutes = [
+  "admin", "admin-agent-detail", "agent-detail", "agents", "api", "assistant",
+  "billing", "dashboard", "deal-detail", "deals", "feed", "feed-post",
+  "feed-post-edit", "forgot-password", "login", "messages", "messenger",
+  "messenger-room", "messenger-room-settings", "offers", "profile", "referral",
+  "register", "request-detail", "request-edit", "requests", "reset-password",
+  "reviews", "rfq-control", "s", "supplier-invite", "supplier-request", "support",
+];
+
 const nextConfig: NextConfig = {
   async headers() {
     return [
@@ -25,6 +34,10 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: securityHeaders,
       },
+      ...privateRoutes.map((route) => ({
+        source: `/${route}/:path*`,
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      })),
     ];
   },
   async redirects() {

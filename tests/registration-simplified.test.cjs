@@ -22,7 +22,7 @@ test('registration starts with only phone or email plus password and defers busi
 test('unsafe password is checked before an SMS code is sent instead of after OTP entry', () => {
   const client = read('lib/public-auth.ts');
   const route = read('lib/server/auth-actions/signup-sms.ts');
-  assert.match(client, /requestSignupSmsProtected\(phone: string, password: string, captchaToken: string\)/);
+  assert.match(client, /requestSignupSmsProtected\(phone: string, password: string, captchaToken: string, termsVersion\?: string\)/);
   const passwordCheck = route.indexOf('passwordCheck = await passwordIsAcceptable(password)');
   const smsSend = route.indexOf('await sendEskizCode(phone, code)');
   assert.ok(passwordCheck >= 0, 'password security check must exist');
@@ -42,7 +42,7 @@ test('phone signup creates an incomplete account without forcing email or compan
 
 test('email signup creates credentials first and leaves profile completion for after verification', () => {
   const route = read('lib/server/auth-actions/signup.ts');
-  assert.match(route, /data: \{ auth_source: "email" \}/);
+  assert.match(route, /data: \{ auth_source: "email", \.\.\.\(receipt \? \{ signup_terms_receipt: receipt \}/);
   assert.doesNotMatch(route, /AGENT_TYPES/);
   assert.doesNotMatch(route, /!fullName/);
   assert.doesNotMatch(route, /!company/);
