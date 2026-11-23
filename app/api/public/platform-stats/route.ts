@@ -5,8 +5,16 @@ import { SUPABASE_URL } from "@/lib/supabase-config";
 export const dynamic = "force-dynamic";
 
 const PUBLIC_TYPES = ["Mehmonxona", "Turoperator", "Turagent"] as const;
+const METRIC_KEYS = [
+  "total_active",
+  "supplier_records",
+  "agent_profiles",
+  "hotels",
+  "tour_operators",
+  "travel_agents",
+] as const;
 
-type PublicType = (typeof PUBLIC_TYPES)[number];
+type MetricKey = (typeof METRIC_KEYS)[number];
 
 export async function GET() {
   const secretKey = process.env.SUPABASE_SECRET_KEY?.trim();
@@ -21,7 +29,8 @@ export async function GET() {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  const [activeResult, supplierResult, agentProfilesResult, ...typeResults] = await Promise.all([
+  // A temporary failure in one table must not hide valid counts from other tables.
+  const queries = [
     admin
       .from("profiles")
       .select("id", { count: "exact", head: true })
@@ -44,37 +53,61 @@ export async function GET() {
         .eq("registration_status", "active")
         .eq("agent_type", agentType),
     ),
-  ]);
+  ];
 
-  const errors = [activeResult, supplierResult, agentProfilesResult, ...typeResults]
-    .map((result) => result.error)
-    .filter(Boolean);
+  const results = await Promise.allSettled(queries);
+  const failures: Array<{ metric: MetricKey; status?: number; code?: string; reason: string }> = [];
+  const counts = results.map((result, index): number | null => {
+    const metric = METRIC_KEYS[index];
+    if (result.status === "rejected") {
+      failures.push({ metric, reason: "Request rejected before receiving a response" });
+      return null;
+    }
+    const { count, error, status } = result.value;
+    if (error || typeof count !== "number" || !Number.isFinite(count) || count < 0) {
+      failures.push({
+        metric,
+        status,
+        code: error?.code,
+        reason: error?.message?.slice(0, 160) || "Missing count or empty error message",
+      });
+      return null;
+    }
+    return count;
+  });
 
-  if (errors.length) {
-    console.error("Public platform stats load failed", errors.map((error) => error?.message));
+  if (failures.length) {
+    // Log diagnostic metadata on the server; do not expose upstream errors to visitors.
+    console.error("Public platform stats load failed", failures);
+  }
+
+  if (counts.every((count) => count === null)) {
     return NextResponse.json(
       { message: "Platforma statistikasi vaqtincha mavjud emas." },
-      { status: 500, headers: { "Cache-Control": "no-store" } },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
     );
   }
 
-  const byType = Object.fromEntries(
-    PUBLIC_TYPES.map((agentType, index) => [agentType, typeResults[index]?.count ?? 0]),
-  ) as Record<PublicType, number>;
+  const values = Object.fromEntries(
+    METRIC_KEYS.map((key, index) => [key, counts[index]]),
+  ) as Record<MetricKey, number | null>;
 
   return NextResponse.json(
     {
-      supplier_records: supplierResult.count ?? 0,
-      hotels: byType.Mehmonxona,
-      tour_operators: byType.Turoperator,
-      travel_agents: byType.Turagent,
-      total_active: activeResult.count ?? 0,
-      agent_profiles: agentProfilesResult.count ?? 0,
+      supplier_records: values.supplier_records,
+      hotels: values.hotels,
+      tour_operators: values.tour_operators,
+      travel_agents: values.travel_agents,
+      total_active: values.total_active,
+      agent_profiles: values.agent_profiles,
+      degraded: failures.length > 0,
       updated_at: new Date().toISOString(),
     },
     {
       headers: {
-        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+        "Cache-Control": failures.length
+          ? "no-store"
+          : "public, s-maxage=60, stale-while-revalidate=300",
       },
     },
   );
