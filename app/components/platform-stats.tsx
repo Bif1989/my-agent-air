@@ -60,7 +60,7 @@ export default function PlatformStats({ isRu }: { isRu: boolean }) {
     async function loadStats() {
       if (document.visibilityState !== "visible" || !navigator.onLine) return;
       try {
-        const response = await fetch("/api/public/platform-stats", { cache: "no-store" });
+        const response = await fetch("/api/public/platform-stats");
         if (!response.ok) {
           if (!cancelled) setStats(null);
           return;
