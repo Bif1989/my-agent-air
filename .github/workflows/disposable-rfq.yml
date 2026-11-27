@@ -42,8 +42,11 @@ jobs:
           for file in supabase/migrations/*.sql; do
             [[ "$(basename "$file")" < "20261004113047_resume_security.sql" ]] && continue
             apply "$file"
+            # The original fixture predates the region/city pair requirement.
+            if [[ "$(basename "$file")" == "20261004113047_resume_security.sql" ]]; then
+              apply supabase/tests/resume_security.sql
+            fi
           done
-          apply supabase/tests/resume_security.sql
           docker exec "$db" psql -X -U postgres -d postgres -q -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';"
       - name: Verify local Auth login and buyer profile over the Data API
         shell: bash
@@ -75,7 +78,7 @@ jobs:
             const password = require('node:crypto').randomUUID() + 'Ab!1';
             const buyer = await call('/auth/v1/admin/users', config.SERVICE_ROLE_KEY, config.SERVICE_ROLE_KEY, {
               email, password, email_confirm: true,
-              user_metadata: { full_name: 'Test Buyer', company_name: 'Test Agency', city: 'Toshkent', phone: '+998000000000', agent_type: 'Aviakassa' },
+              user_metadata: { full_name: 'Test Buyer', company_name: 'Test Agency', phone: '+998000000000', agent_type: 'Aviakassa' },
             });
             const session = await call('/auth/v1/token?grant_type=password', config.ANON_KEY, config.ANON_KEY, { email, password });
             assert.equal(session.user.id, buyer.id, 'test user should sign in');
