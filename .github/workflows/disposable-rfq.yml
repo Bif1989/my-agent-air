@@ -44,7 +44,12 @@ jobs:
             apply "$file"
           done
           docker exec "$db" psql -X -U postgres -d postgres -q -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';"
-      - name: Verify local Auth and manual RFQ round trip over the Data API
+      - name: Install local web and browser test dependencies
+        run: |
+          npm ci
+          npm install --prefix "$RUNNER_TEMP/maa-browser" --no-audit --no-fund playwright@1.58.2
+          "$RUNNER_TEMP/maa-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Verify local Auth, RFQ APIs and real browser pages
         shell: bash
         run: |
           set -euo pipefail
@@ -130,6 +135,81 @@ jobs:
             assert.equal(result.response.currency, 'UZS');
             assert.equal(result.response.comment, quoteComment);
             console.log('Local API RFQ round trip passed: request, manual invite, anonymous quote, buyer visibility.');
+            const testRequest = require('node:crypto').randomUUID();
+            const description = 'QA browser: 10 twin rooms for 2 nights';
+            await call('/rest/v1/requests', config.ANON_KEY, session.access_token, {
+              id: testRequest, created_by: buyer.id, category: 'Mehmonxona', origin: 'Toshkent',
+              destination: 'Samarqand', travel_date: tripDate, adults: 20, currency: 'UZS', description, status: 'open',
+            });
+            const link = await rpc('create_supplier_invite', session.access_token, {
+              p_request_id: testRequest, p_supplier_id: supplierId, p_channel: 'manual',
+            });
+            if (!/^[0-9a-f]{48}$/.test(link.token ?? '')) throw new Error('missing local browser invite');
+            const { chromium } = require(process.env.RUNNER_TEMP + '/maa-browser/node_modules/playwright');
+            const { spawn } = require('node:child_process');
+            const app = 'http://127.0.0.1:3000';
+            const server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'dev', '--hostname', '127.0.0.1', '--port', '3000'], {
+              cwd: process.env.GITHUB_WORKSPACE,
+              env: {
+                PATH: process.env.PATH, HOME: process.env.HOME, CI: 'true', NEXT_TELEMETRY_DISABLED: '1',
+                NEXT_PUBLIC_SUPABASE_URL: base.origin, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: config.ANON_KEY,
+                SUPABASE_URL: base.origin, SUPABASE_SERVICE_ROLE_KEY: config.SERVICE_ROLE_KEY, SUPABASE_SECRET_KEY: config.SERVICE_ROLE_KEY,
+              },
+              stdio: 'ignore',
+            });
+            let stage = 'local app startup', browser;
+            try {
+              const deadline = Date.now() + 90000;
+              while (!await fetch(app + '/login', {signal: AbortSignal.timeout(5000)}).then(r => r.ok).catch(() => false)) {
+                if (server.exitCode !== null || Date.now() > deadline) throw new Error('app not available');
+                await new Promise(resolve => setTimeout(resolve, 1500));
+              }
+              browser = await chromium.launch({headless:true});
+              async function page() {
+                const context = await browser.newContext({locale:'uz-UZ',serviceWorkers:'block'});
+                await context.route('**/*', route => [app,base.origin].includes(new URL(route.request().url()).origin) ? route.continue() : route.abort());
+                const p = await context.newPage();
+                p.setDefaultTimeout(35000);
+                return p;
+              }
+              stage = 'buyer sign-in and request';
+              const bp = await page(), detail = '/requests/' + testRequest;
+              await bp.goto(app + '/login?next=' + encodeURIComponent(detail));
+              await bp.locator('input[name=identifier]').fill(email);
+              await bp.locator('input[name=password]').fill(password);
+              const [login] = await Promise.all([
+                bp.waitForResponse(r => r.url() === app + '/api/auth/password'),
+                bp.locator('button[type=submit]').click(),
+              ]);
+              if (login.status() !== 200) throw new Error('login HTTP ' + login.status());
+              await bp.waitForURL(app + detail);
+              await bp.getByText(description,{exact:true}).first().waitFor();
+              console.log('Browser buyer login and request passed.');
+              stage = 'anonymous supplier submission';
+              const sp = await page();
+              await sp.goto(app + '/supplier-request/' + link.token);
+              await sp.getByRole('button',{name:/^(Mavjud|Есть в наличии)$/}).click();
+              await sp.getByLabel(/Jami narx|Итоговая цена/).fill('4800000');
+              await sp.getByLabel(/Valyuta|Валюта/).selectOption('UZS');
+              const tax = 'QA browser tax included', cancel = 'QA browser free cancellation 48h';
+              await sp.getByLabel(/Soliqlar va|Налоги и сборы/).fill(tax);
+              await sp.getByLabel(/Bekor qilish|Условия отмены/).fill(cancel);
+              await sp.getByRole('button',{name:/Taklifni yuborish|Отправить предложение/}).click();
+              await sp.getByText(/Javob qabul qilindi|Ответ принят/).waitFor();
+              console.log('Browser supplier quote accepted without account.');
+              stage = 'buyer quote rendering';
+              await bp.reload();
+              await bp.getByText(tax,{exact:false}).first().waitFor();
+              await bp.getByText(cancel,{exact:false}).first().waitFor();
+              await bp.getByText(/4[^\d]*800[^\d]*000\s*UZS/).first().waitFor();
+              console.log('Browser buyer sees total, taxes and cancellation terms.');
+            } catch (error) {
+              const status = /^login HTTP \d+$/.test(error.message) ? ' (' + error.message + ')' : '';
+              throw new Error('Browser step ' + stage + (error.name === 'TimeoutError' ? ' timed out' : ' failed') + status);
+            } finally {
+              await browser?.close();
+              server.kill('SIGTERM');
+            }
           }
           test().catch(error => { console.error(error.message); process.exitCode = 1; });
           NODE
