@@ -28,7 +28,7 @@ jobs:
             exit 1
           }
           curl -fsS --max-time 15 http://127.0.0.1:54321/auth/v1/health >/dev/null
-      - name: Replay schema on local database and run RFQ database checks
+      - name: Replay schema on local database and reload the local Data API
         shell: bash
         run: |
           set -euo pipefail
@@ -42,13 +42,9 @@ jobs:
           for file in supabase/migrations/*.sql; do
             [[ "$(basename "$file")" < "20261004113047_resume_security.sql" ]] && continue
             apply "$file"
-            # The original fixture predates the region/city pair requirement.
-            if [[ "$(basename "$file")" == "20261004113047_resume_security.sql" ]]; then
-              apply supabase/tests/resume_security.sql
-            fi
           done
           docker exec "$db" psql -X -U postgres -d postgres -q -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';"
-      - name: Verify local Auth login and buyer profile over the Data API
+      - name: Verify local Auth and manual RFQ round trip over the Data API
         shell: bash
         run: |
           set -euo pipefail
@@ -71,8 +67,14 @@ jobs:
                 body: body ? JSON.stringify(body) : undefined,
                 signal: AbortSignal.timeout(15000),
               });
-              if (!res.ok) throw new Error(path.split('?')[0] + ' returned HTTP ' + res.status);
-              return await res.json();
+              if (!res.ok) {
+                const fault = await res.json().catch(() => ({}));
+                const tag = /^[a-zA-Z0-9_]+$/.test(fault.message ?? '') ? ' (' + fault.message + ')' : '';
+                throw new Error(path.split('?')[0] + ' returned HTTP ' + res.status + tag);
+              }
+              const result = await res.text();
+              return result ? JSON.parse(result) : null;
+
             }
             const email = 'rfq-buyer@example.com';
             const password = require('node:crypto').randomUUID() + 'Ab!1';
@@ -85,6 +87,49 @@ jobs:
             const rows = await call('/rest/v1/profiles?select=id,company_name&id=eq.' + encodeURIComponent(buyer.id), config.ANON_KEY, session.access_token);
             assert.deepEqual(rows.map(row => row.company_name), ['Test Agency']);
             console.log('Local Auth login and authenticated profile query passed.');
+            const uuid = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
+            assert.ok(uuid.test(buyer.id), 'invalid fixture user');
+            const supplierId = require('node:crypto').randomUUID();
+            const { spawnSync } = require('node:child_process');
+            const seeded = spawnSync('docker', ['exec', '-i', 'supabase_db_maa-rfq', 'psql', '-X', '-U', 'postgres', '-d', 'postgres', '-q', '-v', 'ON_ERROR_STOP=1'], {
+              input: [
+                "update public.profiles set is_active=true, registration_status='active', region='Toshkent shahri', city='Toshkent shahri' where id='" + buyer.id + "';",
+                "insert into public.external_suppliers(id,supplier_type,name,region,city,status) values ('" + supplierId + "','hotel','Disposable QA Hotel','Samarqand viloyati','Samarqand shahri','registry');",
+              ].join('\n'),
+              stdio: ['pipe', 'ignore', 'ignore'],
+            });
+            assert.equal(seeded.status, 0, 'local fixture seed failed');
+            const tripDate = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+            const requestId = require('node:crypto').randomUUID();
+            await call('/rest/v1/requests', config.ANON_KEY, session.access_token, {
+              id: requestId, created_by: buyer.id, category: 'Mehmonxona', origin: 'Toshkent',
+              destination: 'Samarqand', travel_date: tripDate, adults: 20, currency: 'UZS',
+              description: 'Disposable QA only: 10 twin rooms for 2 nights', status: 'open',
+            });
+            async function rpc(name, token, body) {
+              return call('/rest/v1/rpc/' + name, config.ANON_KEY, token, body);
+            }
+            const invite = await rpc('create_supplier_invite', session.access_token, {
+              p_request_id: requestId, p_supplier_id: supplierId, p_channel: 'manual',
+            });
+            assert.equal(invite.channel, 'manual');
+            if (!/^[0-9a-f]{48}$/.test(invite.token ?? '')) throw new Error('missing valid local invite');
+            const visit = await rpc('get_supplier_invite_public', config.ANON_KEY, { p_token: invite.token });
+            assert.equal(visit.adults, 20);
+            assert.equal(visit.status, 'opened');
+            const quoteComment = 'QA only: tax included. Free cancellation until 48h before arrival.';
+            const quote = await rpc('submit_supplier_invite_response', config.ANON_KEY, {
+              p_token: invite.token, p_available: true, p_price: 4800000, p_currency: 'UZS', p_comment: quoteComment,
+            });
+            assert.equal(quote.ok, true);
+            const list = await rpc('list_request_supplier_invites_p2', session.access_token, { p_request_id: requestId });
+            const result = list.find(row => row.id === invite.invite_id);
+            assert.ok(result, 'buyer did not see the quote');
+            assert.equal(result.status, 'responded');
+            assert.equal(Number(result.response.price), 4800000);
+            assert.equal(result.response.currency, 'UZS');
+            assert.equal(result.response.comment, quoteComment);
+            console.log('Local API RFQ round trip passed: request, manual invite, anonymous quote, buyer visibility.');
           }
           test().catch(error => { console.error(error.message); process.exitCode = 1; });
           NODE
