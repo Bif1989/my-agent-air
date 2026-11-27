@@ -30,3 +30,16 @@ test('hotel display retains dates, room counts, ages, meal plan and budget basis
   for (const text of ['Chiqish sanasi', 'Xonalar soni', 'Tunlar soni', 'Bolalar yoshi', 'Nonushta', 'Bir xona / bir tun', 'Tinch xona']) assert.ok(html.includes(text), text);
   assert.ok(!html.includes('LEGACY_AIR_ONLY'));
 });
+
+test('staged hotel draft shows room and currency up front and keeps extras collapsed', () => {
+  const html = render(RequestForm, { initialValues: { category:'Mehmonxona', currency:'UZS', adults:20,
+    service_details:{rooms:'10', room_type:'Twin', guest_nationality:'Mahalliy'} },
+    submitLabel:'So‘rovni yaratish', submittingLabel:'Yaratilmoqda', onSubmit:async () => {} });
+  const [quick, extra] = html.split('<details');
+  assert.match(quick, /id="request-service_details-rooms"/);
+  assert.match(quick, /id="request-service_details-room_type"/);
+  assert.match(extra, /id="request-service_details-guest_nationality"/);
+  assert.doesNotMatch(extra.split(">")[0], /\bopen(?:=""|\s|$)/);
+  assert.match(extra, /<option[^>]*selected=""[^>]*>UZS<\/option>/);
+  assert.match(html, /aria-required="true"/);
+});
