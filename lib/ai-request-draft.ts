@@ -1,4 +1,4 @@
-import { readRequestDraft, type AssistantDraft } from "@/lib/request-assistant";
+import { quoteCurrency, readRequestDraft, type AssistantDraft } from "@/lib/request-assistant";
 import { addCalendarDays, hydrateServiceRequest, SERVICE_CATEGORIES, serviceDefinition, serviceFields } from "@/lib/service-request";
 
 // Both the AI schema and the form use the same field keys, choices and labels.
@@ -16,20 +16,6 @@ export const AI_SERVICE_FIELDS_CONTEXT = SERVICE_CATEGORIES.map((category) => {
   const definition = serviceDefinition(category)!;
   return `${category}: origin=${definition.origin?.[0] || "unused; empty string"}; destination=${definition.destination[0]}; travel_date=${definition.date[0]}. ${definition.fields.filter((field) => field.required).map((field) => `${field.key}${field.when ? ` when ${field.when.join("=")}` : ""}`).join(", ")} are required for publication.`;
 }).join("\n");
-
-// A quote currency can be explicit even when no numerical budget was supplied.
-function quoteCurrency(description: unknown) {
-  if (typeof description !== "string") return undefined;
-  if (!/narx|bahosi|qiymat|стоимост|цен[ауеы]|тариф|price|quote/iu.test(description)) return undefined;
-  const aliases = {
-    UZS: /(?:^|[^\p{L}])(?:UZS(?:da)?|so['’‘ʻʼ`´]?m(?:da)?|с[ўу]м(?:да|ах)?)(?![\p{L}])/iu,
-    USD: /(?:^|[^\p{L}])(?:USD(?:da)?|dollar(?:da)?|доллар(?:ах|ов)?)(?![\p{L}])/iu,
-    EUR: /(?:^|[^\p{L}])(?:EUR(?:da)?|yevro(?:da)?|евро)(?![\p{L}])/iu,
-    RUB: /(?:^|[^\p{L}])(?:RUB(?:da)?|rubl(?:da)?|рубл(?:ях|ей)?)(?![\p{L}])/iu,
-  };
-  const matches = Object.entries(aliases).filter(([, pattern]) => pattern.test(description));
-  return matches.length === 1 ? matches[0][0] : undefined;
-}
 
 export function requestFormCurrency(initial?: { currency?: string | null }) {
   return initial ? initial.currency || "" : "USD";
