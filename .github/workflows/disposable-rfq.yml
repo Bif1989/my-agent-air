@@ -1,0 +1,95 @@
+name: Disposable RFQ database smoke
+on:
+  pull_request:
+    branches: [main]
+    paths: [".github/workflows/disposable-rfq.yml", "tests/isolated-rfq/**"]
+permissions:
+  contents: read
+jobs:
+  bootstrap:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'qa/disposable-supabase-rfq'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Start disposable Supabase stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          sandbox="$RUNNER_TEMP/maa-rfq"
+          mkdir -p "$sandbox"
+          cd "$sandbox"
+          npx --yes supabase@2.90.0 init
+          npx --yes supabase@2.90.0 start --exclude studio,imgproxy,edge-runtime,logflare,vector,supavisor > "$RUNNER_TEMP/maa-rfq-start.log" 2>&1 || {
+            echo "::error::Disposable Supabase start failed"
+            grep -Ei 'error|fail|denied|not found|unhealthy' "$RUNNER_TEMP/maa-rfq-start.log" | tail -15 | cut -c1-250 || true
+            exit 1
+          }
+          curl -fsS --max-time 15 http://127.0.0.1:54321/auth/v1/health >/dev/null
+      - name: Replay schema on local database and run RFQ database checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          db=supabase_db_maa-rfq
+          docker inspect "$db" >/dev/null
+          apply() {
+            echo "Applying $(basename "$1")"
+            docker exec -i "$db" psql -X -U postgres -d postgres -q -v ON_ERROR_STOP=1 < "$1" >/dev/null
+          }
+          apply supabase/schema/baseline-before-resume.sql
+          for file in supabase/migrations/*.sql; do
+            [[ "$(basename "$file")" < "20261004113047_resume_security.sql" ]] && continue
+            apply "$file"
+          done
+          apply supabase/tests/resume_security.sql
+          docker exec "$db" psql -X -U postgres -d postgres -q -v ON_ERROR_STOP=1 -c "NOTIFY pgrst, 'reload schema';"
+      - name: Verify local Auth login and buyer profile over the Data API
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/maa-rfq"
+          npx --yes supabase@2.90.0 status -o json > "$RUNNER_TEMP/maa-rfq-status.json" 2>/dev/null
+          node <<'NODE'
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+          const config = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/maa-rfq-status.json', 'utf8'));
+          async function test() {
+            const base = new URL(config.API_URL);
+            assert.equal(base.protocol, 'http:');
+            assert.ok(['localhost', '127.0.0.1'].includes(base.hostname) && base.port === '54321', 'non-local Supabase blocked');
+            assert.ok(config.SERVICE_ROLE_KEY && config.ANON_KEY, 'expected local Auth keys');
+            async function call(path, key, token, body) {
+              const res = await fetch(new URL(path, base), {
+                method: body ? 'POST' : 'GET',
+                redirect: 'error',
+                headers: { apikey: key, Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+                body: body ? JSON.stringify(body) : undefined,
+                signal: AbortSignal.timeout(15000),
+              });
+              if (!res.ok) throw new Error(path.split('?')[0] + ' returned HTTP ' + res.status);
+              return await res.json();
+            }
+            const email = 'rfq-buyer@example.com';
+            const password = require('node:crypto').randomUUID() + 'Ab!1';
+            const buyer = await call('/auth/v1/admin/users', config.SERVICE_ROLE_KEY, config.SERVICE_ROLE_KEY, {
+              email, password, email_confirm: true,
+              user_metadata: { full_name: 'Test Buyer', company_name: 'Test Agency', city: 'Toshkent', phone: '+998000000000', agent_type: 'Aviakassa' },
+            });
+            const session = await call('/auth/v1/token?grant_type=password', config.ANON_KEY, config.ANON_KEY, { email, password });
+            assert.equal(session.user.id, buyer.id, 'test user should sign in');
+            const rows = await call('/rest/v1/profiles?select=id,company_name&id=eq.' + encodeURIComponent(buyer.id), config.ANON_KEY, session.access_token);
+            assert.deepEqual(rows.map(row => row.company_name), ['Test Agency']);
+            console.log('Local Auth login and authenticated profile query passed.');
+          }
+          test().catch(error => { console.error(error.message); process.exitCode = 1; });
+          NODE
+      - name: Clean up disposable services
+        if: always()
+        shell: bash
+        run: |
+          if [ -d "$RUNNER_TEMP/maa-rfq" ]; then
+            cd "$RUNNER_TEMP/maa-rfq"
+            npx --yes supabase@2.90.0 stop --no-backup >/dev/null 2>&1 || true
+          fi
