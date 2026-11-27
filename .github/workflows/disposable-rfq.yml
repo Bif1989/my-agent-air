@@ -147,8 +147,8 @@ jobs:
             if (!/^[0-9a-f]{48}$/.test(link.token ?? '')) throw new Error('missing local browser invite');
             const { chromium } = require(process.env.RUNNER_TEMP + '/maa-browser/node_modules/playwright');
             const { spawn } = require('node:child_process');
-            const app = 'http://127.0.0.1:3000';
-            const server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'dev', '--hostname', '127.0.0.1', '--port', '3000'], {
+            const app = 'http://localhost:3000';
+            const server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'dev', '--hostname', 'localhost', '--port', '3000'], {
               cwd: process.env.GITHUB_WORKSPACE,
               env: {
                 PATH: process.env.PATH, HOME: process.env.HOME, CI: 'true', NEXT_TELEMETRY_DISABLED: '1',
@@ -181,7 +181,11 @@ jobs:
                 bp.waitForResponse(r => r.url() === app + '/api/auth/password'),
                 bp.locator('button[type=submit]').click(),
               ]);
-              if (login.status() !== 200) throw new Error('login HTTP ' + login.status());
+              if (login.status() !== 200) {
+                const failure = await login.json().catch(() => ({}));
+                const code = /^[A-Z_]+$/.test(failure.code ?? '') ? ' ' + failure.code : '';
+                throw new Error('login HTTP ' + login.status() + code);
+              }
               await bp.waitForURL(app + detail);
               await bp.getByText(description,{exact:true}).first().waitFor();
               console.log('Browser buyer login and request passed.');
@@ -204,7 +208,7 @@ jobs:
               await bp.getByText(/4[^\d]*800[^\d]*000\s*UZS/).first().waitFor();
               console.log('Browser buyer sees total, taxes and cancellation terms.');
             } catch (error) {
-              const status = /^login HTTP \d+$/.test(error.message) ? ' (' + error.message + ')' : '';
+              const status = /^login HTTP \d+(?: [A-Z_]+)?$/.test(error.message) ? ' (' + error.message + ')' : '';
               throw new Error('Browser step ' + stage + (error.name === 'TimeoutError' ? ' timed out' : ' failed') + status);
             } finally {
               await browser?.close();
