@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { SERVICE_CATEGORIES, requestIssues, hydrateServiceRequest, cleanServiceData, serviceDetailEntries, requestTitle, serviceFields, serviceDefinition } = require('../lib/service-request.ts');
-const { AI_SERVICE_DETAILS_SCHEMA, aiRequestToDraft } = require('../lib/ai-request-draft.ts');
+const { SERVICE_CATEGORIES, requestIssues, hydrateServiceRequest, cleanServiceData, serviceDetailEntries, requestTitle, serviceFields, serviceDefinition, splitRequestFormFields } = require('../lib/service-request.ts');
+const { AI_SERVICE_DETAILS_SCHEMA, aiRequestToDraft, requestFormCurrency } = require('../lib/ai-request-draft.ts');
 const { readRequestDraft } = require('../lib/request-assistant.ts');
 const { joinServiceDetails } = require('../lib/request-details.ts');
 
@@ -120,4 +120,69 @@ test('AI has exactly the questionnaire fields and explicit category variants', (
     assert.deepEqual(schema.required, ['kind', ...serviceFields(category).map((field) => field.key)]);
     assert.equal(schema.additionalProperties, false);
   }
+});
+
+test('Samarkand quote currency survives a missing budget and staged form handoff', () => {
+  const model = { category: 'Mehmonxona', destination: 'Samarqand', travel_date: '2026-12-11', adults: 20,
+    budget: null, currency: '', description: 'Jami narxni UZSda ko‘rsating. Soliqlar va turistik yig‘im alohida.',
+    service_details: { kind: 'Mehmonxona', rooms: '10', check_out: '2026-12-13', meal_plan: 'breakfast' } };
+  for (const currency of ['', 'USD', 'UZS']) {
+    const draft = aiRequestToDraft({ ...model, currency });
+    const reopened = readRequestDraft(JSON.stringify(draft));
+    assert.equal(reopened.currency, 'UZS');
+    assert.equal(requestFormCurrency(reopened), 'UZS');
+    assert.equal(reopened.budget, undefined);
+    assert.equal(reopened.adults, 20);
+    assert.equal(reopened.service_details.rooms, '10');
+    assert.equal(reopened.service_details.check_out, '2026-12-13');
+    assert.equal(reopened.service_details.meal_plan, 'breakfast');
+  }
+});
+
+test('quote currency recognizes Uzbek and Russian wording across services', () => {
+  for (const [category, description, expected] of [
+    ['Transfer', 'Umumiy narxni so‘mda ko‘rsating.', 'UZS'],
+    ['Gid', 'Укажите стоимость в сумах.', 'UZS'],
+    ['Tur paket', 'Narxni EURda ko‘rsating.', 'EUR'],
+    ['Viza', 'Цена в рублях.', 'RUB'],
+    ['Aviachipta', 'Show the total price in USD.', 'USD'],
+  ]) {
+    assert.equal(aiRequestToDraft({ category, description, budget: null }).currency, expected);
+  }
+});
+
+test('unknown or ambiguous quotes remain unselected and numeric budgets retain currency', () => {
+  for (const description of ['Samarqandda nonushta kerak.', 'Narxni USD yoki UZSda ko‘rsating.', 'Somon air reysi']) {
+    assert.equal(requestFormCurrency(aiRequestToDraft({ category: 'Mehmonxona', description, currency: '' })), '');
+  }
+  const draft = aiRequestToDraft({ category: 'Mehmonxona', description: 'Jami narxni UZSda bering.', currency: 'USD', budget: 120 });
+  assert.equal(draft.budget, 120);
+  assert.equal(requestFormCurrency(draft), 'USD');
+  assert.equal(requestFormCurrency(), 'USD');
+});
+
+test('all seven quick forms surface the most useful detail without requiring it', () => {
+  const quickKeys = ['trip_type', 'duration_days', 'rooms', 'pickup_time', 'language', 'visa_purpose', 'service_name'];
+  for (const [index, category] of SERVICE_CATEGORIES.entries()) {
+    const { quick, extra } = splitRequestFormFields(category, {});
+    assert.ok(quick.some(field => field.key === quickKeys[index]), category);
+    assert.equal(new Set([...quick, ...extra].map(field => field.key)).size, quick.length + extra.length);
+    assert.equal(quick.some(field => field.required), false, category);
+  }
+});
+test('round-trip fields appear in the quick form only for a matching trip type', () => {
+  for (const [category, field] of [['Aviachipta', 'trip_type'], ['Transfer', 'transfer_type']]) {
+    assert.ok(splitRequestFormFields(category, { [field]: 'round_trip' }).quick.some(item => item.key === 'return_date'));
+    assert.ok(!splitRequestFormFields(category, { [field]: 'one_way' }).quick.some(item => item.key === 'return_date'));
+  }
+  assert.deepEqual(splitRequestFormFields('toString', {}), { quick: [], extra: [] });
+});
+
+test('same-day return time is compared only against a supplied pickup time', () => {
+  const request = {category:'Transfer',origin:'Toshkent',destination:'Samarqand',travel_date:'2026-12-11',adults:20,children:0,infants:0};
+  const details = {transfer_type:'round_trip',return_date:'2026-12-11', return_time:'11:00'};
+  const issues = (fields) => requestIssues({...request, service_details:fields}, false, new Date('2026-11-27T00:00:00Z'));
+  for (const pickup_time of [undefined, '', '10:30']) assert.deepEqual(issues({...details,pickup_time}), []);
+  assert.ok(issues({...details,pickup_time:'11:00'}).some(issue => issue.field === 'service_details.return_time'));
+  assert.ok(issues({...details,pickup_time:'11:30'}).some(issue => issue.field === 'service_details.return_time'));
 });
