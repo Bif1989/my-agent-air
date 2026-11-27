@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { SERVICE_CATEGORIES, requestIssues, hydrateServiceRequest, cleanServiceData, serviceDetailEntries, requestTitle, serviceFields, serviceDefinition, splitRequestFormFields } = require('../lib/service-request.ts');
 const { AI_SERVICE_DETAILS_SCHEMA, aiRequestToDraft, requestFormCurrency } = require('../lib/ai-request-draft.ts');
-const { readRequestDraft } = require('../lib/request-assistant.ts');
+const { parseRequestDraft, readRequestDraft } = require('../lib/request-assistant.ts');
 const { joinServiceDetails } = require('../lib/request-details.ts');
 
 const now = new Date('2026-10-05T09:00:00Z');
@@ -185,4 +185,12 @@ test('same-day return time is compared only against a supplied pickup time', () 
   for (const pickup_time of [undefined, '', '10:30']) assert.deepEqual(issues({...details,pickup_time}), []);
   assert.ok(issues({...details,pickup_time:'11:00'}).some(issue => issue.field === 'service_details.return_time'));
   assert.ok(issues({...details,pickup_time:'11:30'}).some(issue => issue.field === 'service_details.return_time'));
+});
+
+test('local fallback preserves explicit quote currency without inventing a budget', () => {
+  const { draft } = parseRequestDraft('Samarqandda mehmonxona kerak. Narxni so‘mda yuboring.');
+  assert.equal(draft.currency, 'UZS');
+  assert.equal(draft.budget, undefined);
+  const previous = { budget:120, currency:'USD' };
+  assert.equal(parseRequestDraft('Narxni UZSda yozing.', previous).draft.currency, 'USD');
 });
