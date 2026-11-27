@@ -17,6 +17,24 @@ export const AI_SERVICE_FIELDS_CONTEXT = SERVICE_CATEGORIES.map((category) => {
   return `${category}: origin=${definition.origin?.[0] || "unused; empty string"}; destination=${definition.destination[0]}; travel_date=${definition.date[0]}. ${definition.fields.filter((field) => field.required).map((field) => `${field.key}${field.when ? ` when ${field.when.join("=")}` : ""}`).join(", ")} are required for publication.`;
 }).join("\n");
 
+// A quote currency can be explicit even when no numerical budget was supplied.
+function quoteCurrency(description: unknown) {
+  if (typeof description !== "string") return undefined;
+  if (!/narx|bahosi|qiymat|стоимост|цен[ауеы]|тариф|price|quote/iu.test(description)) return undefined;
+  const aliases = {
+    UZS: /(?:^|[^\p{L}])(?:UZS(?:da)?|so['’‘ʻʼ`´]?m(?:da)?|с[ўу]м(?:да|ах)?)(?![\p{L}])/iu,
+    USD: /(?:^|[^\p{L}])(?:USD(?:da)?|dollar(?:da)?|доллар(?:ах|ов)?)(?![\p{L}])/iu,
+    EUR: /(?:^|[^\p{L}])(?:EUR(?:da)?|yevro(?:da)?|евро)(?![\p{L}])/iu,
+    RUB: /(?:^|[^\p{L}])(?:RUB(?:da)?|rubl(?:da)?|рубл(?:ях|ей)?)(?![\p{L}])/iu,
+  };
+  const matches = Object.entries(aliases).filter(([, pattern]) => pattern.test(description));
+  return matches.length === 1 ? matches[0][0] : undefined;
+}
+
+export function requestFormCurrency(initial?: { currency?: string | null }) {
+  return initial ? initial.currency || "" : "USD";
+}
+
 export function aiRequestToDraft(value: unknown): AssistantDraft | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const item = value as Record<string, unknown>;
@@ -30,6 +48,9 @@ export function aiRequestToDraft(value: unknown): AssistantDraft | null {
   if (category === "Mehmonxona" && !serviceDetails.check_out && serviceDetails.nights && /^\d+$/.test(String(serviceDetails.nights))) {
     serviceDetails.check_out = addCalendarDays(String(item.travel_date || ""), Number(serviceDetails.nights));
   }
-  const draft = readRequestDraft(JSON.stringify({ ...item, service_details: serviceDetails, budget: typeof item.budget === "number" && item.budget > 0 ? item.budget : null }));
+  const budget = typeof item.budget === "number" && item.budget > 0 ? item.budget : null;
+  // Do not overwrite the currency of a numeric budget with a separate quote preference.
+  const currency = (budget === null ? quoteCurrency(item.description) : undefined) ?? item.currency;
+  const draft = readRequestDraft(JSON.stringify({ ...item, service_details: serviceDetails, budget, currency }));
   return draft ? hydrateServiceRequest(draft) : null;
 }
