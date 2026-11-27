@@ -72,7 +72,7 @@ function responseSummary(invite: SupplierInviteRow, isRu: boolean) {
     const price = response.price == null
       ? tr(isRu, "Narx ko‘rsatilmagan", "Цена не указана")
       : `${Number(response.price).toLocaleString(isRu ? "ru-RU" : "uz-UZ")} ${response.currency || "UZS"}`;
-    return response.comment ? `${price} · ${response.comment}` : price;
+    return response.comment ? `${price}\n${response.comment}` : price;
   }
   return tr(isRu, "Javob olindi", "Ответ получен");
 }
@@ -272,7 +272,7 @@ export default function SupplierMatching({ request }: { request: RequestRecord }
         <div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold text-[#0b1f3a]">{tr(isRu, "Tashqi so‘rovlar holati", "Статус внешних запросов")}</h3><p className="mt-1 text-sm text-slate-500">{tr(isRu, "Yuborish, ochish va hamkor javoblari bo‘yicha funnel.", "Воронка отправки, открытия и ответов поставщиков.")}</p></div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{invites.length} {tr(isRu, "ta", "шт.")}</span></div>
         <div className="mt-4 space-y-3">{invites.map((invite) => {
           const summary = responseSummary(invite, isRu);
-          return <div key={invite.id} className="rounded-xl border border-slate-100 px-4 py-3 text-sm"><div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center"><div><span className="font-semibold text-[#0b1f3a]">{invite.supplier_name}</span><span className="ml-2 text-slate-400">{invite.channel.toUpperCase()} · {invite.recipient_hint}</span></div><span className={`font-semibold ${invite.status === "failed" ? "text-amber-700" : "text-blue-700"}`}>{statusLabel(invite.status, isRu)}</span></div>{invite.converted && <span className="text-xs text-emerald-700">{tr(isRu, "Platformaga bog‘langan", "Профиль привязан")}</span>}{invite.delivery_error && <p className="mt-1 text-xs text-amber-700">{invite.delivery_error}</p>}{summary && <p className={`mt-2 ${invite.response?.available === false ? "text-amber-700" : "text-emerald-700"}`}>{summary}</p>}</div>;
+          return <div key={invite.id} className="rounded-xl border border-slate-100 px-4 py-3 text-sm"><div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center"><div><span className="font-semibold text-[#0b1f3a]">{invite.supplier_name}</span><span className="ml-2 text-slate-400">{invite.channel.toUpperCase()} · {invite.recipient_hint}</span></div><span className={`font-semibold ${invite.status === "failed" ? "text-amber-700" : "text-blue-700"}`}>{statusLabel(invite.status, isRu)}</span></div>{invite.converted && <span className="text-xs text-emerald-700">{tr(isRu, "Platformaga bog‘langan", "Профиль привязан")}</span>}{invite.delivery_error && <p className="mt-1 text-xs text-amber-700">{invite.delivery_error}</p>}{summary && <p className={`mt-2 whitespace-pre-wrap break-words ${invite.response?.available === false ? "text-amber-700" : "text-emerald-700"}`}>{summary}</p>}</div>;
         })}</div>
       </div>}
     </section>
