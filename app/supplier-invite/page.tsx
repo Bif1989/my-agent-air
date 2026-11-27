@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { supplierQuoteComment, supplierQuoteCurrency } from "@/lib/supplier-quote";
 import { useEffect, useMemo, useState } from "react";
 import {
   getPublicSupplierInvite,
@@ -68,6 +69,8 @@ export default function SupplierRequestPage() {
   const [available, setAvailable] = useState(true);
   const [price, setPrice] = useState("");
   const [currency, setCurrency] = useState("UZS");
+  const [tax, setTax] = useState("");
+  const [cancellation, setCancellation] = useState("");
   const [comment, setComment] = useState("");
   const [working, setWorking] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -83,7 +86,7 @@ export default function SupplierRequestPage() {
       }
       setToken(pathToken);
       getPublicSupplierInvite(pathToken)
-        .then(setInvite)
+        .then((loaded) => { setInvite(loaded); setCurrency(supplierQuoteCurrency(loaded.currency)); })
         .catch((cause) => setError(cause instanceof Error ? cause.message : "So‘rov yuklanmadi / Не удалось загрузить запрос."))
         .finally(() => setLoading(false));
     }, 0);
@@ -108,7 +111,7 @@ export default function SupplierRequestPage() {
     setWorking(true);
     setError("");
     try {
-      await submitPublicSupplierResponse(token, { available, price: numericPrice, currency, comment: comment.trim() || null });
+      await submitPublicSupplierResponse(token, { available, price: numericPrice, currency, comment: supplierQuoteComment({ available, tax, cancellation, comment, lang }) });
       setSubmitted(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : tr(lang, "Javob yuborilmadi.", "Не удалось отправить ответ."));
@@ -198,7 +201,7 @@ export default function SupplierRequestPage() {
 
         {submitted || invite.status === "responded" ? <section className="mt-6 rounded-3xl border border-emerald-200 bg-emerald-50 p-8 text-center">
           <p className="text-lg font-semibold text-emerald-900">{tr(lang, "Javob qabul qilindi", "Ответ принят")}</p>
-          <p className="mt-2 text-sm leading-6 text-emerald-800">{tr(lang, "Taklifingiz so‘rov yuborgan agentga yetkazildi.", "Ваше предложение передано агенту, отправившему запрос.")}</p>
+          <p className="mt-2 text-sm leading-6 text-emerald-800">{tr(lang, "Javobingiz saqlandi. So‘rov egasi uni platformada ko‘ra oladi.", "Ответ сохранён. Автор запроса может увидеть его на платформе.")}</p>
           <div className="mx-auto mt-6 max-w-xl rounded-2xl border border-emerald-200 bg-white p-5">
             <p className="font-semibold text-[#0b1f3a]">{tr(lang, "Keyingi so‘rovlarni o‘tkazib yubormang", "Не пропускайте следующие запросы")}</p>
             <p className="mt-2 text-sm leading-6 text-slate-600">{tr(lang, "My Agent Air’da bepul ro‘yxatdan o‘ting va sizning xizmatlaringizga mos yangi B2B so‘rovlarni platformada qabul qiling.", "Зарегистрируйтесь бесплатно в My Agent Air и получайте новые B2B-запросы, подходящие вашим услугам.")}</p>
@@ -210,8 +213,12 @@ export default function SupplierRequestPage() {
           <h2 className="text-xl font-semibold text-[#0b1f3a]">{tr(lang, "Taklif yuborish", "Отправить предложение")}</h2>
           <p className="mt-2 text-sm text-slate-500">{tr(lang, "Ro‘yxatdan o‘tish shart emas — ushbu so‘rovga hozir javob berishingiz mumkin.", "Регистрация не обязательна — вы можете ответить на этот запрос прямо сейчас.")}</p>
           <div className="mt-5 grid grid-cols-2 gap-3"><button type="button" onClick={() => setAvailable(true)} className={`rounded-xl px-4 py-3 text-sm font-semibold ${available ? "bg-emerald-600 text-white" : "border border-slate-200 text-slate-600"}`}>{tr(lang, "Mavjud", "Есть в наличии")}</button><button type="button" onClick={() => setAvailable(false)} className={`rounded-xl px-4 py-3 text-sm font-semibold ${!available ? "bg-slate-700 text-white" : "border border-slate-200 text-slate-600"}`}>{tr(lang, "Mavjud emas", "Нет в наличии")}</button></div>
-          {available && <div className="mt-5 grid gap-4 sm:grid-cols-[1fr_150px]"><label className="text-sm font-semibold text-[#0b1f3a]">{tr(lang, "Narx", "Цена")}<input inputMode="decimal" value={price} onChange={(event) => setPrice(event.target.value.replace(/[^0-9.]/g, ""))} placeholder={tr(lang, "Masalan: 450000", "Например: 450000")} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-3 font-normal outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" /></label><label className="text-sm font-semibold text-[#0b1f3a]">{tr(lang, "Valyuta", "Валюта")}<select value={currency} onChange={(event) => setCurrency(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 font-normal"><option>UZS</option><option>USD</option><option>EUR</option><option>RUB</option></select></label></div>}
-          <label className="mt-5 block text-sm font-semibold text-[#0b1f3a]">{tr(lang, "Izoh", "Комментарий")}<textarea maxLength={1000} rows={5} value={comment} onChange={(event) => setComment(event.target.value)} placeholder={available ? tr(lang, "Narx nimani o‘z ichiga olishi, mavjudlik yoki shartlarni yozing.", "Укажите, что входит в цену, наличие и условия.") : tr(lang, "Mavjud emasligi sababini yozishingiz mumkin.", "Можно указать причину отсутствия.")} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-3 font-normal outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" /></label>
+          {available && <div className="mt-5 grid gap-4 sm:grid-cols-[1fr_150px]"><label className="text-sm font-semibold text-[#0b1f3a]">{tr(lang, "Jami narx", "Итоговая цена")}<input inputMode="decimal" value={price} onChange={(event) => setPrice(event.target.value.replace(/[^0-9.]/g, ""))} placeholder={tr(lang, "Masalan: 450000", "Например: 450000")} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-3 font-normal outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" /></label><label className="text-sm font-semibold text-[#0b1f3a]">{tr(lang, "Valyuta", "Валюта")}<select value={currency} onChange={(event) => setCurrency(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-3 font-normal"><option>UZS</option><option>USD</option><option>EUR</option><option>RUB</option></select></label></div>}
+          {available && <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <label className="text-sm font-semibold text-[#0b1f3a]">{tr(lang, "Soliqlar va yig‘imlar", "Налоги и сборы")}<input value={tax} onChange={(event) => setTax(event.target.value)} maxLength={140} placeholder={tr(lang, "Narxga kiradimi yoki alohida to‘lanadimi?", "Включены или оплачиваются отдельно?")} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-3 font-normal" /></label>
+            <label className="text-sm font-semibold text-[#0b1f3a]">{tr(lang, "Bekor qilish shartlari", "Условия отмены")}<input value={cancellation} onChange={(event) => setCancellation(event.target.value)} maxLength={220} placeholder={tr(lang, "Masalan: 48 soat oldin bepul", "Например: бесплатно за 48 часов")} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-3 font-normal" /></label>
+          </div>}
+          <label className="mt-5 block text-sm font-semibold text-[#0b1f3a]">{tr(lang, "Izoh", "Комментарий")}<textarea maxLength={available ? 520 : 1000} rows={3} value={comment} onChange={(event) => setComment(event.target.value)} placeholder={available ? tr(lang, "Narx nimani o‘z ichiga olishi, mavjudlik yoki shartlarni yozing.", "Укажите, что входит в цену, наличие и условия.") : tr(lang, "Mavjud emasligi sababini yozishingiz mumkin.", "Можно указать причину отсутствия.")} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-3 font-normal outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" /></label>
           <button type="submit" disabled={working} className="mt-6 w-full rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{working ? tr(lang, "Yuborilmoqda...", "Отправляется...") : tr(lang, "Taklifni yuborish", "Отправить предложение")}</button>
         </form>}
 
