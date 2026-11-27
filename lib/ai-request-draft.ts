@@ -1,4 +1,4 @@
-import { readRequestDraft, type AssistantDraft } from "@/lib/request-assistant";
+import { quoteCurrency, readRequestDraft, type AssistantDraft } from "@/lib/request-assistant";
 import { addCalendarDays, hydrateServiceRequest, SERVICE_CATEGORIES, serviceDefinition, serviceFields } from "@/lib/service-request";
 
 // Both the AI schema and the form use the same field keys, choices and labels.
@@ -17,6 +17,10 @@ export const AI_SERVICE_FIELDS_CONTEXT = SERVICE_CATEGORIES.map((category) => {
   return `${category}: origin=${definition.origin?.[0] || "unused; empty string"}; destination=${definition.destination[0]}; travel_date=${definition.date[0]}. ${definition.fields.filter((field) => field.required).map((field) => `${field.key}${field.when ? ` when ${field.when.join("=")}` : ""}`).join(", ")} are required for publication.`;
 }).join("\n");
 
+export function requestFormCurrency(initial?: { currency?: string | null }) {
+  return initial ? initial.currency || "" : "USD";
+}
+
 export function aiRequestToDraft(value: unknown): AssistantDraft | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const item = value as Record<string, unknown>;
@@ -30,6 +34,9 @@ export function aiRequestToDraft(value: unknown): AssistantDraft | null {
   if (category === "Mehmonxona" && !serviceDetails.check_out && serviceDetails.nights && /^\d+$/.test(String(serviceDetails.nights))) {
     serviceDetails.check_out = addCalendarDays(String(item.travel_date || ""), Number(serviceDetails.nights));
   }
-  const draft = readRequestDraft(JSON.stringify({ ...item, service_details: serviceDetails, budget: typeof item.budget === "number" && item.budget > 0 ? item.budget : null }));
+  const budget = typeof item.budget === "number" && item.budget > 0 ? item.budget : null;
+  // Do not overwrite the currency of a numeric budget with a separate quote preference.
+  const currency = (budget === null ? quoteCurrency(item.description) : undefined) ?? item.currency;
+  const draft = readRequestDraft(JSON.stringify({ ...item, service_details: serviceDetails, budget, currency }));
   return draft ? hydrateServiceRequest(draft) : null;
 }

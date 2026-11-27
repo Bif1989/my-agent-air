@@ -22,6 +22,27 @@ export function serviceDefinition(category?: string | null) {
   };
 }
 
+// Keep the fields needed for useful quotes visible without making them mandatory.
+const QUICK_DETAIL_KEYS: Record<base.ServiceCategory, ReadonlySet<string>> = {
+  Aviachipta: new Set(["trip_type", "return_date", "route_details"]),
+  "Tur paket": new Set(["transport", "duration_days", "nights"]),
+  Mehmonxona: new Set(["check_out", "rooms", "room_type", "meal_plan"]),
+  Transfer: new Set(["transfer_type", "pickup_time", "vehicle", "return_date", "return_time", "duration_hours"]),
+  Gid: new Set(["language", "duration_hours"]),
+  Viza: new Set(["nationality", "visa_purpose", "visa_service"]),
+  Boshqa: new Set(["service_name", "quantity", "unit"]),
+};
+
+export function splitRequestFormFields(category: string | null | undefined, details: base.ServiceData) {
+  if (!category || !Object.hasOwn(QUICK_DETAIL_KEYS, category)) return { quick: [], extra: [] };
+  const primary = QUICK_DETAIL_KEYS[category as base.ServiceCategory];
+  const visible = (serviceDefinition(category)?.fields || []).filter((item) => base.fieldVisible(item, details));
+  return {
+    quick: visible.filter((item) => item.required || primary.has(item.key)),
+    extra: visible.filter((item) => !item.required && !primary.has(item.key)),
+  };
+}
+
 export function serviceFields(category?: string | null) {
   const definition = serviceDefinition(category);
   return definition ? [...definition.fields, ...base.COMMON_SERVICE_FIELDS] : [];
@@ -48,7 +69,6 @@ function syntheticRequiredValue(item: base.ServiceField, input: base.ServiceRequ
     if (item.key === "check_out" && input.travel_date) return base.addCalendarDays(input.travel_date, 1) || input.travel_date;
     return input.travel_date || "2099-01-01";
   }
-  if (item.type === "time") return item.key === "return_time" ? "23:59" : "12:00";
   return "Aniqlashtiriladi";
 }
 
@@ -64,6 +84,12 @@ export function requestIssues(input: base.ServiceRequestInput, isRu = false, now
 
   for (const item of rawDefinition.fields) {
     if (!base.fieldVisible(item, details) || !item.required || details[item.key]) continue;
+    // Missing optional times must not participate in same-day transfer ordering.
+    if (item.type === "time") {
+      delete details[item.key];
+      syntheticFields.add(`service_details.${item.key}`);
+      continue;
+    }
     let value = syntheticRequiredValue(item, input);
     if (item.key === "duration_days" && details.nights && /^\d+$/.test(details.nights)) value = String(Number(details.nights) + 1);
     details[item.key] = value;

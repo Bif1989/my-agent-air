@@ -134,6 +134,20 @@ export function detectRequestCategories(text: string) {
   return [];
 }
 
+// A quote currency can be explicit even when no numerical budget was supplied.
+export function quoteCurrency(description: unknown) {
+  if (typeof description !== "string") return undefined;
+  if (!/narx|bahosi|qiymat|стоимост|цен[ауеы]|тариф|price|quote/iu.test(description)) return undefined;
+  const aliases = {
+    UZS: /(?:^|[^\p{L}])(?:UZS(?:da)?|so['’‘ʻʼ`´]?m(?:da)?|с[ўу]м(?:да|ах)?)(?![\p{L}])/iu,
+    USD: /(?:^|[^\p{L}])(?:USD(?:da)?|dollar(?:da)?|доллар(?:ах|ов)?)(?![\p{L}])/iu,
+    EUR: /(?:^|[^\p{L}])(?:EUR(?:da)?|yevro(?:da)?|евро)(?![\p{L}])/iu,
+    RUB: /(?:^|[^\p{L}])(?:RUB(?:da)?|rubl(?:da)?|рубл(?:ях|ей)?)(?![\p{L}])/iu,
+  };
+  const matches = Object.entries(aliases).filter(([, pattern]) => pattern.test(description));
+  return matches.length === 1 ? matches[0][0] : undefined;
+}
+
 export function parseRequestDraft(text: string, previous: AssistantDraft = {}, now = new Date()) {
   const normalized = normalizeAirportSearch(text.replace(/[–—→]/g, "-"));
   const draft: AssistantDraft = { adults: 1, children: 0, infants: 0, currency: "USD", ...previous };
@@ -205,6 +219,8 @@ export function parseRequestDraft(text: string, previous: AssistantDraft = {}, n
   if (money) {
     draft.budget = Number(money[1].replace(",", "."));
     draft.currency = /dollar|dolar|доллар/i.test(money[2]) ? "USD" : /som|so‘m|сум/i.test(money[2]) ? "UZS" : money[2].toUpperCase();
+  } else if (draft.budget == null) {
+    draft.currency = quoteCurrency(text) ?? draft.currency;
   }
   const baggage = /\b(\d{1,3})\s*(?:kg|кг)\b/i.exec(text);
   if (baggage) draft.baggage = `${baggage[1]} kg`;
