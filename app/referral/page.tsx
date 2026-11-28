@@ -23,6 +23,7 @@ export default function ReferralPage() {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const t = (uz: string, ru: string) => isRu ? ru : uz;
+  const loadErrorMessage = t("Referal ma’lumotlarini yuklab bo‘lmadi.", "Не удалось загрузить реферальные данные.");
 
   useEffect(() => {
     const stored = getStoredSession();
@@ -41,11 +42,11 @@ export default function ReferralPage() {
           window.location.replace("/login");
           return;
         }
-        if (active) setError(t("Referal ma’lumotlarini yuklab bo‘lmadi.", "Не удалось загрузить реферальные данные."));
+        if (active) setError(loadErrorMessage);
       })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [session, isRu]);
+  }, [session, loadErrorMessage]);
 
   const referralUrl = useMemo(() => {
     if (!dashboard?.code || typeof window === "undefined") return "";

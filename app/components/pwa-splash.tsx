@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 
 function detectStandalone() {
@@ -30,7 +31,7 @@ export default function PwaSplash() {
     <div className="pwa-launch-screen fixed inset-0 z-[200] flex items-center justify-center bg-[#0b1f3a]" aria-hidden="true">
       <div className="flex flex-col items-center">
         <div className="flex h-24 w-24 items-center justify-center rounded-[28px] bg-white/10 shadow-2xl ring-1 ring-white/15">
-          <img src="/my-agent-air-icon.svg" alt="" className="h-20 w-20" />
+          <Image src="/my-agent-air-icon.svg" alt="" width={80} height={80} loading="eager" unoptimized />
         </div>
         <p className="mt-5 text-lg font-bold tracking-[0.18em] text-white">AGENT BIFAVIA</p>
         <p className="mt-1 text-[11px] font-medium tracking-[0.16em] text-cyan-200">MY AGENT AIR</p>

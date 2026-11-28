@@ -53,6 +53,7 @@ export default function BillingSubscriptionPage() {
   const [paymentError, setPaymentError] = useState("");
   const [walletMessage, setWalletMessage] = useState("");
   const t = (uz: string, ru: string) => isRu ? ru : uz;
+  const loadErrorMessage = t("Abonent tarifi ma’lumotlarini yuklab bo‘lmadi.", "Не удалось загрузить данные абонентского тарифа.");
 
   useEffect(() => {
     const stored = getStoredSession();
@@ -83,12 +84,12 @@ export default function BillingSubscriptionPage() {
             window.location.replace("/login");
             return;
           }
-          setError(t("Abonent tarifi ma’lumotlarini yuklab bo‘lmadi.", "Не удалось загрузить данные абонентского тарифа."));
+          setError(loadErrorMessage);
         })
         .finally(() => { if (active) setLoading(false); });
     }, 0);
     return () => { active = false; window.clearTimeout(timeoutId); };
-  }, [session, isRu, load]);
+  }, [session, loadErrorMessage, load]);
 
   async function payFromWallet() {
     if (!status?.plan_price_amount || !wallet || walletPaying) return;

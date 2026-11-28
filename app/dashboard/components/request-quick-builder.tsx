@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useId, useState, type KeyboardEvent } from "react";
 import { AIRPORTS, type AirportReference } from "@/data/airports";
 import { normalizeAirportSearch } from "@/lib/aviation-assist";
 import { REQUEST_CATEGORIES, type AssistantDraft } from "@/lib/request-assistant";
@@ -34,6 +34,9 @@ function locationLabel(airport: AirportReference, query: string) {
 
 function LocationField({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder: string }) {
   const [focused, setFocused] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const inputId = useId();
+  const listId = `${inputId}-options`;
   const query = normalizeAirportSearch(value.trim());
   const seen = new Set<string>();
   const options = query.length >= 3
@@ -45,31 +48,65 @@ function LocationField({ label, value, onChange, placeholder }: { label: string;
       }).slice(0, 8)
     : [];
 
+  const open = focused && options.length > 0;
+
+  function selectCity(city: string) {
+    onChange(city);
+    setFocused(false);
+    setActiveIndex(-1);
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (!options.length || event.nativeEvent.isComposing) return;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setFocused(true);
+      setActiveIndex(event.key === "ArrowDown"
+        ? (activeIndex + 1) % options.length
+        : (activeIndex <= 0 ? options.length : activeIndex) - 1);
+    } else if (open && event.key === "Enter" && options[activeIndex]) {
+      event.preventDefault();
+      selectCity(options[activeIndex].city);
+    } else if (open && event.key === "Escape") {
+      event.preventDefault();
+      setFocused(false);
+      setActiveIndex(-1);
+    }
+  }
+
   return (
-    <label className="relative rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 dark:border-slate-700 dark:bg-slate-900">
-      <span className="block text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400">{label}</span>
+    <div className="relative rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 dark:border-slate-700 dark:bg-slate-900">
+      <label htmlFor={inputId} className="block text-[8px] font-bold uppercase tracking-[0.12em] text-slate-400">{label}</label>
       <input
+        id={inputId}
         value={value}
-        onChange={(event) => { onChange(event.target.value); setFocused(true); }}
+        onChange={(event) => { onChange(event.target.value); setFocused(true); setActiveIndex(-1); }}
         onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
+        onBlur={() => { setFocused(false); setActiveIndex(-1); }}
+        onKeyDown={handleKeyDown}
         maxLength={120}
         autoComplete="off"
         role="combobox"
         aria-autocomplete="list"
-        aria-expanded={focused && options.length > 0}
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        aria-activedescendant={open && options[activeIndex] ? `${listId}-${activeIndex}` : undefined}
         placeholder={placeholder}
         className="mt-0.5 w-full bg-transparent text-[13px] text-[#0b1f3a] outline-none placeholder:text-slate-300 dark:text-slate-100"
       />
-      {focused && options.length > 0 && (
-        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-30 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-950">
-          {options.map((airport) => (
+      {open && (
+        <div id={listId} role="listbox" aria-label={label} className="absolute left-0 right-0 top-[calc(100%+4px)] z-30 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-950">
+          {options.map((airport, index) => (
             <button
               key={`${airport.city}-${airport.country}`}
+              id={`${listId}-${index}`}
               type="button"
+              role="option"
+              tabIndex={-1}
+              aria-selected={activeIndex === index}
               onMouseDown={(event) => event.preventDefault()}
-              onClick={() => { onChange(airport.city); setFocused(false); }}
-              className="flex w-full items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-blue-50 dark:border-slate-800 dark:hover:bg-slate-900"
+              onClick={() => selectCity(airport.city)}
+              className="flex w-full items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-blue-50 aria-selected:bg-blue-50 dark:border-slate-800 dark:hover:bg-slate-900 dark:aria-selected:bg-slate-900"
             >
               <span className="min-w-0">
                 <span className="block truncate text-xs font-semibold text-[#0b1f3a] dark:text-slate-100">{locationLabel(airport, query)}</span>
@@ -80,7 +117,7 @@ function LocationField({ label, value, onChange, placeholder }: { label: string;
           ))}
         </div>
       )}
-    </label>
+    </div>
   );
 }
 
